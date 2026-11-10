@@ -1,0 +1,225 @@
+{
+  "Schema": "godswar-build-analysis-v1",
+  "Level": 160,
+  "AttackerHit": 1000,
+  "AttackerCritical": 1000,
+  "BaseTargetCriticalResistance": 500,
+  "Gaia": {
+    "DodgeBonus": 3000,
+    "CriticalResistanceBonus": 1000,
+    "MaxRankDurationSeconds": 10,
+    "MaxRankCooldownSeconds": 90
+  },
+  "Status": "controlled policy scenarios; class gear optimization still pending",
+  "DodgeScenarios": [
+    {
+      "Dodge": 0,
+      "PvpHitBasisPoints": 9784,
+      "PveHitBasisPoints": 9784,
+      "PvpCriticalBasisPoints": 6666,
+      "GaiaPvpHitBasisPoints": 500,
+      "GaiaPvpCriticalBasisPoints": 4000,
+      "ExpectedIncomingNormalHitUnits": 1.30450072,
+      "GaiaExpectedIncomingNormalHitUnits": 0.06,
+      "Gaia90SecondAverageIncoming": 1.1662228622222222
+    },
+    {
+      "Dodge": 500,
+      "PvpHitBasisPoints": 9357,
+      "PveHitBasisPoints": 9357,
+      "PvpCriticalBasisPoints": 6666,
+      "GaiaPvpHitBasisPoints": 500,
+      "GaiaPvpCriticalBasisPoints": 4000,
+      "ExpectedIncomingNormalHitUnits": 1.24756881,
+      "GaiaExpectedIncomingNormalHitUnits": 0.06,
+      "Gaia90SecondAverageIncoming": 1.11561672
+    },
+    {
+      "Dodge": 1000,
+      "PvpHitBasisPoints": 9000,
+      "PveHitBasisPoints": 9000,
+      "PvpCriticalBasisPoints": 6666,
+      "GaiaPvpHitBasisPoints": 500,
+      "GaiaPvpCriticalBasisPoints": 4000,
+      "ExpectedIncomingNormalHitUnits": 1.19997,
+      "GaiaExpectedIncomingNormalHitUnits": 0.06,
+      "Gaia90SecondAverageIncoming": 1.0733066666666666
+    },
+    {
+      "Dodge": 1100,
+      "PvpHitBasisPoints": 7800,
+      "PveHitBasisPoints": 8936,
+      "PvpCriticalBasisPoints": 6666,
+      "GaiaPvpHitBasisPoints": 500,
+      "GaiaPvpCriticalBasisPoints": 4000,
+      "ExpectedIncomingNormalHitUnits": 1.039974,
+      "GaiaExpectedIncomingNormalHitUnits": 0.06,
+      "Gaia90SecondAverageIncoming": 0.931088
+    },
+    {
+      "Dodge": 1250,
+      "PvpHitBasisPoints": 6000,
+      "PveHitBasisPoints": 8843,
+      "PvpCriticalBasisPoints": 6666,
+      "GaiaPvpHitBasisPoints": 500,
+      "GaiaPvpCriticalBasisPoints": 4000,
+      "ExpectedIncomingNormalHitUnits": 0.79998,
+      "GaiaExpectedIncomingNormalHitUnits": 0.06,
+      "Gaia90SecondAverageIncoming": 0.71776
+    },
+    {
+      "Dodge": 1500,
+      "PvpHitBasisPoints": 3000,
+      "PveHitBasisPoints": 8697,
+      "PvpCriticalBasisPoints": 6666,
+      "GaiaPvpHitBasisPoints": 500,
+      "GaiaPvpCriticalBasisPoints": 4000,
+      "ExpectedIncomingNormalHitUnits": 0.39999,
+      "GaiaExpectedIncomingNormalHitUnits": 0.06,
+      "Gaia90SecondAverageIncoming": 0.36221333333333333
+    },
+    {
+      "Dodge": 2000,
+      "PvpHitBasisPoints": 2167,
+      "PveHitBasisPoints": 8437,
+      "PvpCriticalBasisPoints": 6666,
+      "GaiaPvpHitBasisPoints": 500,
+      "GaiaPvpCriticalBasisPoints": 4000,
+      "ExpectedIncomingNormalHitUnits": 0.28892611,
+      "GaiaExpectedIncomingNormalHitUnits": 0.06,
+      "Gaia90SecondAverageIncoming": 0.26348987555555553
+    },
+    {
+      "Dodge": 3000,
+      "PvpHitBasisPoints": 500,
+      "PveHitBasisPoints": 8013,
+      "PvpCriticalBasisPoints": 6666,
+      "GaiaPvpHitBasisPoints": 500,
+      "GaiaPvpCriticalBasisPoints": 4000,
+      "ExpectedIncomingNormalHitUnits": 0.066665,
+      "GaiaExpectedIncomingNormalHitUnits": 0.06,
+      "Gaia90SecondAverageIncoming": 0.06592444444444444
+    },
+    {
+      "Dodge": 4000,
+      "PvpHitBasisPoints": 500,
+      "PveHitBasisPoints": 7682,
+      "PvpCriticalBasisPoints": 6666,
+      "GaiaPvpHitBasisPoints": 500,
+      "GaiaPvpCriticalBasisPoints": 4000,
+      "ExpectedIncomingNormalHitUnits": 0.066665,
+      "GaiaExpectedIncomingNormalHitUnits": 0.06,
+      "Gaia90SecondAverageIncoming": 0.06592444444444444
+    }
+  ],
+  "LifeAbsorptionScenarios": [
+    {
+      "Targets": 1,
+      "CommittedDamagePerTarget": 1000,
+      "FlatHealingPerSuccessfulHit": 0,
+      "PercentageHealingBasisPoints": 0,
+      "RequestedHealingPerPulse": 0,
+      "Caveat": "Before missing-HP cap, healing-received modifiers, enemy deaths, misses and field expiry. Skill-slot compatibility is not established by this scenario."
+    },
+    {
+      "Targets": 1,
+      "CommittedDamagePerTarget": 1000,
+      "FlatHealingPerSuccessfulHit": 0,
+      "PercentageHealingBasisPoints": 2000,
+      "RequestedHealingPerPulse": 200,
+      "Caveat": "Before missing-HP cap, healing-received modifiers, enemy deaths, misses and field expiry. Skill-slot compatibility is not established by this scenario."
+    },
+    {
+      "Targets": 1,
+      "CommittedDamagePerTarget": 1000,
+      "FlatHealingPerSuccessfulHit": 670,
+      "PercentageHealingBasisPoints": 0,
+      "RequestedHealingPerPulse": 670,
+      "Caveat": "Before missing-HP cap, healing-received modifiers, enemy deaths, misses and field expiry. Skill-slot compatibility is not established by this scenario."
+    },
+    {
+      "Targets": 1,
+      "CommittedDamagePerTarget": 1000,
+      "FlatHealingPerSuccessfulHit": 670,
+      "PercentageHealingBasisPoints": 2000,
+      "RequestedHealingPerPulse": 870,
+      "Caveat": "Before missing-HP cap, healing-received modifiers, enemy deaths, misses and field expiry. Skill-slot compatibility is not established by this scenario."
+    },
+    {
+      "Targets": 3,
+      "CommittedDamagePerTarget": 1000,
+      "FlatHealingPerSuccessfulHit": 0,
+      "PercentageHealingBasisPoints": 0,
+      "RequestedHealingPerPulse": 0,
+      "Caveat": "Before missing-HP cap, healing-received modifiers, enemy deaths, misses and field expiry. Skill-slot compatibility is not established by this scenario."
+    },
+    {
+      "Targets": 3,
+      "CommittedDamagePerTarget": 1000,
+      "FlatHealingPerSuccessfulHit": 0,
+      "PercentageHealingBasisPoints": 2000,
+      "RequestedHealingPerPulse": 600,
+      "Caveat": "Before missing-HP cap, healing-received modifiers, enemy deaths, misses and field expiry. Skill-slot compatibility is not established by this scenario."
+    },
+    {
+      "Targets": 3,
+      "CommittedDamagePerTarget": 1000,
+      "FlatHealingPerSuccessfulHit": 670,
+      "PercentageHealingBasisPoints": 0,
+      "RequestedHealingPerPulse": 2010,
+      "Caveat": "Before missing-HP cap, healing-received modifiers, enemy deaths, misses and field expiry. Skill-slot compatibility is not established by this scenario."
+    },
+    {
+      "Targets": 3,
+      "CommittedDamagePerTarget": 1000,
+      "FlatHealingPerSuccessfulHit": 670,
+      "PercentageHealingBasisPoints": 2000,
+      "RequestedHealingPerPulse": 2610,
+      "Caveat": "Before missing-HP cap, healing-received modifiers, enemy deaths, misses and field expiry. Skill-slot compatibility is not established by this scenario."
+    },
+    {
+      "Targets": 8,
+      "CommittedDamagePerTarget": 1000,
+      "FlatHealingPerSuccessfulHit": 0,
+      "PercentageHealingBasisPoints": 0,
+      "RequestedHealingPerPulse": 0,
+      "Caveat": "Before missing-HP cap, healing-received modifiers, enemy deaths, misses and field expiry. Skill-slot compatibility is not established by this scenario."
+    },
+    {
+      "Targets": 8,
+      "CommittedDamagePerTarget": 1000,
+      "FlatHealingPerSuccessfulHit": 0,
+      "PercentageHealingBasisPoints": 2000,
+      "RequestedHealingPerPulse": 1600,
+      "Caveat": "Before missing-HP cap, healing-received modifiers, enemy deaths, misses and field expiry. Skill-slot compatibility is not established by this scenario."
+    },
+    {
+      "Targets": 8,
+      "CommittedDamagePerTarget": 1000,
+      "FlatHealingPerSuccessfulHit": 670,
+      "PercentageHealingBasisPoints": 0,
+      "RequestedHealingPerPulse": 5360,
+      "Caveat": "Before missing-HP cap, healing-received modifiers, enemy deaths, misses and field expiry. Skill-slot compatibility is not established by this scenario."
+    },
+    {
+      "Targets": 8,
+      "CommittedDamagePerTarget": 1000,
+      "FlatHealingPerSuccessfulHit": 670,
+      "PercentageHealingBasisPoints": 2000,
+      "RequestedHealingPerPulse": 6960,
+      "Caveat": "Before missing-HP cap, healing-received modifiers, enemy deaths, misses and field expiry. Skill-slot compatibility is not established by this scenario."
+    }
+  ],
+  "GeneratedAt": "2026-10-29T11:31:37.345260+00:00",
+  "SourceHashes": {
+    "World/Systems/Combat/AuthoredCombatChancePolicies.cs": "dd5a520f959e289bc145cb1bb4e79345086f2bc16c37af92a07d4b10e8d4de02",
+    "World/Systems/Combat/AuthoredCombatVersions.cs": "80bc6f07db940c2a0f71cc88d44719ead0e6b3985502649b9816634a4796a948",
+    "World/Systems/Combat/AuthoredPlayerPveCurrent.cs": "46a78a52161e589518a189fb0974d97ebdde55acf09094f579a3915ecbef9765",
+    "World/Systems/Combat/CombatSecondaryEffectPolicy.cs": "2f6b5cd1a4eaf4ee1233b98e8adefb40465e396d511739f21d2c7f061cf133a9",
+    "State/SkillStatusEffectCatalog.cs": "66e7ebedbaae496ba2abaf73bfc6fcf4f90e9a03037b2f5a802fe23753e9ab9c",
+    "State/PostgresCharacterPetLearnedSkillProjectionSql.cs": "e657ad0cf043caf95d4bf9a177cfc1d4d781fcbdbe57d892846c69ea96c8623b",
+    "Game/FlameBlastPulsePolicy.cs": "3d0b5c3fdaa06b27fd02cc323203a88ceaed847b86016fdeb9d7962eaa0c2ed2",
+    "Game/GameClientHandler.FlameBlastPulse.cs": "40718a7f9caece9b4e2ebfa354401f23649f7d957b949455f2888396e6fac17e",
+    "Infrastructure/Pets/PetLearnedSkillContentBaseline.Vampiric.cs": "21c8d0aa732f5910db15484600ab381b42ef8a8d3b3043045ac2c3bf6b606ec8"
+  }
+}

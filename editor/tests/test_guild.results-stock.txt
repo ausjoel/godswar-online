@@ -1,0 +1,18 @@
+# tests/test_guild.py --build stock --quick, 2026-10-28 06:04 UTC, db godswar_ed_guild
+ok   editor answers - database godswar_ed_guild
+ok   not the live database
+ok   server build is stock - capabilities {'available': False, 'port': 60601, 'error': 'management port 60601 has no /admin/capabilities (HTTP 404): live edits of online characters are not available, log the character out to edit', 'version': None}
+ok   guild overview - 3 guilds, 0 issues, 17 building types
+ok   account gtxpjfl created (Accounts page API)
+ok   headless client made character GtXpjfL - messages [10005, 10019, 10033, 10043, 10056, 10078, 10090, 10164, 10166, 10196, 10201, 10202]
+ok   GtXpjfL is listed in the all-characters picker (#17) - 16 characters listed
+ok   create guild GtXpjfGuild, leader GtXpjfL - guilds +1; guild_members +1; character_base ~1 (consortia,consortia_job,guild_duty)
+ok   the page shows GtXpjfL online - ["GtXpjfL"]
+ok   guild edit while a member is online is refused (423) - guild GtXpjfGuild: silver 777777: GtXpjfL is online. Each online member's guild window, rank tag and altar bonus are held by the game session, so a database edit would not reach them. Live edits arrive with the round-2 s
+ok   stock: the refusal says live edits arrive with the round-2 update - guild GtXpjfGuild: silver 777777: GtXpjfL is online. Each online member's guild window, rank tag and altar bonus are held by the game session, so a database edit would not reach them. Live edits arriv
+ok   stock: no Kick is offered
+ok   stock: once logged out the same edit saves to the database (guild Silver 777,777) - guilds ~1 (silver,updated_at)
+ok   the client receives its guild at login (10138): GtXpjfGuild, Silver 777777 - {"name": "GtXpjfGuild", "level": 1, "gold": 0, "proclamation": "", "silver": 777777, "bijou": 0, "member_limit": 100, "buildings": {}}
+ok   the client's member list (10143) shows GtXpjfL as Guild Leader (6) - [{"name": "GtXpjfL", "online": true, "duty": 6, "level": 1, "profession": 0, "gold": 0, "silver": 0}]
+ok   the character panel duty byte (10166) is 6 - {"duty": 6, "contribution": 0}
+ALL OK

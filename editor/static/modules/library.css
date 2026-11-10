@@ -1,0 +1,174 @@
+/* static/modules/library.css - the Library page only. Every rule starts with .gw-mod-library (dialogs wrap their
+   content in a .gw-mod-library element, so they follow the same rule). Look: static/ui/UI-STYLE.md. */
+.gw-mod-library .lib-top { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: -6px 0 10px; }
+.gw-mod-library .lib-gs { position: relative; flex: 1 1 340px; max-width: 620px; }
+.gw-mod-library .lib-input { height: 26px; padding: 0 8px; min-width: 0; border: 1px solid #2e5468; border-radius: 3px; background: #050d12; color: #fff; font: 12px var(--gw-font); }
+.gw-mod-library .lib-input:focus { outline: 2px solid #ffe066; outline-offset: 1px; }
+.gw-mod-library .lib-gsearch { width: 100%; }
+.gw-mod-library .lib-pop { position: absolute; z-index: 40; top: 30px; left: 0; width: min(760px, 90vw); max-height: 70vh; overflow: auto; padding: 8px 10px;
+  background: rgba(6, 14, 20, .98); border: 1px solid #3d6b86; border-radius: 4px; box-shadow: 0 8px 24px #000c; }
+.gw-mod-library .lib-pop.hidden { display: none; }
+.gw-mod-library .lib-pop-h { display: flex; justify-content: space-between; align-items: center; color: var(--gw-title); font-weight: 700; margin: 8px 0 4px; }
+.gw-mod-library .lib-pop-row { display: flex; flex-wrap: wrap; gap: 4px; }
+
+/* three columns: tab rail | grid or view | details */
+.gw-mod-library .lib-cols { display: grid; grid-template-columns: 178px minmax(0, 1fr) minmax(330px, 430px); gap: 12px; height: calc(100vh - 176px); min-height: 460px; }
+.gw-mod-library .lib-rail { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; padding-right: 2px; }
+.gw-mod-library .lib-tab { display: grid; grid-template-columns: 36px 1fr; grid-template-rows: auto auto; column-gap: 7px; align-items: center; padding: 2px 6px; text-align: left;
+  border: 1px solid transparent; border-radius: 3px; background: transparent; color: #e6eef2; cursor: pointer; font: 12px var(--gw-font); }
+.gw-mod-library .lib-tab .gw-icon { grid-row: 1 / span 2; width: 36px; height: 36px; }
+.gw-mod-library .lib-tab .t { font-weight: 700; align-self: end; }
+.gw-mod-library .lib-tab .n { color: #8aa3b0; font-size: 10.5px; align-self: start; }
+.gw-mod-library .lib-tab:hover { background: #0f2a38; border-color: #2e6a88; }
+.gw-mod-library .lib-tab.on { background: #24485c; border-color: #ffe066; }
+.gw-mod-library .lib-tab:focus-visible { outline: 2px solid #ffe066; outline-offset: 1px; }
+.gw-mod-library .lib-center { display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 0; }
+.gw-mod-library .lib-center > .gw-pk, .gw-mod-library .lib-center > .lib-view { flex: 1; min-height: 0; }
+.gw-mod-library .lib-tabhelp { font-size: 11px; }
+.gw-mod-library .lib-view { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+.gw-mod-library .lib-view-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.gw-mod-library .lib-scrollpane { overflow: auto; padding: 4px; background: rgba(4, 18, 30, .8); border: 1px solid #1d4458; border-radius: 3px; }
+.gw-mod-library .lib-sub { display: flex; flex-wrap: wrap; gap: 3px; border-bottom: 1px solid #2e5468; padding: 0 2px; }
+
+/* details window */
+.gw-mod-library .lib-detailwin { margin: 34px 0 0; padding: 10px 12px; min-height: 0; display: flex; flex-direction: column; }
+.gw-mod-library .lib-detail { flex: 1; min-height: 0; overflow-y: auto; padding-right: 4px; }
+.gw-mod-library .lib-head { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 8px; }
+.gw-mod-library .lib-head-t { min-width: 0; flex: 1; }
+.gw-mod-library .lib-title { font: 700 15px var(--gw-font); color: var(--gw-value, #fff); overflow-wrap: anywhere; }
+.gw-mod-library .lib-flags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; align-items: center; }
+.gw-mod-library .lib-h { margin: 12px 0 5px; color: var(--gw-title); font: 700 12px var(--gw-font); }
+.gw-mod-library .lib-use { padding: 8px; margin: 6px 0 10px; border: 1px solid #3d6b86; border-radius: 4px; background: rgba(16, 40, 54, .6); }
+.gw-mod-library .lib-use-h { font-weight: 700; color: var(--gw-title); margin-bottom: 6px; cursor: help; }
+.gw-mod-library .lib-buttons { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0; }
+.gw-mod-library .lib-chips { margin-top: 6px; color: #b9c9d0; font-size: 11px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.gw-mod-library .lib-tt .gw-tooltip, .gw-mod-library .lib-ttbox .gw-tooltip, .gw-mod-library .lib-give-prev .gw-tooltip { max-width: none; position: static; }
+.gw-mod-library .lib-sliders { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 6px; }
+.gw-mod-library .lib-sliders label { display: flex; gap: 6px; align-items: center; color: #cfe3ec; font-size: 11.5px; }
+.gw-mod-library .lib-range { flex: 0 1 160px; accent-color: #6bccfe; }
+.gw-mod-library .lib-qname { font-weight: 700; font-size: 11.5px; }
+.gw-mod-library .lib-desc { margin: 6px 0; line-height: 1.45; white-space: pre-wrap; }
+.gw-mod-library .lib-warn { color: #ffb36b; font-size: 11.5px; margin: 4px 0; }
+.gw-mod-library .lib-attrs { width: 100%; border-collapse: collapse; }
+.gw-mod-library .lib-attrs th { text-align: left; font-weight: 400; color: #9fc3d4; padding: 2px 10px 2px 0; vertical-align: top; cursor: help; white-space: nowrap; }
+.gw-mod-library .lib-attrs td { padding: 2px 0; overflow-wrap: anywhere; }
+.gw-mod-library .lib-scroll { overflow-x: auto; max-width: 100%; }
+.gw-mod-library .lib-qtab { border-collapse: collapse; font-size: 11.5px; }
+.gw-mod-library .lib-qtab th, .gw-mod-library .lib-qtab td { padding: 2px 6px; border: 1px solid #1d4458; text-align: right; white-space: nowrap; }
+.gw-mod-library .lib-qtab th:first-child { text-align: left; color: #9fc3d4; font-weight: 400; cursor: help; }
+.gw-mod-library .lib-qtab tr:first-child th { background: #0b1a22; }
+.gw-mod-library .lib-qtab .on { background: #3a3110; outline: 1px solid #ffe066; }
+.gw-mod-library .lib-tiles { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.gw-mod-library .lib-tile { display: flex; flex-direction: column; min-width: 74px; padding: 4px 8px; border: 1px solid #2e5468; border-radius: 3px; background: #0b1a22; cursor: help; }
+.gw-mod-library .lib-tile .k { color: #8aa3b0; font-size: 10.5px; }
+.gw-mod-library .lib-tile b { color: var(--gw-value, #fff); }
+.gw-mod-library .lib-refs { display: flex; flex-wrap: wrap; gap: 4px; }
+.gw-mod-library .lib-ref { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 1px 7px 1px 1px; border: 1px solid #2e5468; border-radius: 3px;
+  background: #0b1a22; color: #e8f4fa; cursor: pointer; font: 11.5px var(--gw-font); }
+.gw-mod-library .lib-ref .gw-icon { width: 36px; height: 36px; transform: scale(.67); margin: -6px; }
+.gw-mod-library .lib-ref .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+.gw-mod-library .lib-ref .note { color: #8aa3b0; font-size: 10.5px; }
+.gw-mod-library .lib-ref:hover { border-color: #6bccfe; }
+.gw-mod-library .lib-ref.unknown .nm { color: #ff8a80; }
+.gw-mod-library .lib-ref.text { cursor: default; padding: 3px 7px; }
+.gw-mod-library .lib-srv { margin-top: 12px; }
+.gw-mod-library .lib-srv summary { cursor: pointer; color: var(--gw-title); font-weight: 700; }
+.gw-mod-library .lib-srv-h { margin: 8px 0 3px; color: #9fc3d4; }
+.gw-mod-library .lib-srv-wrap { overflow-x: auto; }
+.gw-mod-library .lib-srv-t { border-collapse: collapse; font-size: 11px; }
+.gw-mod-library .lib-srv-t th, .gw-mod-library .lib-srv-t td { border: 1px solid #1d4458; padding: 1px 5px; text-align: left; vertical-align: top; max-width: 320px; overflow-wrap: anywhere; }
+.gw-mod-library .lib-bars { display: flex; flex-direction: column; gap: 2px; }
+.gw-mod-library .lib-bar { display: grid; grid-template-columns: 22px 1fr 70px; gap: 6px; align-items: center; font-size: 11px; cursor: help; }
+.gw-mod-library .lib-bar .lv { color: #8aa3b0; text-align: right; }
+.gw-mod-library .lib-bar .b { height: 9px; background: linear-gradient(90deg, #1b6a2c, #00ff00); border-radius: 2px; }
+.gw-mod-library .lib-bar .v { color: var(--gw-green-textcolor); }
+.gw-mod-library .lib-rewards { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin: 6px 0; }
+.gw-mod-library .lib-reward { padding: 1px 8px; border-radius: 9px; border: 1px solid #8a7a2e; color: #ffe27a; background: #221d08; font-size: 11.5px; cursor: help; }
+.gw-mod-library .lib-cells { display: flex; gap: 16px; align-items: center; margin: 6px 0; }
+.gw-mod-library .lib-cells > span { display: inline-flex; align-items: center; gap: 4px; }
+.gw-mod-library .lib-stages { display: flex; flex-direction: column; gap: 6px; }
+.gw-mod-library .lib-stage { display: grid; grid-template-columns: 42px 1fr; gap: 8px; align-items: start; }
+
+/* map plot */
+.gw-mod-library .lib-svg { width: 100%; height: auto; background: radial-gradient(#0e2a38, #06131b); border: 1px solid #2e5468; border-radius: 3px; }
+.gw-mod-library .lib-svg .mon { fill: #ff5a4f; opacity: .7; }
+.gw-mod-library .lib-svg .npc { fill: #14f078; }
+.gw-mod-library .lib-svg .gate { fill: none; stroke: #6bccfe; stroke-width: 2; }
+.gw-mod-library .lib-svg .place { fill: #ffe066; stroke: #000; stroke-width: 1; }
+.gw-mod-library .lib-svg .place:hover, .gw-mod-library .lib-svg .gate:hover { stroke: #fff; stroke-width: 2; }
+.gw-mod-library .lib-svg .lbl { fill: #fff7c0; font: 9px var(--gw-font); paint-order: stroke; stroke: #000; stroke-width: 2px; pointer-events: none; }
+.gw-mod-library .lib-legend { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; font-size: 11px; color: #b9c9d0; margin: 4px 0; }
+.gw-mod-library .lib-legend .k { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
+.gw-mod-library .lib-legend .k.place { background: #ffe066; } .gw-mod-library .lib-legend .k.gate { border: 2px solid #6bccfe; }
+.gw-mod-library .lib-legend .k.mon { background: #ff5a4f; } .gw-mod-library .lib-legend .k.npc { background: #14f078; }
+.gw-mod-library .lib-places { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
+.gw-mod-library .lib-place { padding: 1px 7px; border: 1px solid #8a7a2e; border-radius: 9px; background: #221d08; color: #ffe27a; font: 11px var(--gw-font); cursor: pointer; }
+.gw-mod-library .lib-place:hover { border-color: #ffe066; }
+
+/* talent trees */
+.gw-mod-library .lib-trees { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; overflow: auto; padding: 4px;
+  background: rgba(4, 18, 30, .8); border: 1px solid #1d4458; border-radius: 3px; flex: 1; min-height: 0; align-content: start; }
+.gw-mod-library .lib-tree-h { color: var(--gw-title); font-weight: 700; margin: 2px 0 6px; }
+.gw-mod-library .lib-tree-cells { display: flex; flex-direction: column; gap: 3px; }
+.gw-mod-library .lib-tal { display: grid; grid-template-columns: 42px 1fr; grid-template-rows: auto auto; column-gap: 7px; align-items: center; text-align: left; padding: 2px 4px;
+  border: 1px solid transparent; border-radius: 3px; background: transparent; color: #e8f4fa; cursor: pointer; font: 12px var(--gw-font); }
+.gw-mod-library .lib-tal .gw-cellx { grid-row: 1 / span 2; }
+.gw-mod-library .lib-tal .nm { font-weight: 700; align-self: end; }
+.gw-mod-library .lib-tal .need { color: #8aa3b0; font-size: 10.5px; align-self: start; }
+.gw-mod-library .lib-tal:hover { border-color: #2e6a88; background: #0f2a38; }
+.gw-mod-library .lib-tal.on { border-color: #ffe066; background: #24485c; }
+
+/* zodiac */
+.gw-mod-library .lib-signs { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.gw-mod-library .lib-sign { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px; border: 1px solid #2e5468; border-radius: 4px; background: #0b1a22; text-align: center; cursor: help; }
+.gw-mod-library .lib-sign b { color: #dcc883; }
+.gw-mod-library .lib-board { display: grid; grid-template-columns: repeat(4, 76px); gap: 6px; margin: 4px 0 10px; }
+.gw-mod-library .lib-cellbtn { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 62px; border: 1px solid #3d6b86; border-radius: 4px;
+  background: radial-gradient(#1b3a4c, #08151d); color: #fff; cursor: pointer; font: 11px var(--gw-font); }
+.gw-mod-library .lib-cellbtn b { font-size: 16px; color: #dcc883; }
+.gw-mod-library .lib-cellbtn:hover { border-color: #ffe066; }
+
+/* shops */
+.gw-mod-library .lib-shops { flex-direction: row; gap: 10px; }
+.gw-mod-library .lib-shoplist { width: 220px; flex: 0 0 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.gw-mod-library .lib-shoprow { display: flex; flex-direction: column; text-align: left; padding: 4px 8px; border: 1px solid #1d3a4a; border-radius: 3px; background: #0a1820cc; color: #e8f4fa; cursor: pointer; font: 12px var(--gw-font); }
+.gw-mod-library .lib-shoprow:hover { border-color: #6bccfe; }
+.gw-mod-library .lib-shoprow.on { border-color: #ffe066; background: #24485c; }
+.gw-mod-library .lib-shopbody { flex: 1; min-width: 0; overflow-y: auto; padding: 6px; background: rgba(4, 18, 30, .8); border: 1px solid #1d4458; border-radius: 3px; }
+.gw-mod-library .lib-shophead { margin-bottom: 8px; color: #cfe3ec; }
+.gw-mod-library .lib-shophead b { color: var(--gw-title); }
+.gw-mod-library .lib-shopcells { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 4px; margin-bottom: 8px; }
+.gw-mod-library .lib-shopitem { display: grid; grid-template-columns: 42px 1fr; grid-template-rows: auto auto; column-gap: 6px; align-items: center; text-align: left; padding: 2px 4px;
+  border: 1px solid #1d3a4a; border-radius: 3px; background: #08151d; color: #fff; cursor: pointer; font: 11.5px var(--gw-font); }
+.gw-mod-library .lib-shopitem .gw-cellx { grid-row: 1 / span 2; }
+.gw-mod-library .lib-shopitem .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; align-self: end; }
+.gw-mod-library .lib-shopitem .pr { color: #ffe27a; font-size: 10.5px; align-self: start; }
+.gw-mod-library .lib-shopitem:hover { border-color: #6bccfe; }
+.gw-mod-library .lib-shopitem.noclient .nm { color: #ff8a80; }
+
+/* dialogs (wrapped in .gw-mod-library) */
+.gw-mod-library.lib-dialog { display: flex; flex-direction: column; gap: 8px; min-width: min(560px, 90vw); }
+.gw-mod-library .lib-charlist { display: flex; flex-direction: column; gap: 2px; max-height: 55vh; overflow: auto; }
+.gw-mod-library .lib-charrow { display: flex; gap: 8px; align-items: center; padding: 4px 8px; text-align: left; border: 1px solid transparent; border-radius: 3px; background: transparent; color: #fff; cursor: pointer; font: 12px var(--gw-font); }
+.gw-mod-library .lib-charrow:hover, .gw-mod-library .lib-charrow:focus-visible { background: #0f2a38; border-color: #2e6a88; outline: none; }
+.gw-mod-library .lib-charrow.on { border-color: #ffe066; }
+.gw-mod-library .lib-kv { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.gw-mod-library .lib-kv > :first-child { min-width: 80px; color: #9fc3d4; }
+.gw-mod-library .lib-help { cursor: help; border-bottom: 1px dotted #5a7c8c; }
+.gw-mod-library .lib-give-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 300px); gap: 14px; align-items: start; }
+.gw-mod-library .lib-give-form { display: flex; flex-direction: column; gap: 7px; }
+.gw-mod-library .lib-q { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.gw-mod-library .lib-result .gw-good { font-weight: 700; margin: 4px 0; }
+.gw-mod-library .lib-loading { padding: 20px; }
+
+@media (max-width: 1100px) {
+  .gw-mod-library .lib-cols { grid-template-columns: 150px minmax(0, 1fr); height: auto; }
+  .gw-mod-library .lib-center { height: 70vh; }
+  .gw-mod-library .lib-detailwin { grid-column: 1 / -1; max-height: none; }
+}
+@media (max-width: 700px) {
+  .gw-mod-library .lib-cols { grid-template-columns: 1fr; }
+  .gw-mod-library .lib-rail { flex-direction: row; flex-wrap: wrap; }
+  .gw-mod-library .lib-tab { grid-template-columns: 36px auto; }
+  .gw-mod-library .lib-give-cols { grid-template-columns: 1fr; }
+}

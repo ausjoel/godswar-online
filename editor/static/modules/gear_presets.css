@@ -1,0 +1,5 @@
+.gw-mod-gear_presets .gp-controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0}
+.gw-mod-gear_presets .gp-controls label{display:flex;gap:6px;align-items:center}
+.gw-mod-gear_presets .gp-piece{padding:12px;margin:12px 0;border:1px solid #36505b;background:#0b171f}
+.gw-mod-gear_presets .gp-piece h3{margin:0 0 8px}
+.gw-mod-gear_presets .gp-piece p{margin:6px 0}

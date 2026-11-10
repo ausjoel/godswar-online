@@ -1,0 +1,181 @@
+using Godswar.Server.Networking;
+using Godswar.Server.State;
+
+namespace Godswar.Server.Game;
+
+internal sealed partial class GameSessionRegistry
+{
+    private TrainingDummyHostileStatusClientOverlay
+        CaptureTrainingDummyHostileStatusOverlay(
+            GameSessionContext expected,
+            DateTimeOffset now)
+    {
+        lock (_gate)
+        {
+            if (!_sessions.TryGetValue(expected.Session, out var current) ||
+                !current.WorldReady ||
+                current.CharacterId != expected.CharacterId ||
+                current.ObjectId != expected.ObjectId ||
+                current.WorldInstanceId != expected.WorldInstanceId ||
+                current.WorldRevision != expected.WorldRevision ||
+                current.Ownership != expected.Ownership ||
+                !ReferenceEquals(current.Character, expected.Character))
+            {
+                return TrainingDummyHostileStatusClientOverlay.Empty;
+            }
+
+            var snapshot = CaptureTrainingDummyHostileStatusSnapshotLocked(
+                current,
+                now);
+            return TrainingDummyHostileStatusClientProjection.Create(
+                snapshot,
+                now);
+        }
+    }
+
+    private PlayerStatusSnapshot MergeTrainingDummyClientStatusOverlays(
+        GameSessionContext context,
+        PlayerStatusSnapshot baseline,
+        DateTimeOffset now,
+        out ElementalClientStatusOverlay elementalOverlay,
+        out TrainingDummyHostileStatusClientOverlay hostileOverlay,
+        out MedusaClientStatusOverlay medusaOverlay,
+        out PlayerStatusSnapshot snapshotWithoutMedusa)
+    {
+        var elemental = MergeTrainingDummyElementalStatusOverlay(
+            context,
+            baseline,
+            now,
+            out elementalOverlay);
+        hostileOverlay = CaptureTrainingDummyHostileStatusOverlay(
+            context,
+            now);
+        var hostile = TrainingDummyHostileStatusClientProjection.Merge(
+            elemental,
+            hostileOverlay);
+        snapshotWithoutMedusa = hostile;
+        medusaOverlay = CaptureMedusaClientStatusOverlay(context, now);
+        // Wonderland boss debuffs are authoritative encounter effects rather
+        // than runtime statuses, so they are layered onto every snapshot that
+        // this producer emits and cleared again when the run ends.
+        return MergeWonderlandStatusOverlay(
+            context,
+            MedusaClientStatusProjection.Merge(hostile, medusaOverlay),
+            now);
+    }
+
+    internal async Task<bool>
+        PublishTrainingDummyHostileStatusApplicationAsync(
+            GameSessionContext target,
+            HostileStatusApplicationDecision decision,
+            DateTimeOffset now,
+            string reason,
+            CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        if (!_playerStatusStates.ContainsKey(target.Session) &&
+            CaptureTrainingDummyHostileStatusOverlay(target, now)
+                .Effects.Count == 0)
+        {
+            return false;
+        }
+        if (!TryGetOrCreatePlayerStatusState(target.Session, out var state))
+        {
+            return false;
+        }
+
+        var admissionClaims = new ExactStatusDisconnectClaims();
+        await state.Gate.WaitAsync(cancellationToken);
+        try
+        {
+            var published = await PublishStatusSnapshotLockedAsync(
+                target.Session,
+                state,
+                now,
+                reason,
+                force: false,
+                broadcast: true,
+                cancellationToken,
+                claimedDisconnects: admissionClaims);
+            if (decision.Applied && decision.ActiveStatus is { } active)
+            {
+                ScheduleTrainingDummyHostileStatusExpiry(
+                    target,
+                    state,
+                    active.ExpiresAt,
+                    active.Definition.StatusId,
+                    active.Revision);
+            }
+            return published;
+        }
+        finally
+        {
+            state.Gate.Release();
+            admissionClaims.CompleteAll(this);
+        }
+    }
+
+    private void ScheduleTrainingDummyHostileStatusExpiry(
+        GameSessionContext target,
+        PlayerStatusState state,
+        DateTimeOffset expiresAt,
+        uint statusId,
+        long revision)
+    {
+        _ = PublishTrainingDummyHostileStatusExpiryAsync(
+            target,
+            state,
+            expiresAt,
+            statusId,
+            revision);
+    }
+
+    private async Task PublishTrainingDummyHostileStatusExpiryAsync(
+        GameSessionContext target,
+        PlayerStatusState state,
+        DateTimeOffset expiresAt,
+        uint statusId,
+        long revision)
+    {
+        try
+        {
+            var delay = expiresAt - DateTimeOffset.UtcNow;
+            if (delay > TimeSpan.Zero)
+            {
+                await Task.Delay(delay, state.Lifetime.Token);
+            }
+
+            var admissionClaims = new ExactStatusDisconnectClaims();
+            await state.Gate.WaitAsync(state.Lifetime.Token);
+            try
+            {
+                await PublishStatusSnapshotLockedAsync(
+                    target.Session,
+                    state,
+                    DateTimeOffset.UtcNow,
+                    $"training-dummy-hostile-{statusId}-expired-" +
+                    revision,
+                    force: true,
+                    broadcast: true,
+                    state.Lifetime.Token,
+                    claimedDisconnects: admissionClaims);
+            }
+            finally
+            {
+                state.Gate.Release();
+                admissionClaims.CompleteAll(this);
+            }
+        }
+        catch (OperationCanceledException) when (
+            state.Lifetime.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(
+                "[training-status] expiry projection deferred " +
+                $"target={target.DisplayName} status={statusId} " +
+                $"revision={revision}: {ex.Message}");
+        }
+    }
+}

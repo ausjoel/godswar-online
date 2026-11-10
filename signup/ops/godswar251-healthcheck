@@ -1,0 +1,44 @@
+#!/bin/bash
+# Every 5 minutes (godswar251-health.timer): is the reborn server up? Is the sign-up website up?
+# Pushes to ntfy (/etc/godswar251-alert.conf) only when a state changes: down, then back up.
+# The game and the sign-up site have separate state files, so each gets its own alerts.
+set -u
+. /etc/godswar251-alert.conf
+
+# notify KIND STATEFILE PROBLEM DOWN_TITLE DOWN_HINT UP_TITLE
+notify() {
+  local state=$1 problem=$2 down_title=$3 hint=$4 up_title=$5 prev
+  prev=$(cat "$state" 2>/dev/null || echo up)
+  if [ -n "$problem" ] && [ "$prev" = up ]; then
+    curl -s -m 15 -H "Title: $down_title" -H "Priority: high" -H "Tags: warning" -d "$problem ($(date -u '+%F %H:%M') UTC). $hint" "$NTFY_URL" >/dev/null && echo down > "$state"
+  elif [ -z "$problem" ] && [ "$prev" = down ]; then
+    curl -s -m 15 -H "Title: $up_title" -H "Tags: white_check_mark" -d "Healthy again ($(date -u '+%F %H:%M') UTC)" "$NTFY_URL" >/dev/null && echo up > "$state"
+  fi
+}
+
+# --- game server
+problem=""
+systemctl is-active --quiet godswar251 || problem="service godswar251 is not running"
+[ -z "$problem" ] && ! curl -sf -m 10 http://127.0.0.1:9090/ready >/dev/null && problem="server not ready (management /ready failed)"
+for p in 6999 7000; do
+  [ -z "$problem" ] && ! timeout 5 bash -c "exec 3<>/dev/tcp/127.0.0.1/$p" 2>/dev/null && problem="port $p not accepting connections"
+done
+notify /var/lib/godswar251-health.state "$problem" "GodsWar server DOWN" \
+  "ssh vps, then: sudo gw251 status / sudo gw251 restart" "GodsWar server back up"
+game_problem=$problem
+
+# --- sign-up website (GodsWar-VPS/signup): only checked once it is installed
+signup_problem=""
+if [ -f /etc/systemd/system/gwsignup.service ]; then
+  systemctl is-active --quiet gwsignup || signup_problem="service gwsignup is not running"
+  [ -z "$signup_problem" ] && ! systemctl is-active --quiet caddy && signup_problem="service caddy is not running"
+  [ -z "$signup_problem" ] && [ "$(curl -s -m 10 http://127.0.0.1:8090/healthz)" != ok ] && signup_problem="sign-up app /healthz is not ok (database?)"
+  # Through Caddy with a real certificate check (catches an expired or missing certificate).
+  [ -z "$signup_problem" ] && ! curl -sf -m 15 -o /dev/null "${GW_SIGNUP_URL:?}"/healthz && signup_problem="$GW_SIGNUP_URL does not answer (Caddy or certificate)"
+  notify /var/lib/godswar251-signup-health.state "$signup_problem" "GodsWar sign-up site DOWN" \
+    "ssh vps, then: systemctl status gwsignup caddy / journalctl -u gwsignup -n 50" "GodsWar sign-up site back up"
+fi
+
+[ -n "$game_problem" ] && echo "$game_problem"
+[ -n "$signup_problem" ] && echo "signup: $signup_problem"
+[ -z "$game_problem$signup_problem" ]

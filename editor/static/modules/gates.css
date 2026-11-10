@@ -1,0 +1,9 @@
+.gw-mod-gates .gw-gt-num { width: 70px; }
+.gw-mod-gates .gw-gt-note { width: 160px; }
+.gw-mod-gates .gw-gt-told { max-width: 320px; font-size: 12px; }
+.gw-mod-gates .gw-gt-edited td { background: #12251a; }
+.gw-mod-gates .gw-gt-warn:empty { display: none; }
+.gw-mod-gates .gw-gt-table td { vertical-align: top; }
+.gw-mod-gates .gw-gt-win { margin: 2px 0; white-space: nowrap; }
+.gw-mod-gates .gw-gt-windows { margin-top: 4px; }
+.gw-mod-gates .gw-gt-table select { max-width: 150px; }

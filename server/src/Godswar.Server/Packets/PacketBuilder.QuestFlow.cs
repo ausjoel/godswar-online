@@ -1,0 +1,295 @@
+using Godswar.Server.Protocol;
+
+namespace Godswar.Server.Packets;
+
+internal static partial class PacketBuilder
+{
+    // Every frame below is a byte-for-byte copy of the reference
+    // server's own packet. Nothing is rebuilt.
+
+    /// <summary>S2C 10090, replayed verbatim from reference capture packet 104.</summary>
+    private static readonly byte[] LoginSnapshotBytes = Convert.FromHexString(
+        "00086a270100000006020000e3130000ef130000000000000000000000000000" +
+        "00000000000000000000000000000000ffffffffffffffff0000000000000000" +
+        "0000000000000000000000000400000003000000000000000000000000000000" +
+        "00000000000000000000000000000000240f0000ffffffffffffffffffffffff" +
+        "ffffffffffffffff010101010000000000000000000000000000000000000000" +
+        "00000000000000000000000000000000000000000000000000000000ffffffff" +
+        "ffffffffffffffffffffffffffffffff01010001000000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "00000000ffffffffffffffffffffffffffffffffffffffff0101000100000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "000000000000000000000000ffffffffffffffffffffffffffffffffffffffff" +
+        "0101000100000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000000000000000000000000000ffffffffffffffffffffffff" +
+        "ffffffffffffffff010100000000000000000000000000000000000000000000" +
+        "00000000000000000000000000000000ffffffffffffffff00000000ffffffff" +
+        "ffffffffffffffffffffffffffffffff01010000000000000000000000000000" +
+        "000000000000000000000000000000000000000000000000ffffffffffffffff" +
+        "00000000ffffffffffffffffffffffffffffffffffffffff0101000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "ffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffff" +
+        "0101000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000ffffffffffffffffffffffff000000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "00000000000000000000000000000000000000000000000000000000ffffffff" +
+        "ffffffffffffffffffffffffffffffff01010000000000000000000000000000" +
+        "000000000000000000000000000000000000000000000000ffffffffffffffff" +
+        "00000000ffffffffffffffffffffffffffffffffffffffff0101000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "ffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffff" +
+        "0101000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000ffffffffffffffff00000000ffffffffffffffffffffffff" +
+        "ffffffffffffffff010100000000000000000000000000000000000000000000" +
+        "00000000000000000000000000000000ffffffffffffffffffffffff00000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "00000000ffffffffffffffffffffffffffffffffffffffff0101000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "ffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffff" +
+        "0101000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000ffffffffffffffff00000000ffffffffffffffffffffffff" +
+        "ffffffffffffffff010100000000000000000000000000000000000000000000" +
+        "00000000000000000000000000000000ffffffffffffffff00000000ffffffff" +
+        "ffffffffffffffffffffffffffffffff01010000000000000000000000000000" +
+        "000000000000000000000000000000000000000000000000ffffffffffffffff");
+
+    /// <summary>S2C 10083, replayed verbatim from reference capture packet 214.</summary>
+    private static readonly byte[] SceneOfferBytes = Convert.FromHexString(
+        "1100632706020000ef1300000602000001");
+
+    /// <summary>S2C 10067, replayed verbatim from reference capture packet 222.</summary>
+    private static readonly byte[] GuideDialogOpenBytes = Convert.FromHexString(
+        "30005327e313000003000000000000005370617274615f303934000000000000" +
+        "00000000000000000000000000000000");
+
+    /// <summary>S2C 10082, replayed verbatim from reference capture packet 247.</summary>
+    private static readonly byte[] AcceptAnswerBytes = Convert.FromHexString(
+        "88026227e3130000ef1300000602000000000000040000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000240f0000ffffffffffffffffffffffffffffffffffffffff" +
+        "0101010100000000000000000000000000000000000000000000000000000000" +
+        "00000000000000000000000000000000ffffffffffffffffffffffffffffffff" +
+        "ffffffffffffffff010100010000000000000000000000000000000000000000" +
+        "000000000000000000000000000000000000000000000000ffffffffffffffff" +
+        "ffffffffffffffffffffffffffffffff01010001000000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "ffffffffffffffffffffffffffffffffffffffffffffffff0101000100000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "000000000000000000000000ffffffffffffffffffffffffffffffffffffffff" +
+        "0101000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000ffffffffffffffff00000000ffffffffffffffffffffffff" +
+        "ffffffffffffffff010100000000000000000000000000000000000000000000" +
+        "00000000000000000000000000000000ffffffffffffffff00000000ffffffff" +
+        "ffffffffffffffffffffffffffffffff01010000000000000000000000000000" +
+        "000000000000000000000000000000000000000000000000ffffffffffffffff" +
+        "00000000ffffffffffffffffffffffffffffffffffffffff0101000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "ffffffffffffffff");
+
+    /// <summary>S2C 10092, replayed verbatim from reference capture packet 248.</summary>
+    private static readonly byte[] AcceptPairAckBytes = Convert.FromHexString(
+        "30006c2700000000000000000000000000000000000000000000000000000000" +
+        "00000000000000000000000000000000");
+
+    /// <summary>S2C 10084, replayed verbatim from reference capture packet 249.</summary>
+    private static readonly byte[] AcceptConfirmBytes = Convert.FromHexString(
+        "0c006427ef13000006020000");
+
+    /// <summary>S2C 10067, replayed verbatim from reference capture packet 424.</summary>
+    private static readonly byte[] GuideDialogOpen2Bytes = Convert.FromHexString(
+        "30005327e313000003000000000000005370617274615f303934000000000000" +
+        "00000000000000000000000000000000");
+
+    /// <summary>S2C 10067, replayed verbatim from reference capture packet 620.</summary>
+    private static readonly byte[] GuideDialogOpen3Bytes = Convert.FromHexString(
+        "30005327e313000003000000000000005370617274615f303934000000000000" +
+        "00000000000000000000000000000000");
+
+    /// <summary>S2C 10082, replayed verbatim from reference capture packet 664.</summary>
+    private static readonly byte[] AcceptAnswer2Bytes = Convert.FromHexString(
+        "88026227e3130000ef1300000602000000000000040000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000240f0000ffffffffffffffffffffffffffffffffffffffff" +
+        "0101010100000000000000000000000000000000000000000000000000000000" +
+        "00000000000000000000000000000000ffffffffffffffffffffffffffffffff" +
+        "ffffffffffffffff010100010000000000000000000000000000000000000000" +
+        "000000000000000000000000000000000000000000000000ffffffffffffffff" +
+        "ffffffffffffffffffffffffffffffff01010001000000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "ffffffffffffffffffffffffffffffffffffffffffffffff0101000100000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "000000000000000000000000ffffffffffffffffffffffffffffffffffffffff" +
+        "0101000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000ffffffffffffffff00000000ffffffffffffffffffffffff" +
+        "ffffffffffffffff010100000000000000000000000000000000000000000000" +
+        "00000000000000000000000000000000ffffffffffffffff00000000ffffffff" +
+        "ffffffffffffffffffffffffffffffff01010000000000000000000000000000" +
+        "000000000000000000000000000000000000000000000000ffffffffffffffff" +
+        "00000000ffffffffffffffffffffffffffffffffffffffff0101000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "ffffffffffffffff");
+
+    /// <summary>S2C 10092, replayed verbatim from reference capture packet 665.</summary>
+    private static readonly byte[] AcceptPairAck2Bytes = Convert.FromHexString(
+        "30006c2700000000000000000000000000000000000000000000000000000000" +
+        "00000000000000000000000000000000");
+
+    /// <summary>S2C 10084, replayed verbatim from reference capture packet 666.</summary>
+    private static readonly byte[] AcceptConfirm2Bytes = Convert.FromHexString(
+        "0c006427ef13000006020000");
+
+    /// <summary>S2C 10067, replayed verbatim from reference capture packet 1307.</summary>
+    private static readonly byte[] ResponderDialogOpenBytes = Convert.FromHexString(
+        "30005327ef13000003000000000000005370617274615f313036000000000000" +
+        "00000000000000000000000000000000");
+
+    /// <summary>S2C 10086, replayed verbatim from reference capture packet 1340.</summary>
+    private static readonly byte[] HandInAckBytes = Convert.FromHexString(
+        "78006627e3130000ef1300000602000000000000000000000000000000000000" +
+        "0000000002000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "000000000000000000000000000000000000000000000000");
+
+    /// <summary>S2C 10076, replayed verbatim from reference capture packet 1341.</summary>
+    private static readonly byte[] HandInDetailBytes = Convert.FromHexString(
+        "64015c27ef130000070200000000000004000000000000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "00000000e803000001000000500000002800000083000000ffffffff01010101" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000000000007805000001000000500000003c00000083000000" +
+        "ffffffff01010101000000000000000000000000000000000000000000000000" +
+        "0000000000000000000000000000000000000000a4060000150000005a000000" +
+        "b400000083000000ffffffff0101010100000000000000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000008070000" +
+        "150000005a0000003c00000083000000ffffffff010101010000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "00000000");
+
+    /// <summary>S2C 10077, replayed verbatim from reference capture packet 1342.</summary>
+    private static readonly byte[] HandInListBytes = Convert.FromHexString(
+        "3c005d27ef1300000600000007020000010000000a020000000000000c020000" +
+        "00000000680000000000000069000000000000006a00000000000000");
+
+    /// <summary>S2C 10080, replayed verbatim from reference capture packet 1343.</summary>
+    private static readonly byte[] HandInMenuBytes = Convert.FromHexString(
+        "24006027ef1300000600000006020000090200000b0200006800000069000000" +
+        "6a000000");
+
+    /// <summary>S2C 10097, replayed verbatim from reference capture packet 1368.</summary>
+    private static readonly byte[] HandInTailBytes = Convert.FromHexString(
+        "10007127810500004604000083020000");
+
+    /// <summary>S2C 10082, replayed verbatim from reference capture packet 1373.</summary>
+    private static readonly byte[] AcceptAnswer3Bytes = Convert.FromHexString(
+        "88026227ef130000be1300000702000000000000040000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000e803000001000000500000002800000083000000ffffffff" +
+        "0101010100000000000000000000000000000000000000000000000000000000" +
+        "000000000000000000000000000000007805000001000000500000003c000000" +
+        "83000000ffffffff010101010000000000000000000000000000000000000000" +
+        "000000000000000000000000000000000000000000000000a406000015000000" +
+        "5a000000b400000083000000ffffffff01010101000000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "08070000150000005a0000003c00000083000000ffffffff0101010100000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "000000000000000000000000ffffffffffffffffffffffffffffffffffffffff" +
+        "0101000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000ffffffffffffffff00000000ffffffffffffffffffffffff" +
+        "ffffffffffffffff010100000000000000000000000000000000000000000000" +
+        "00000000000000000000000000000000ffffffffffffffff00000000ffffffff" +
+        "ffffffffffffffffffffffffffffffff01010000000000000000000000000000" +
+        "000000000000000000000000000000000000000000000000ffffffffffffffff" +
+        "00000000ffffffffffffffffffffffffffffffffffffffff0101000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000" +
+        "ffffffffffffffff");
+
+    /// <summary>S2C 10092, replayed verbatim from reference capture packet 1374.</summary>
+    private static readonly byte[] AcceptPairAck3Bytes = Convert.FromHexString(
+        "30006c2700000000000000000000000000000000000000000000000000000000" +
+        "00000000000000000000000000000000");
+
+    /// <summary>S2C 10084, replayed verbatim from reference capture packet 1375.</summary>
+    private static readonly byte[] AcceptConfirm3Bytes = Convert.FromHexString(
+        "0c006427be13000007020000");
+
+    /// <summary>S2C 10090.</summary>
+    public static byte[] LoginSnapshotFrame() => (byte[])LoginSnapshotBytes.Clone();
+
+    /// <summary>S2C 10083.</summary>
+    public static byte[] SceneOfferFrame() => (byte[])SceneOfferBytes.Clone();
+
+    /// <summary>S2C 10067.</summary>
+    public static byte[] GuideDialogOpenFrame() => (byte[])GuideDialogOpenBytes.Clone();
+
+    /// <summary>S2C 10082.</summary>
+    public static byte[] AcceptAnswerFrame() => (byte[])AcceptAnswerBytes.Clone();
+
+    /// <summary>S2C 10092.</summary>
+    public static byte[] AcceptPairAckFrame() => (byte[])AcceptPairAckBytes.Clone();
+
+    /// <summary>S2C 10084.</summary>
+    public static byte[] AcceptConfirmFrame() => (byte[])AcceptConfirmBytes.Clone();
+
+    /// <summary>S2C 10067.</summary>
+    public static byte[] GuideDialogOpen2Frame() => (byte[])GuideDialogOpen2Bytes.Clone();
+
+    /// <summary>S2C 10067.</summary>
+    public static byte[] GuideDialogOpen3Frame() => (byte[])GuideDialogOpen3Bytes.Clone();
+
+    /// <summary>S2C 10082.</summary>
+    public static byte[] AcceptAnswer2Frame() => (byte[])AcceptAnswer2Bytes.Clone();
+
+    /// <summary>S2C 10092.</summary>
+    public static byte[] AcceptPairAck2Frame() => (byte[])AcceptPairAck2Bytes.Clone();
+
+    /// <summary>S2C 10084.</summary>
+    public static byte[] AcceptConfirm2Frame() => (byte[])AcceptConfirm2Bytes.Clone();
+
+    /// <summary>S2C 10067.</summary>
+    public static byte[] ResponderDialogOpenFrame() => (byte[])ResponderDialogOpenBytes.Clone();
+
+    /// <summary>S2C 10086.</summary>
+    public static byte[] HandInAckFrame() => (byte[])HandInAckBytes.Clone();
+
+    /// <summary>S2C 10076.</summary>
+    public static byte[] HandInDetailFrame() => (byte[])HandInDetailBytes.Clone();
+
+    /// <summary>S2C 10077.</summary>
+    public static byte[] HandInListFrame() => (byte[])HandInListBytes.Clone();
+
+    /// <summary>S2C 10080.</summary>
+    public static byte[] HandInMenuFrame() => (byte[])HandInMenuBytes.Clone();
+
+    /// <summary>S2C 10097.</summary>
+    public static byte[] HandInTailFrame() => (byte[])HandInTailBytes.Clone();
+
+    /// <summary>S2C 10082.</summary>
+    public static byte[] AcceptAnswer3Frame() => (byte[])AcceptAnswer3Bytes.Clone();
+
+    /// <summary>S2C 10092.</summary>
+    public static byte[] AcceptPairAck3Frame() => (byte[])AcceptPairAck3Bytes.Clone();
+
+    /// <summary>S2C 10084.</summary>
+    public static byte[] AcceptConfirm3Frame() => (byte[])AcceptConfirm3Bytes.Clone();
+}

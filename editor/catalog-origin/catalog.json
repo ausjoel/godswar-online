@@ -1,0 +1,33 @@
+{
+ "client": "GodsWar-2.51/Q20-Client/Client",
+ "items": 3507,
+ "pets": 45,
+ "petskills": 1661,
+ "quests": 1300,
+ "skills": 1441,
+ "talents": 73,
+ "monsters": 904,
+ "npcs": 991,
+ "maps": 81,
+ "titles": 90,
+ "statuses": 351,
+ "appendattrs": 195,
+ "atlases": [
+  "Icon.gwo",
+  "Icon2.gwo",
+  "Icon3.gwo",
+  "Icon4.gwo"
+ ],
+ "atlas_layout": "2x2 in static/icons-origin.png: atlas i at ((i%2)*1024, (i//2)*1024)",
+ "sprites": {
+  "file": "static/catalog-icons.png",
+  "tile": 36,
+  "columns": 64,
+  "tiles": 1108,
+  "position": "x = (sprite % columns) * tile, y = (sprite // columns) * tile"
+ },
+ "database": {
+  "database": "godswar",
+  "taken_at": "2026-10-28T04:06:12.654959+00:00"
+ }
+}

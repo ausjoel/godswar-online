@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Account ready{% endblock %}
+{% block content %}
+<section class="card">
+  <p class="badge">Account created</p>
+  <h1>Welcome, {{ username }}</h1>
+  <p class="lead">Your account is ready. Next: download the client and log in.</p>
+
+  <ol class="steps">
+    <li>
+      <h3>Get the GodsWar launcher</h3>
+      <p>The launcher downloads the game for you and keeps it up to date.</p>
+      <p><a class="go link" href="/downloads/files/GodsWar-Launcher-mac.zip" rel="noopener">Download for Mac</a></p>
+      <p><a class="go link" href="/downloads/files/GodsWar-Launcher-windows.exe" rel="noopener">Download for Windows</a></p>
+      <p class="small">Your computer will warn that the app is from an unknown publisher the first time. <a href="/static/player-guide.html">The how-to-play guide</a> shows the clicks to allow it.</p>
+    </li>
+    <li>
+      <h3>Log in</h3>
+      <p>Open the game and log in with the username <strong class="name">{{ username }}</strong> and the password you just chose.
+      Type the username in <strong>lowercase</strong>, exactly as shown.</p>
+    </li>
+    <li>
+      <h3>Make your hero</h3>
+      <p>Pick the server, choose your faction and class, and enter the world.</p>
+    </li>
+  </ol>
+
+  {% if mailed %}
+  <p class="small">We sent a link to your email address. Open it within 24 hours to confirm the address. No mail? Look in the spam folder. You can play without confirming.</p>
+  {% else %}
+  <p class="small">We saved your email address, but we have not checked it yet. Later we will use it to help you reset a forgotten password.</p>
+  {% endif %}
+</section>
+{% endblock %}

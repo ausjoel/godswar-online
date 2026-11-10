@@ -1,0 +1,70 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql" Version="10.0.2" />
+    <PackageReference Include="StackExchange.Redis" Version="3.0.17" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource
+      Include="State/DatabaseMigrations/LegacySchemaBootstrap.001.sql"
+      LogicalName="Godswar.Server.State.DatabaseMigrations.LegacySchemaBootstrap.001.sql" />
+    <EmbeddedResource
+      Include="State/DatabaseMigrations/LegacySchemaBootstrap.002.sql"
+      LogicalName="Godswar.Server.State.DatabaseMigrations.LegacySchemaBootstrap.002.sql" />
+    <EmbeddedResource
+      Include="State/DatabaseMigrations/LegacySchemaBootstrap.003.sql"
+      LogicalName="Godswar.Server.State.DatabaseMigrations.LegacySchemaBootstrap.003.sql" />
+    <EmbeddedResource
+      Include="State/DatabaseMigrations/LegacySchemaBootstrap.004.sql"
+      LogicalName="Godswar.Server.State.DatabaseMigrations.LegacySchemaBootstrap.004.sql" />
+    <EmbeddedResource
+      Include="State/DatabaseMigrations/LegacySchemaBootstrap.005.sql"
+      LogicalName="Godswar.Server.State.DatabaseMigrations.LegacySchemaBootstrap.005.sql" />
+    <EmbeddedResource
+      Include="State/DatabaseMigrations/LegacySchemaBootstrap.006.sql"
+      LogicalName="Godswar.Server.State.DatabaseMigrations.LegacySchemaBootstrap.006.sql" />
+    <EmbeddedResource
+      Include="Infrastructure/WorldContent/Baselines/NpcContentBaseline.v1.br"
+      LogicalName="Godswar.Server.Infrastructure.WorldContent.Baselines.NpcContentBaseline.v1.br" />
+    <EmbeddedResource
+      Include="Infrastructure/WorldContent/Baselines/MonsterContentBaseline.v1.gz"
+      LogicalName="Godswar.Server.Infrastructure.WorldContent.Baselines.MonsterContentBaseline.v1.gz" />
+    <EmbeddedResource
+      Include="../../database/postgres/005_item_attributes.sql"
+      LogicalName="Godswar.Server.Infrastructure.DatabaseBaselines.005_item_attributes.sql" />
+    <EmbeddedResource
+      Include="../../database/postgres/006_skills_and_talents.sql"
+      LogicalName="Godswar.Server.Infrastructure.DatabaseBaselines.006_skills_and_talents.sql" />
+    <EmbeddedResource
+      Include="../../database/postgres/007_npcs.sql"
+      LogicalName="Godswar.Server.Infrastructure.DatabaseBaselines.007_npcs.sql" />
+    <EmbeddedResource
+      Include="../../database/postgres/008_maps.sql"
+      LogicalName="Godswar.Server.Infrastructure.DatabaseBaselines.008_maps.sql" />
+    <EmbeddedResource
+      Include="../../database/postgres/009_monsters.sql"
+      LogicalName="Godswar.Server.Infrastructure.DatabaseBaselines.009_monsters.sql" />
+    <!-- ROUND3: island eight loads this existing captured collision resource at publication. -->
+    <EmbeddedResource
+      Include="Game/Navigation/WonderlandFinalIsland.grid.gz"
+      LogicalName="Godswar.Server.Game.Navigation.WonderlandFinalIsland.grid.gz" />
+    <EmbeddedResource
+      Include="Game/monster-attack-presentation.csv"
+      LogicalName="Godswar.Server.Game.monster-attack-presentation.csv" />
+    <EmbeddedResource
+      Include="Game/pan-avatar-draw.csv"
+      LogicalName="Godswar.Server.Game.pan-avatar-draw.csv" />
+    <EmbeddedResource
+      Include="State/name-filter.txt"
+      LogicalName="Godswar.Server.State.name-filter.txt" />
+    </ItemGroup>
+
+</Project>

@@ -1,0 +1,114 @@
+/* static/modules/skills.css - styles of the Skills & talents page only (every rule starts with .gw-mod-skills). */
+.gw-mod-skills { font: 12px var(--gw-font); color: #e8eef2; }
+.gw-mod-skills .gw-sk-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin: 8px 0 6px; }
+.gw-mod-skills .gw-sk-name { color: var(--gw-title, #ffff00); font: 700 16px var(--gw-font); }
+.gw-mod-skills .gw-sk-revision { margin-left: auto; font-size: 11px; }
+.gw-mod-skills .gw-sk-tabs, .gw-mod-skills .gw-sk-subtabs { display: flex; gap: 2px; border-bottom: 1px solid #2e5468; margin-bottom: 8px; flex-wrap: wrap; }
+.gw-mod-skills .gw-sk-subtabs { margin: 4px 0 6px; }
+.gw-mod-skills .gw-sk-body { display: block; }
+.gw-mod-skills .gw-sk-cols { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
+.gw-mod-skills .gw-sk-cols > .gw-sk-panel { flex: 1 1 420px; min-width: 300px; }
+.gw-mod-skills .gw-sk-cols > .gw-sk-panel.gw-sk-side { flex: 0 1 340px; }
+.gw-mod-skills .gw-sk-cols > .gw-sk-panel.gw-sk-side.wide { flex: 1 1 420px; }
+.gw-mod-skills .gw-sk-panel { background: rgba(4, 18, 30, .8); border: 1px solid #3a5a6c; border-radius: 6px; padding: 8px 10px 10px; margin-bottom: 10px;
+  box-shadow: inset 0 0 0 1px #0a1822, 0 0 0 1px #0a1822; }
+.gw-mod-skills .gw-sk-ptitle { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: -2px 0 8px; padding-bottom: 5px; border-bottom: 1px solid #23404f; }
+.gw-mod-skills .gw-sk-ptitle .t { color: var(--gw-base-headcolor, #6bccfe); font: 700 13px var(--gw-font); }
+.gw-mod-skills .gw-sk-fs { border: 0; margin: 0; padding: 0; min-width: 0; }
+.gw-mod-skills .gw-sk-fs[disabled] { opacity: .55; }
+.gw-mod-skills .gw-sk-lock { margin: 0 0 8px; padding: 6px 10px; border: 1px solid #8a5a2e; background: #24150a; color: #ffcf99; border-radius: 4px; }
+.gw-mod-skills .gw-sk-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.gw-mod-skills .gw-sk-strip { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.gw-mod-skills .gw-sk-kv { border-collapse: collapse; margin-top: 6px; }
+.gw-mod-skills .gw-sk-kv th { color: var(--gw-base-headcolor, #6bccfe); text-align: left; font-weight: 400; padding: 2px 10px 2px 0; white-space: nowrap; vertical-align: top; }
+.gw-mod-skills .gw-sk-kv td { color: var(--gw-ordinary-infocolor, #fff77c); padding: 2px 0; }
+.gw-mod-skills .gw-sk-detail { min-height: 120px; }
+.gw-mod-skills .gw-sk-detail .gw-tooltip { position: static; max-width: none; margin-bottom: 6px; }
+
+/* ---- skill book */
+.gw-mod-skills .gw-sk-book { display: flex; flex-direction: column; gap: 2px; max-height: 640px; overflow: auto; padding-right: 4px; }
+.gw-mod-skills .gw-sk-sect { color: var(--gw-title, #ffff00); margin: 8px 0 3px; font-weight: 700; }
+.gw-mod-skills .gw-sk-fam { display: flex; align-items: center; gap: 8px; padding: 2px 4px; border-radius: 4px; }
+.gw-mod-skills .gw-sk-fam:hover { background: #0f2633; }
+.gw-mod-skills .gw-sk-fam.changed { background: #2a2408; box-shadow: inset 3px 0 0 #ffe066; }
+.gw-mod-skills .gw-sk-fam.off .gw-sk-fname b { color: #9fb3bd; }
+.gw-mod-skills .gw-sk-fam.bad { color: #ff9a8f; }
+.gw-mod-skills .gw-sk-fname { flex: 1; min-width: 120px; }
+.gw-mod-skills .gw-sk-pips { display: flex; gap: 3px; flex-wrap: wrap; }
+.gw-mod-skills .gw-sk-pip { min-width: 26px; height: 24px; padding: 0 5px; border: 1px solid #2e5468; border-radius: 3px; background: #0b1a22; color: #cfe3ec;
+  font: 700 11px var(--gw-font); cursor: pointer; }
+.gw-mod-skills .gw-sk-pip:hover:not([disabled]) { border-color: #6bccfe; }
+.gw-mod-skills .gw-sk-pip.on { background: linear-gradient(#f3e8c4, #c8b783); color: #111; border-color: #e9dcb0; }
+.gw-mod-skills .gw-sk-pip.over:not(.on) { color: #ffb36b; }
+.gw-mod-skills .gw-sk-pip.none.on { background: #3a1d1a; color: #ffb3a8; border-color: #b4483d; }
+.gw-mod-skills .gw-sk-book-item { display: inline-flex; align-items: center; gap: 4px; margin-right: 8px; }
+.gw-mod-skills .gw-sk-book-item .gw-icon { transform: scale(.6); margin: -7px; }
+
+/* ---- talent tree (SkillViewUI Talent tab geometry) */
+.gw-mod-skills .gw-sk-tree { position: relative; width: 240px; height: 420px; margin: 4px auto 8px; background: #2e3d4c; border: 1px solid #10202a; border-radius: 4px; }
+.gw-mod-skills .gw-sk-arrows { position: absolute; left: 0; top: 0; pointer-events: none; }
+.gw-mod-skills .gw-sk-arrows path { fill: none; stroke: #c9d3da; stroke-width: 2; }
+.gw-mod-skills .gw-sk-node { position: absolute; }
+.gw-mod-skills .gw-sk-node.shade > .gw-icon { filter: grayscale(.85) brightness(.45); }
+.gw-mod-skills .gw-sk-node.sel { outline: 2px solid #ffe066; outline-offset: 0; }
+.gw-mod-skills .gw-sk-node.changed { box-shadow: 0 0 0 2px #ffb33a; }
+.gw-mod-skills .gw-sk-node.over .gw-sk-rank { color: #ff9a8f; }
+.gw-mod-skills .gw-sk-rank { position: absolute; right: 3px; bottom: 1px; font: 700 11px var(--gw-font); color: #fff; pointer-events: none; }
+.gw-mod-skills .gw-sk-sum { text-align: center; }
+.gw-mod-skills .gw-sk-tname { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 13px; }
+.gw-mod-skills .gw-sk-quick { display: flex; gap: 4px; margin: 6px 0; flex-wrap: wrap; }
+
+/* ---- zodiac (Constellation geometry) */
+.gw-mod-skills .gw-sk-zleft { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.gw-mod-skills .gw-sk-zpic { width: 176px; height: 150px; border: 2px solid #8796a3; border-radius: 4px; object-fit: cover; background: #000; }
+.gw-mod-skills .gw-sk-signs { display: flex; flex-wrap: wrap; gap: 3px; max-width: 360px; }
+.gw-mod-skills .gw-sk-stars { display: grid; grid-template-columns: repeat(10, 18px); gap: 2px 0; align-items: center; }
+.gw-mod-skills .gw-sk-stars button { border: 0; padding: 0; cursor: pointer; background-color: transparent; }
+.gw-mod-skills .gw-sk-zlv { grid-column: 1 / -1; color: var(--gw-ordinary-infocolor, #fff77c); }
+.gw-mod-skills .gw-sk-ebar { position: relative; width: 240px; height: 14px; background: #10202a; border: 1px solid #3a5a6c; border-radius: 3px; overflow: hidden; }
+.gw-mod-skills .gw-sk-ebar .fill { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(#7fb2ff, #2d5fc4); }
+.gw-mod-skills .gw-sk-ebar .txt { position: absolute; inset: 0; text-align: center; font: 10px/14px var(--gw-font); }
+.gw-mod-skills .gw-sk-grids { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; }
+.gw-mod-skills .gw-sk-grow { border: 1px solid #3a5a6c; border-radius: 6px; padding: 6px 8px; background: #0d1d27; }
+.gw-mod-skills .gw-sk-gtitle { color: var(--gw-base-headcolor, #6bccfe); font-weight: 700; }
+.gw-mod-skills .gw-sk-gsub { font-size: 11px; margin-bottom: 4px; }
+.gw-mod-skills .gw-sk-gcells { display: grid; grid-template-columns: repeat(4, minmax(52px, 1fr)); gap: 4px; }
+.gw-mod-skills .gw-sk-gcell { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.gw-mod-skills .gw-sk-gcell .gw-cellx.changed { box-shadow: 0 0 0 2px #ffb33a; }
+.gw-mod-skills .gw-sk-gcell .gw-cellx.bad { box-shadow: 0 0 0 2px #ff5b4c; }
+.gw-mod-skills .gw-sk-gname { font-size: 10px; line-height: 12px; max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gw-mod-skills.gw-sk-gdlg { min-width: 520px; }
+.gw-mod-skills .gw-sk-kinds { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 4px; max-height: 330px; overflow: auto; }
+.gw-mod-skills .gw-sk-kind { display: flex; align-items: center; gap: 6px; text-align: left; padding: 3px; border: 1px solid #2e5468; border-radius: 4px; background: #0b1a22; color: #e8eef2; cursor: pointer; font: 11px var(--gw-font); }
+.gw-mod-skills .gw-sk-kind:hover:not([disabled]) { border-color: #6bccfe; }
+.gw-mod-skills .gw-sk-kind.on { border-color: #ffe066; background: #2a2408; }
+.gw-mod-skills .gw-sk-kind.no { opacity: .45; cursor: not-allowed; }
+
+/* ---- titles */
+.gw-mod-skills .gw-sk-titles { display: flex; flex-direction: column; gap: 2px; }
+.gw-mod-skills .gw-sk-trow { display: flex; align-items: center; gap: 6px; text-align: left; padding: 4px 8px; border: 1px solid transparent; border-radius: 3px; background: #0b1a22; color: #e8eef2; cursor: pointer; font: 12px var(--gw-font); }
+.gw-mod-skills .gw-sk-trow:hover:not([disabled]) { border-color: #6bccfe; }
+.gw-mod-skills .gw-sk-trow.on { border-color: #ffe066; }
+
+/* ---- quests (QuestInfoUI two-pane) */
+.gw-mod-skills .gw-sk-qlist { display: flex; flex-direction: column; gap: 1px; max-height: 470px; overflow: auto; }
+.gw-mod-skills .gw-sk-qrow { display: flex; align-items: center; gap: 6px; text-align: left; min-height: 22px; padding: 2px 8px; border: 1px solid transparent; background: #0b1a22; color: #e8eef2; cursor: pointer; font: 12px var(--gw-font); }
+.gw-mod-skills .gw-sk-qrow:hover { border-color: #6bccfe; }
+.gw-mod-skills .gw-sk-qrow.on { border-color: #ffe066; background: #1d2a10; }
+.gw-mod-skills .gw-sk-qrow .nm { color: var(--gw-ordinary-infocolor, #fff77c); }
+.gw-mod-skills .gw-sk-qtitle { color: var(--gw-title, #ffff00); font: 700 13px var(--gw-font); margin-bottom: 4px; }
+.gw-mod-skills .gw-sk-qtext { margin: 6px 0; white-space: pre-wrap; color: #dcdcdc; }
+.gw-mod-skills .gw-sk-objs { margin: 6px 0; padding: 6px; border: 1px solid #23404f; border-radius: 4px; }
+.gw-mod-skills .gw-sk-otitle { color: #dcc883; margin-bottom: 4px; }
+.gw-mod-skills .gw-sk-obj { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 2px 0; }
+.gw-mod-skills .gw-sk-qbtns { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.gw-mod-skills .gw-sk-adv { display: inline-flex; align-items: center; gap: 6px; margin: 4px 0 8px; cursor: pointer; }
+.gw-mod-skills .gw-sk-tbl { border-collapse: collapse; width: 100%; }
+.gw-mod-skills .gw-sk-tbl th { color: var(--gw-base-headcolor, #6bccfe); text-align: left; font-weight: 400; border-bottom: 1px solid #23404f; padding: 3px 6px; }
+.gw-mod-skills .gw-sk-tbl td { padding: 3px 6px; border-bottom: 1px solid #13283a; }
+.gw-mod-skills .gw-sk-gtable { margin: 6px 0; }
+
+@media (max-width: 700px) {
+  .gw-mod-skills .gw-sk-grids { grid-template-columns: 1fr; }
+  .gw-mod-skills.gw-sk-gdlg { min-width: 0; }
+}

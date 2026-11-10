@@ -1,0 +1,65 @@
+# Caddy front for the GodsWar sign-up site. setup.sh writes /etc/caddy/Caddyfile from this
+# (or install it yourself and set GW_SIGNUP_DOMAIN in Caddy's environment).
+# Caddy gets and renews the Let's Encrypt certificate for GW_SIGNUP_DOMAIN by itself: ports 80 and
+# 443 must be open and the name must point at this server (a domain you own, or an
+# <ip-with-dashes>.sslip.io name, which resolves to that IP without any DNS set-up).
+{
+	# Account e-mail for Let's Encrypt is optional; uncomment and fill in to get expiry notices.
+	# email you@example.com
+}
+
+{$GW_SIGNUP_DOMAIN} {
+	encode zstd gzip
+
+	log {
+		output file /var/log/caddy/gwsignup-access.log {
+			roll_size 10MiB
+			roll_keep 10
+		}
+		format json
+	}
+
+	header {
+		# Applied after the app answers, so these replace anything the app sent.
+		defer
+		Strict-Transport-Security "max-age=31536000"
+		Content-Security-Policy "default-src 'none'; img-src 'self'; style-src 'self'; script-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "same-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
+		Cross-Origin-Opener-Policy "same-origin"
+		Cross-Origin-Resource-Policy "same-origin"
+		-Server
+	}
+
+	request_body {
+		max_size 16KB
+	}
+
+	# Signed client updates and launcher/client downloads. Clients check the Ed25519 signature; this is only storage.
+	handle_path /updates/* {
+		root * /var/www/gwupdates
+		header Cache-Control "no-cache"
+		file_server
+	}
+	handle_path /downloads/* {
+		root * /var/www/gwdownloads
+		header Cache-Control "no-cache"
+		file_server
+	}
+
+	# Pictures, CSS and JS straight from disk.
+	handle_path /static/* {
+		root * /opt/gwsignup/static
+		header Cache-Control "public, max-age=86400"
+		file_server
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:8090 {
+			# The app trusts this header only from 127.0.0.1, and Caddy always overwrites it.
+			header_up X-Real-IP {remote_host}
+		}
+	}
+}

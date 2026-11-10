@@ -1,0 +1,248 @@
+namespace Godswar.Server.State;
+
+internal enum DonatorTier : short
+{
+    None = 0,
+    KijinPatron = 1,
+    OniPatron = 2,
+    DemonLordSeed = 3,
+    TrueDemonLord = 4,
+    OctagramPatron = 5
+}
+
+internal static class ExperienceStatusIds
+{
+    public const int Weekend = 511;
+    public const int TrickOrTreat = 512;
+    public const int MaxExperiencePotion = 586;
+    public const int TalentExperience50Percent = 580;
+    public const int TalentPotion50Percent = 587;
+    public const int TalentExperience100Percent = 581;
+    public const int HighTalentBoost100Percent = 509;
+    public const int TalentExperience200Percent = 582;
+    public const int SuperTalentPotion200Percent = 588;
+    public const int TalentExperience300Percent = 583;
+    public const int IncredibleTalentPotion300Percent = 589;
+    public const int TalentExperience400Percent = 584;
+    public const int MaxTalentPotion400Percent = 590;
+    public const int GuildDoubleExperience16Hours = 1007;
+
+    /// <summary>
+    /// The enduring experience-potion statuses. <c>508</c> is
+    /// <c>持久经验药剂</c> (Enduring Medium, +100%), <c>585</c> is the weak
+    /// +50% grant, and <c>590</c> is the +400% grant.
+    /// </summary>
+    public const int EnduringExperiencePotion = 508;
+    public const int EnduringWeakExperiencePotion = 585;
+    public const int EnduringHolyExperiencePotion = 590;
+
+    public const int KijinPatron = 1500;
+    public const int OniPatron = 1501;
+    public const int DemonLordSeed = 1502;
+    public const int TrueDemonLord = 1503;
+    public const int FactionAreaExperience = 1504;
+    public const int OctagramPatron = 1506;
+    public const int PremiumBattlePass = 1507;
+}
+
+internal static class ExperienceBoostKinds
+{
+    public const int Consumable = 14;
+    public const int Talent = 20;
+    public const int Weekend = 22;
+    public const int TrickOrTreat = 23;
+    public const int Pet = 24;
+
+    /// <summary>
+    /// The enduring experience-potion family (items 4534/4535/4539). It is a
+    /// channel of its own so its online duration is tracked independently of
+    /// both the fighter <see cref="Consumable"/> grant and the pet
+    /// <see cref="Pet"/> grant, and it feeds the fighter and pet stacks at the
+    /// same time.
+    /// </summary>
+    public const int PersistentExperiencePotion = 25;
+
+    public const int Guild = 100;
+    public const int GuildTalent = 101;
+    public const int Donator = 1008;
+    public const int FactionArea = 1009;
+    public const int BattlePass = 1010;
+
+    public static bool AffectsFighter(int kind) => kind switch
+    {
+        Talent or GuildTalent or Pet => false,
+        _ => true
+    };
+
+    public static bool AffectsTalent(int kind) =>
+        kind is Talent or GuildTalent or FactionArea or BattlePass;
+
+    public static bool AffectsPet(int kind) => kind is
+        Consumable or Weekend or Pet or Guild or FactionArea or BattlePass or
+        PersistentExperiencePotion;
+}
+
+internal static class DonatorBenefits
+{
+    public static int ExperienceBonusBasisPoints(DonatorTier tier) => tier switch
+    {
+        DonatorTier.KijinPatron => 500,
+        DonatorTier.OniPatron => 1_000,
+        DonatorTier.DemonLordSeed => 1_500,
+        DonatorTier.TrueDemonLord => 2_000,
+        DonatorTier.OctagramPatron => 2_500,
+        _ => 0
+    };
+
+    public static int MaximumHitPointsBonusBasisPoints(DonatorTier tier) =>
+        tier switch
+        {
+            DonatorTier.KijinPatron => 200,
+            DonatorTier.OniPatron => 400,
+            DonatorTier.DemonLordSeed => 600,
+            DonatorTier.TrueDemonLord => 800,
+            DonatorTier.OctagramPatron => 1_000,
+            _ => 0
+        };
+
+    public static int AttackBonusBasisPoints(DonatorTier tier) => tier switch
+    {
+        DonatorTier.KijinPatron => 100,
+        DonatorTier.OniPatron => 200,
+        DonatorTier.DemonLordSeed => 300,
+        DonatorTier.TrueDemonLord => 400,
+        DonatorTier.OctagramPatron => 500,
+        _ => 0
+    };
+
+    public static int StatusId(DonatorTier tier) => tier switch
+    {
+        DonatorTier.KijinPatron => ExperienceStatusIds.KijinPatron,
+        DonatorTier.OniPatron => ExperienceStatusIds.OniPatron,
+        DonatorTier.DemonLordSeed => ExperienceStatusIds.DemonLordSeed,
+        DonatorTier.TrueDemonLord => ExperienceStatusIds.TrueDemonLord,
+        DonatorTier.OctagramPatron => ExperienceStatusIds.OctagramPatron,
+        _ => 0
+    };
+
+    public static string DisplayName(DonatorTier tier) => tier switch
+    {
+        DonatorTier.KijinPatron => "Kijin Patron",
+        DonatorTier.OniPatron => "Oni Patron",
+        DonatorTier.DemonLordSeed => "Demon Lord Seed",
+        DonatorTier.TrueDemonLord => "True Demon Lord",
+        DonatorTier.OctagramPatron => "Octagram Patron",
+        _ => string.Empty
+    };
+}
+
+internal static class BattlePassBenefits
+{
+    public const int ExperienceBonusBasisPoints = 500;
+}
+
+internal sealed record ActiveExperienceBoost(
+    int StatusId,
+    int Kind,
+    int BonusBasisPoints,
+    int Priority,
+    DateTimeOffset? ExpiresAt,
+    string Source)
+{
+    // ROUND3: operator session effects may independently affect fighter, talent and pet EXP.
+    // Durable rows retain their existing kind-based policy when this is null.
+    public ExperienceBoostBonuses? ExplicitBonuses { get; init; }
+    public int FighterBonus => ExplicitBonuses?.Fighter ??
+        (ExperienceBoostKinds.AffectsFighter(Kind) ? BonusBasisPoints : 0);
+    public int TalentBonus => ExplicitBonuses?.Talent ??
+        (ExperienceBoostKinds.AffectsTalent(Kind) ? BonusBasisPoints : 0);
+    public int PetBonus => ExplicitBonuses?.Pet ??
+        (ExperienceBoostKinds.AffectsPet(Kind) ? BonusBasisPoints : 0);
+
+    public uint RemainingSeconds(DateTimeOffset now)
+    {
+        // Donator membership can last longer than a practical countdown timer.
+        // Its client definitions are permanent while present; periodic server
+        // reconciliation removes the icon when the entitlement expires.
+        if (Kind == ExperienceBoostKinds.Donator || ExpiresAt is null)
+        {
+            return uint.MaxValue;
+        }
+
+        return (uint)Math.Clamp(
+            (long)Math.Ceiling((ExpiresAt.Value - now).TotalSeconds),
+            0L,
+            uint.MaxValue);
+    }
+}
+
+internal sealed record ExperienceBoostState(
+    IReadOnlyList<ActiveExperienceBoost> ActiveBoosts)
+{
+    public static ExperienceBoostState Empty { get; } = new([]);
+
+    public int TotalBonusBasisPoints
+    {
+        get
+        {
+            // ROUND3: explicit session channels share the same saturated award path.
+            var total = ActiveBoosts.Aggregate(
+                0L, static (sum, boost) => sum + boost.FighterBonus);
+            return (int)Math.Clamp(total, int.MinValue, int.MaxValue);
+        }
+    }
+
+    public int TotalTalentBonusBasisPoints
+    {
+        get
+        {
+            // ROUND3: explicit session channels share the same saturated award path.
+            var total = ActiveBoosts.Aggregate(
+                0L, static (sum, boost) => sum + boost.TalentBonus);
+            return (int)Math.Clamp(total, int.MinValue, int.MaxValue);
+        }
+    }
+
+    public int ApplyTo(int baseExperience)
+    {
+        return ApplyBonus(baseExperience, TotalBonusBasisPoints);
+    }
+
+    public int ApplyToTalent(int baseTalentExperience)
+    {
+        return ApplyBonus(baseTalentExperience, TotalTalentBonusBasisPoints);
+    }
+
+    public int TotalPetBonusBasisPoints
+    {
+        get
+        {
+            // ROUND3: explicit session channels share the same saturated award path.
+            var total = ActiveBoosts.Aggregate(
+                0L, static (sum, boost) => sum + boost.PetBonus);
+            return (int)Math.Clamp(total, int.MinValue, int.MaxValue);
+        }
+    }
+
+    public int ApplyToPet(int basePetExperience)
+    {
+        return ApplyBonus(basePetExperience, TotalPetBonusBasisPoints);
+    }
+
+    private static int ApplyBonus(int baseExperience, int bonusBasisPoints)
+    {
+        if (baseExperience <= 0)
+        {
+            return 0;
+        }
+
+        var multiplierBasisPoints = Math.Max(0L, 10_000L + bonusBasisPoints);
+        var adjusted = ((long)baseExperience * multiplierBasisPoints) / 10_000L;
+        return (int)Math.Min(adjusted, int.MaxValue);
+    }
+}
+
+internal sealed record WorldBossRespawnState(
+    short MapId,
+    string BossTemplateKey,
+    DateTimeOffset RespawnAt);

@@ -1,0 +1,29 @@
+.gw-npc-bar { display: flex; gap: 10px; margin-bottom: 10px; }
+.gw-npc-body { display: grid; grid-template-columns: minmax(240px, 340px) 1fr; gap: 14px; align-items: start; }
+.gw-npc-list { max-height: 75vh; overflow-y: auto; }
+.gw-npc-list h3 { margin: 10px 0 4px; }
+.gw-npc-row { display: block; width: 100%; text-align: left; padding: 4px 6px; background: none; border: 1px solid transparent; color: inherit; cursor: pointer; }
+.gw-npc-row:hover, .gw-npc-row.on { background: #24485c; border-color: #2e6a88; }
+.gw-npc-row .gw-chip { margin-left: 6px; }
+.gw-npc-rows { max-height: 62vh; overflow-y: auto; }
+.gw-npc-item { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid #2e5468; }
+.gw-npc-name { flex: 1; min-width: 180px; }
+.gw-npc-num { width: 80px; }
+@media (max-width: 700px) { .gw-npc-body { grid-template-columns: 1fr; } }
+.gw-npc-tab { margin: 10px 0 2px; display: flex; gap: 8px; align-items: center; }
+.gw-npc-order { display: inline-flex; gap: 2px; }
+.gw-npc-order .gw-btnx:disabled { opacity: .35; cursor: default; }
+.gw-npc-cur { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0; }
+.gw-cur { margin-left: 6px; color: #cfe3ec; border-color: #46555e; background: #10181d; }
+.gw-cur-honour { color: #ffb36b; border-color: #8a5a2e; background: #24150a; }
+.gw-cur-points { color: #8fd3ff; border-color: #2e6a88; background: #0b1a22; }
+.gw-cur-medals { color: #ffe27a; border-color: #8a7a2e; background: #221d08; }
+.gw-cur-silver { color: #d6dde2; border-color: #6c7a83; background: #161d22; }
+.gw-cur-gold, .gw-cur-bgold { color: #f5c542; border-color: #8a6d1e; background: #1f1806; }
+.gw-cur.gw-cur-fallback { color: #ff6b5e; border-color: #8a2e2e; background: #240b0b; }
+.gw-npc-item[draggable="true"] { cursor: grab; }
+.gw-npc-grip { color: #6f8a99; font-size: 14px; user-select: none; }
+.gw-npc-dragging { opacity: .45; }
+.gw-npc-drop-before { box-shadow: inset 0 2px 0 #f5c542; }
+.gw-npc-drop-after { box-shadow: inset 0 -2px 0 #f5c542; }
+.gw-npc-drop-no { cursor: no-drop; background: #240b0b; }

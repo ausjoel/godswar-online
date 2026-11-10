@@ -1,0 +1,18 @@
+# Everything personal lives in local/ and config/godswar.env: never committed.
+config/godswar.env
+local/*
+!local/README.md
+*.pem
+*.key
+backups/
+data/
+**/bin/
+**/obj/
+__pycache__/
+.DS_Store
+
+# generated from your own client (not distributed)
+editor/static/ui/**/*.png
+editor/static/*.png
+editor/static/avatar-previews/
+editor/static/modules/character-minimaps/

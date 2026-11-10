@@ -1,0 +1,592 @@
+{
+ "source": {
+  "colors": "Localization/en_us/UI/Base/font.lua",
+  "items": "Localization/en_us/Settings/Sys/ItemColor.xml"
+ },
+ "colors": {
+  "DEFAULT_TEXTCOLOR": "#ffffff",
+  "YELLOW_TEXTCOLOR": "#ffff00",
+  "GREEN_TEXTCOLOR": "#00ff00",
+  "LoginEdit_TEXTCOLOR": "#cdcdcd",
+  "ItemCOLOR": "#00f09e",
+  "GWO_IMG_TEXTCOLOR": "#e8bf00",
+  "BASE_HEADCOLOR": "#6bccfe",
+  "ORDINARY_INFOCOLOR": "#fff77c",
+  "WHISPER_COLOR": "#ff86ee",
+  "TEAM_COLOR": "#00fced",
+  "GUILD_COLOR": "#ff9900",
+  "CAMP_COLOR": "#14f078",
+  "BillBoard_TEXTCOLOR": "#f0c300",
+  "GWORed": "#ff0000",
+  "Itemper_color": "#e308e4",
+  "MONSTER_TEXTCOLOR": "#f6b596",
+  "BLUE_TEXTCOLOR": "#0000ff",
+  "PetMasterName_TEXTCOLOR": "#00ffb4",
+  "NPC_TEXTCOLOR": "#c8c800",
+  "Classical_color": "#f0c800",
+  "Legend_color": "#ff4500",
+  "Chat_color": "#f14187",
+  "Ancient_color": "#c040ff",
+  "Celestial_color": "#a080ff",
+  "Divine_color": "#8080ff",
+  "Mythical_color": "#66ccff",
+  "Ethereal_color": "#33ffff",
+  "BRONZE_COLOR": "#cd7f32",
+  "SILVER_COLOR": "#ffffff",
+  "GOLD_COLOR": "#ff9900",
+  "PLATINUM_COLOR": "#16d9ff",
+  "MITHRIL_COLOR": "#74dbab",
+  "ORICHALCUM_COLOR": "#be5bfc",
+  "ADAMANTIUM_COLOR": "#e26ea1",
+  "WATER_COLOR": "#a080ff",
+  "FIRE_COLOR": "#ff0000"
+ },
+ "quality": {
+  "1": {
+   "name": "Common",
+   "constant": "DEFAULT_TEXTCOLOR",
+   "hex": "#ffffff"
+  },
+  "2": {
+   "name": "Enhanced",
+   "constant": "TEAM_COLOR",
+   "hex": "#00fced"
+  },
+  "3": {
+   "name": "Delicate",
+   "constant": "ItemCOLOR",
+   "hex": "#00f09e"
+  },
+  "4": {
+   "name": "Good",
+   "constant": "GREEN_TEXTCOLOR",
+   "hex": "#00ff00"
+  },
+  "5": {
+   "name": "Superior",
+   "constant": "GUILD_COLOR",
+   "hex": "#ff9900"
+  },
+  "6": {
+   "name": "Classic",
+   "constant": "Classical_color",
+   "hex": "#f0c800"
+  },
+  "7": {
+   "name": "Eternal",
+   "constant": "YELLOW_TEXTCOLOR",
+   "hex": "#ffff00"
+  },
+  "8": {
+   "name": "Epic",
+   "constant": "WHISPER_COLOR",
+   "hex": "#ff86ee"
+  },
+  "9": {
+   "name": "Legendary",
+   "constant": "Legend_color",
+   "hex": "#ff4500"
+  },
+  "10": {
+   "name": "Mystic",
+   "constant": "Itemper_color",
+   "hex": "#e308e4"
+  },
+  "11": {
+   "name": "Divine",
+   "constant": "Divine_color",
+   "hex": "#8080ff"
+  },
+  "12": {
+   "name": "Celestial",
+   "constant": "Celestial_color",
+   "hex": "#a080ff"
+  },
+  "13": {
+   "name": "Mythical",
+   "constant": "Mythical_color",
+   "hex": "#66ccff"
+  },
+  "14": {
+   "name": "Astral",
+   "constant": "Astral_color",
+   "hex": null
+  },
+  "15": {
+   "name": "Arcane",
+   "constant": "Arcane_color",
+   "hex": null
+  },
+  "16": {
+   "name": "Ethereal",
+   "constant": "Ethereal_color",
+   "hex": "#33ffff"
+  },
+  "17": {
+   "name": "Transcendent",
+   "constant": "Transcendent_color",
+   "hex": null
+  },
+  "18": {
+   "name": "Ancient",
+   "constant": "Ancient_color",
+   "hex": "#c040ff"
+  },
+  "19": {
+   "name": "Primordial",
+   "constant": "Primordial_color",
+   "hex": null
+  },
+  "20": {
+   "name": "Boundless",
+   "constant": "Boundless_color",
+   "hex": null
+  }
+ },
+ "grade": {
+  "1": {
+   "stars": 1,
+   "constant": "DEFAULT_TEXTCOLOR",
+   "hex": "#ffffff",
+   "attribute_hex": "#00ff00"
+  },
+  "2": {
+   "stars": 2,
+   "constant": "DEFAULT_TEXTCOLOR",
+   "hex": "#ffffff",
+   "attribute_hex": "#00ff00"
+  },
+  "3": {
+   "stars": 3,
+   "constant": "TEAM_COLOR",
+   "hex": "#00fced",
+   "attribute_hex": "#00ff00"
+  },
+  "4": {
+   "stars": 4,
+   "constant": "TEAM_COLOR",
+   "hex": "#00fced",
+   "attribute_hex": "#00ff00"
+  },
+  "5": {
+   "stars": 5,
+   "constant": "ItemCOLOR",
+   "hex": "#00f09e",
+   "attribute_hex": "#00ff00"
+  },
+  "6": {
+   "stars": 6,
+   "constant": "GREEN_TEXTCOLOR",
+   "hex": "#00ff00",
+   "attribute_hex": "#00ff00"
+  },
+  "7": {
+   "stars": 7,
+   "constant": "GUILD_COLOR",
+   "hex": "#ff9900",
+   "attribute_hex": "#00ff00"
+  },
+  "8": {
+   "stars": 8,
+   "constant": "YELLOW_TEXTCOLOR",
+   "hex": "#ffff00",
+   "attribute_hex": "#00ff00"
+  },
+  "9": {
+   "stars": 9,
+   "constant": "WHISPER_COLOR",
+   "hex": "#ff86ee",
+   "attribute_hex": "#00ff00"
+  },
+  "10": {
+   "stars": 10,
+   "constant": "WHISPER_COLOR",
+   "hex": "#ff86ee",
+   "attribute_hex": "#00ff00"
+  },
+  "11": {
+   "stars": 11,
+   "constant": "Legend_color",
+   "hex": "#ff4500",
+   "attribute_hex": "#00ff00"
+  },
+  "12": {
+   "stars": 12,
+   "constant": "Itemper_color",
+   "hex": "#e308e4",
+   "attribute_hex": "#00ff00"
+  },
+  "13": {
+   "stars": 13,
+   "constant": "Ancient_color",
+   "hex": "#c040ff",
+   "attribute_hex": "#00ff00"
+  },
+  "14": {
+   "stars": 14,
+   "constant": "Divine_color",
+   "hex": "#8080ff",
+   "attribute_hex": "#00ff00",
+   "source": "reborn item_grade_levels (ItemColor.xml has no AppLevel14)"
+  },
+  "15": {
+   "stars": 15,
+   "constant": "Celestial_color",
+   "hex": "#a080ff",
+   "attribute_hex": "#00ff00",
+   "source": "reborn item_grade_levels (ItemColor.xml has no AppLevel15)"
+  },
+  "16": {
+   "stars": 16,
+   "constant": "Celestial_color",
+   "hex": "#a080ff",
+   "attribute_hex": "#00ff00",
+   "source": "reborn item_grade_levels (ItemColor.xml has no AppLevel16)"
+  },
+  "17": {
+   "stars": 17,
+   "constant": "Mythical_color",
+   "hex": "#66ccff",
+   "attribute_hex": "#00ff00",
+   "source": "reborn item_grade_levels (ItemColor.xml has no AppLevel17)"
+  },
+  "18": {
+   "stars": 18,
+   "constant": "Mythical_color",
+   "hex": "#66ccff",
+   "attribute_hex": "#00ff00",
+   "source": "reborn item_grade_levels (ItemColor.xml has no AppLevel18)"
+  },
+  "19": {
+   "stars": 19,
+   "constant": "Astral_color",
+   "hex": null,
+   "attribute_hex": "#00ff00",
+   "source": "reborn item_grade_levels (ItemColor.xml has no AppLevel19)"
+  },
+  "20": {
+   "stars": 20,
+   "constant": "Arcane_color",
+   "hex": null,
+   "attribute_hex": "#00ff00",
+   "source": "reborn item_grade_levels (ItemColor.xml has no AppLevel20)"
+  },
+  "21": {
+   "stars": 21,
+   "constant": "Transcendent_color",
+   "hex": null,
+   "attribute_hex": "#00ff00",
+   "source": "reborn item_grade_levels (ItemColor.xml has no AppLevel21)"
+  },
+  "22": {
+   "stars": 22,
+   "constant": "Ancient_color",
+   "hex": "#c040ff",
+   "attribute_hex": "#00ff00",
+   "source": "reborn item_grade_levels (ItemColor.xml has no AppLevel22)"
+  },
+  "23": {
+   "stars": 23,
+   "constant": "Primordial_color",
+   "hex": null,
+   "attribute_hex": "#00ff00",
+   "source": "reborn item_grade_levels (ItemColor.xml has no AppLevel23)"
+  },
+  "24": {
+   "stars": 24,
+   "constant": "Primordial_color",
+   "hex": null,
+   "attribute_hex": "#00ff00",
+   "source": "reborn item_grade_levels (ItemColor.xml has no AppLevel24)"
+  },
+  "25": {
+   "stars": 25,
+   "constant": "Boundless_color",
+   "hex": null,
+   "attribute_hex": "#00ff00",
+   "source": "reborn item_grade_levels (ItemColor.xml has no AppLevel25)"
+  }
+ },
+ "aptitude": {
+  "1": {
+   "name": "Weak",
+   "constant": "DEFAULT_TEXTCOLOR",
+   "hex": "#ffffff"
+  },
+  "2": {
+   "name": "Foolish",
+   "constant": "DEFAULT_TEXTCOLOR",
+   "hex": "#ffffff"
+  },
+  "3": {
+   "name": "Cowardly",
+   "constant": "DEFAULT_TEXTCOLOR",
+   "hex": "#ffffff"
+  },
+  "4": {
+   "name": "Moderate",
+   "constant": "DEFAULT_TEXTCOLOR",
+   "hex": "#ffffff"
+  },
+  "5": {
+   "name": "Rational",
+   "constant": "TEAM_COLOR",
+   "hex": "#00fced"
+  },
+  "6": {
+   "name": "Calm",
+   "constant": "YELLOW_TEXTCOLOR",
+   "hex": "#ffff00"
+  },
+  "7": {
+   "name": "Smart",
+   "constant": "YELLOW_TEXTCOLOR",
+   "hex": "#ffff00"
+  },
+  "8": {
+   "name": "Zealous",
+   "constant": "GREEN_TEXTCOLOR",
+   "hex": "#00ff00"
+  },
+  "9": {
+   "name": "Grumpy",
+   "constant": "TEAM_COLOR",
+   "hex": "#00fced"
+  },
+  "10": {
+   "name": "Brave",
+   "constant": "GREEN_TEXTCOLOR",
+   "hex": "#00ff00"
+  },
+  "11": {
+   "name": "Overbearing",
+   "constant": "TEAM_COLOR",
+   "hex": "#00fced"
+  },
+  "12": {
+   "name": "Ferocious",
+   "constant": "GREEN_TEXTCOLOR",
+   "hex": "#00ff00"
+  },
+  "13": {
+   "name": "Almighty",
+   "constant": "TEAM_COLOR",
+   "hex": "#00fced"
+  },
+  "14": {
+   "name": "Godly",
+   "constant": "Itemper_color",
+   "hex": "#e308e4"
+  },
+  "15": {
+   "name": "Backup",
+   "constant": "TEAM_COLOR",
+   "hex": "#00fced"
+  },
+  "16": {
+   "name": "Backup",
+   "constant": "TEAM_COLOR",
+   "hex": "#00fced"
+  },
+  "17": {
+   "name": "Backup",
+   "constant": "TEAM_COLOR",
+   "hex": "#00fced"
+  },
+  "18": {
+   "name": "Backup",
+   "constant": "TEAM_COLOR",
+   "hex": "#00fced"
+  },
+  "19": {
+   "name": "Backup",
+   "constant": "TEAM_COLOR",
+   "hex": "#00fced"
+  },
+  "20": {
+   "name": "Backup",
+   "constant": "TEAM_COLOR",
+   "hex": "#00fced"
+  }
+ },
+ "undefined_in_client": [
+  "Arcane_color",
+  "Astral_color",
+  "Boundless_color",
+  "Primordial_color",
+  "Transcendent_color"
+ ],
+ "fallback_for_undefined": {
+  "Astral_color": "#7f91d9",
+  "Arcane_color": "#9178c8",
+  "Transcendent_color": "#e8d66f",
+  "Primordial_color": "#e36033",
+  "Boundless_color": "#ff3b30"
+ },
+ "fonts": {
+  "MainFonts": {
+   "size": 12
+  },
+  "Mainlogin2": {
+   "size": 14
+  },
+  "MainMap": {
+   "size": 10
+  },
+  "Mainlogin": {
+   "size": 16
+  },
+  "MainFonts2": {
+   "size": 18
+  },
+  "MainMap2": {
+   "size": 9
+  },
+  "ChatFont14": {
+   "size": 10
+  },
+  "MessageFont24": {
+   "size": 24
+  },
+  "FightFont24": {
+   "size": 18
+  },
+  "EmotionFont": {
+   "size": 18
+  },
+  "con_MainFont12": {
+   "size": 12
+  },
+  "CONTAIN1_TEXTFONT": {
+   "size": 10
+  },
+  "CONTAIN2_TEXTFONT": {
+   "size": 10
+  },
+  "CONTAIN3_TEXTFONT": {
+   "size": 10
+  },
+  "CONTAIN4_TEXTFONT": {
+   "size": 10
+  },
+  "CONTAIN5_TEXTFONT": {
+   "size": 10
+  },
+  "CONTAIN6_TEXTFONT": {
+   "size": 10
+  },
+  "CONTAIN7_TEXTFONT": {
+   "size": 12
+  },
+  "CONTAIN8_TEXTFONT": {
+   "size": 12
+  },
+  "CONTAIN9_TEXTFONT": {
+   "size": 12
+  },
+  "CONTAIN10_TEXTFONT": {
+   "size": 12
+  },
+  "CONTAIN11_BILLBOARD": {
+   "size": 10
+  },
+  "CONTAIN_Mall_TEXTFONT": {
+   "size": 12
+  },
+  "CONTAIN_UPGRADE_TEXTFONT": {
+   "size": 10
+  },
+  "CONTAIN_HELPSYSTEM_TEXTFONT": {
+   "size": 10
+  },
+  "CONTAIN1_HELPSYSTEM_TEXTFONT": {
+   "size": 10
+  },
+  "CONTAIN2_HELPSYSTEM_TEXTFONT": {
+   "size": 10
+  },
+  "CONTAIN_Event_TEXTFONT": {
+   "size": 10
+  },
+  "CONTAIN_GMEvent_TEXTFONT": {
+   "size": 10
+  },
+  "CONT_DynamicText_TXF": {
+   "size": 12
+  },
+  "CONTAIN12_TEXTFONT": {
+   "size": 12
+  },
+  "CONTAIN_MLS_TEXTFONT": {
+   "size": 10
+  }
+ },
+ "zodiac": {
+  "0": {
+   "name": "Aries",
+   "png": "zodiac/00.png",
+   "source": "UI/Texture/000.gwo (256x256, saved at 128x128)"
+  },
+  "1": {
+   "name": "Taurus",
+   "png": "zodiac/01.png",
+   "source": "UI/Texture/001.gwo (256x256, saved at 128x128)"
+  },
+  "2": {
+   "name": "Gemini",
+   "png": "zodiac/02.png",
+   "source": "UI/Texture/002.gwo (256x256, saved at 128x128)"
+  },
+  "3": {
+   "name": "Cancer",
+   "png": "zodiac/03.png",
+   "source": "UI/Texture/003.gwo (256x256, saved at 128x128)"
+  },
+  "4": {
+   "name": "Leo",
+   "png": "zodiac/04.png",
+   "source": "UI/Texture/004.gwo (256x256, saved at 128x128)"
+  },
+  "5": {
+   "name": "Virgo",
+   "png": "zodiac/05.png",
+   "source": "UI/Texture/005.gwo (256x256, saved at 128x128)"
+  },
+  "6": {
+   "name": "Libra",
+   "png": "zodiac/06.png",
+   "source": "UI/Texture/006.gwo (256x256, saved at 128x128)"
+  },
+  "7": {
+   "name": "Scorpio",
+   "png": "zodiac/07.png",
+   "source": "UI/Texture/007.gwo (256x256, saved at 128x128)"
+  },
+  "8": {
+   "name": "Sagittarius",
+   "png": "zodiac/08.png",
+   "source": "UI/Texture/008.gwo (256x256, saved at 128x128)"
+  },
+  "9": {
+   "name": "Capricorn",
+   "png": "zodiac/09.png",
+   "source": "UI/Texture/009.gwo (256x256, saved at 128x128)"
+  },
+  "10": {
+   "name": "Aquarius",
+   "png": "zodiac/10.png",
+   "source": "UI/Texture/010.gwo (256x256, saved at 128x128)"
+  },
+  "11": {
+   "name": "Pisces",
+   "png": "zodiac/11.png",
+   "source": "UI/Texture/011.gwo (256x256, saved at 128x128)"
+  }
+ },
+ "classes": {
+  "0": "Warrior",
+  "1": "Champion",
+  "2": "Priest",
+  "3": "Mage"
+ }
+}

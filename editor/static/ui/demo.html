@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GodsWar UI kit</title>
+<!-- Component gallery for ui-kit.css (static/ui/UI-STYLE.md). Open it next to the editor:
+     /static/ui/demo.html once server.py serves static/ui/ (UI-STYLE.md section 9). -->
+<link rel="stylesheet" href="ui-kit.css">
+<style>
+  body { margin: 0; padding: 16px; background: #05090c; color: #fff; font: 12px/1.4 var(--gw-font); }
+  h2 { color: var(--gw-title); font-size: 14px; margin: 22px 0 8px; }
+  .row { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+  .tile { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 64px; }
+  .tile small { color: #8aa; }
+  .bag { display: grid; grid-template-columns: repeat(6, 42px); }
+  .bag .gw-cell { position: relative; }
+  .bag .gw-cell img { position: absolute; left: 3px; top: 3px; width: 36px; height: 36px; }
+  .win { width: 263px; min-height: 160px; }
+  .win.simple { width: 240px; min-height: 90px; }
+  .sheet { display: grid; grid-template-columns: auto auto; gap: 2px 14px; }
+  .q { padding: 1px 4px; }
+</style>
+</head>
+<body class="gw-text">
+<h2>Window frames (border-image)</h2>
+<div class="row">
+  <div class="gw-frame-normalwindow win"><div style="text-align:center;color:var(--gw-title)">Char Name</div>
+    <div class="sheet"><span class="gw-label">Level</span><span class="gw-value">99</span>
+      <span class="gw-label">Faith</span><span class="gw-value">Athena</span></div></div>
+  <div class="gw-frame-simplewindow win simple">T_SimpleWindow (dialogs, warehouse)</div>
+  <div class="gw-frame-bgwindow win simple">T_BgWindow (tooltips)</div>
+</div>
+
+<h2>Slot cells and a 6 x 4 bag</h2>
+<div class="bag" id="bag"></div>
+
+<h2>Buttons, tabs, check boxes (hover them; .on = selected, .disabled)</h2>
+<div class="row" id="sprites"></div>
+
+<h2>Quality Q1-Q20, grade G1-G25, pet aptitude 1-14</h2>
+<div class="row" id="q"></div>
+<div class="row" id="g"></div>
+<div class="row" id="a"></div>
+
+<h2>Item tooltip</h2>
+<div class="gw-tooltip">
+  <div class="tt-name gw-q9">Scimitar +7</div>
+  <div>One-Hand Sword</div>
+  <div class="tt-bound">Can't be traded</div>
+  <div>Lv. 30 &nbsp; Class Restriction: Warrior</div>
+  <div class="gw-g7">Grade ★★★★★★★</div>
+  <div>Physical Attack 120-160</div>
+  <div class="tt-green">(Lv.5)Attack+ 48</div>
+  <div style="color:var(--gw-bronze-color)">Level 3 Bronze</div>
+  <div>Holy Stone Lv.2 Fire Spirit of Destruction</div>
+  <div>Silver 1,200</div>
+</div>
+
+<script>
+  const SPR = ["close", "close-small", "btn2", "btn4", "btn9", "tab", "tab-wide", "check", "arrow-up", "arrow-down",
+               "arrow-left", "arrow-right", "zoom-in", "bar-hp", "bar-mp", "bar-exp", "zodiac-star-off", "zodiac-star-on",
+               "camp-sparta", "camp-athens", "paperdoll", "skill-frame", "coin-silver", "coin-gold", "hud"];
+  const sp = document.getElementById("sprites");
+  for (const n of SPR) {
+    const t = document.createElement("div"); t.className = "tile";
+    const s = document.createElement("span"); s.className = "gw-sprite gw-" + n;
+    const l = document.createElement("small"); l.textContent = n;
+    t.append(s, l); sp.append(t);
+  }
+  const bag = document.getElementById("bag");
+  for (let i = 0; i < 24; i++) { const c = document.createElement("span"); c.className = "gw-sprite gw-cell"; bag.append(c); }
+  const add = (id, cls, n, label) => {
+    const el = document.getElementById(id);
+    for (let i = 1; i <= n; i++) { const s = document.createElement("span"); s.className = "q " + cls + i; s.textContent = label + i; el.append(s); }
+  };
+  add("q", "gw-q", 20, "Q"); add("g", "gw-g", 25, "G"); add("a", "gw-apt", 14, "A");
+</script>
+</body>
+</html>

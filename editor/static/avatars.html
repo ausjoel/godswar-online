@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Faces and hair</title>
+<style>
+  :root { color-scheme: dark; }
+  body { background: #18191f; color: #e6e1d3; font: 15px system-ui, sans-serif; margin: 0; padding: 16px; }
+  h1 { font-size: 22px; margin: 0 0 8px; }
+  p { margin: 0 0 12px; max-width: 70ch; }
+  label { margin-right: 14px; }
+  select { font: inherit; padding: 4px; }
+  img { display: block; margin-top: 14px; max-width: 100%; height: auto; }
+</style>
+</head>
+<body>
+<h1>Faces and hair</h1>
+<p>From the client's own files. <b>Hair style</b> number = style × 10 + colour, so 53 is style 5, colour 3. <b>Face</b> pictures are the stored textures, flat, not on the model. Hair is drawn on a plain head with no light. The character creation screen may offer fewer than the client ships.</p>
+<label>Models <select id="layout"><option value="old">Original (Avatar=1)</option><option value="new">New (Avatar=2)</option></select></label>
+<label>Gender <select id="sex"><option>male</option><option>female</option></select></label>
+<label>Show <select id="part"><option value="hair">Hair</option><option value="faces">Faces</option></select></label>
+<img id="sheet" alt="Picture sheet">
+<script>
+  const pick = id => document.getElementById(id);
+  const show = () => {
+    const name = `${pick("layout").value}_${pick("sex").value}_${pick("part").value}`;
+    pick("sheet").src = `avatar-previews/${name}.png`;
+    pick("sheet").alt = name.replaceAll("_", " ");
+  };
+  ["layout", "sex", "part"].forEach(id => pick(id).addEventListener("change", show));
+  show();
+</script>
+</body>
+</html>

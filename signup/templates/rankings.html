@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Rankings{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Rankings</h1>
+  <p class="lead">Updated about once a minute. Staff characters are not listed.</p>
+</section>
+{% for board in boards %}
+<section class="card slim rank">
+  <h2>{{ board.title }}</h2>
+  {% if board.rows %}
+  <table>
+    <thead><tr><th>#</th><th>Name</th><th>Class</th><th>Faction</th><th class="num">{{ board.column }}</th></tr></thead>
+    <tbody>
+    {% for p in board.rows %}
+      <tr><td>{{ loop.index }}</td><td>{{ p.name }}</td><td>{{ p.cls }}</td><td>{{ p.camp }}</td><td class="num">{{ "{:,}".format(p[board.key]) }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>Nobody here yet.</p>
+  {% endif %}
+</section>
+{% endfor %}
+{% endblock %}

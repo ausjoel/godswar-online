@@ -1,0 +1,55 @@
+# GodsWar server stack: PostgreSQL + the game server. Driven entirely by config/godswar.env.
+#   docker compose --env-file config/godswar.env up -d --build
+name: godswar
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes: ["godswar-postgres-data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  server:
+    build: {context: ./server, dockerfile: Dockerfile}
+    depends_on: {postgres: {condition: service_healthy}}
+    environment:
+      GODSWAR_RUNTIME_PROFILE: LocalDevelopment
+      GODSWAR_STORAGE_PROVIDER: postgres
+      GODSWAR_POSTGRES_CONNECTION_STRING: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Pooling=true"
+      GODSWAR_LOGIN_BIND_HOST: 0.0.0.0
+      GODSWAR_LOGIN_PORT: 5999
+      GODSWAR_GAME_BIND_HOST: 0.0.0.0
+      GODSWAR_GAME_PORT: 7000
+      GODSWAR_GAME_PUBLIC_HOST: ${GODSWAR_HOST}
+      GODSWAR_EDITION: ${GODSWAR_EDITION:-reborn}
+      GODSWAR_MONSTER_RUNTIME: Ecs
+      GODSWAR_PLAYER_RUNTIME: Ecs
+      GODSWAR_AUTH_ALLOW_LEGACY_RAW_AUTHENTICATION: "true"
+      GODSWAR_AUTH_ALLOW_REGISTRATION: ${GODSWAR_ALLOW_REGISTRATION:-false}
+      GODSWAR_DEVELOPER_COMMANDS_ENABLED: ${GODSWAR_DEVELOPER_COMMANDS_ENABLED:-false}
+      GODSWAR_DEVELOPER_ACCOUNT_IDS: ${GODSWAR_DEVELOPER_ACCOUNT_IDS:-}
+      GODSWAR_MANAGEMENT_ENABLED: "true"
+      GODSWAR_MANAGEMENT_BIND_HOST: "127.0.0.1"
+      GODSWAR_MANAGEMENT_PORT: "9090"
+    ports:
+      - "${GODSWAR_LOGIN_PORT}:5999"
+      - "${GODSWAR_GAME_PORT}:7000"
+    healthcheck:
+      test: ["CMD", "/app/secure-healthcheck.sh"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 30s
+    stop_grace_period: 45s
+    restart: unless-stopped
+    logging: {driver: json-file, options: {max-size: "10m", max-file: "3"}}
+
+volumes:
+  godswar-postgres-data:

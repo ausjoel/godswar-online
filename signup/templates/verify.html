@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Confirm your email{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Confirm your email</h1>
+  <p class="lead">Press the button to confirm that this email address belongs to your account.</p>
+  <form method="post" action="/verify">
+    <input type="hidden" name="ts" value="{{ form.ts }}">
+    <input type="hidden" name="n" value="{{ form.n }}">
+    <input type="hidden" name="tok" value="{{ form.tok }}">
+    <input type="hidden" name="chk" value="{{ form.chk }}">
+    <input type="hidden" name="t" value="{{ t }}">
+    <button class="go" type="submit">Confirm my email</button>
+  </form>
+</section>
+{% endblock %}

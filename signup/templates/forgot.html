@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}{{ p.title }}{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>{{ p.title }}</h1>
+  <p class="lead">{{ p.lead }}</p>
+
+  {% if error %}
+  <div class="alert" role="alert" id="form-error">{{ error }}</div>
+  {% endif %}
+
+  <form method="post" action="/{{ page|replace('_', '-') }}" novalidate autocomplete="on">
+    <input type="hidden" name="ts" value="{{ form.ts }}">
+    <input type="hidden" name="n" value="{{ form.n }}">
+    <input type="hidden" name="tok" value="{{ form.tok }}">
+    <input type="hidden" name="chk" value="{{ form.chk }}">
+
+    <div class="field{% if error and 'email' in error %} bad{% endif %}">
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" value="{{ v.email }}" required maxlength="254"
+             autocomplete="email" inputmode="email" aria-describedby="email-help" autofocus>
+      <p class="help" id="email-help">The address you gave when you made the account. We only send this to a confirmed address.</p>
+    </div>
+
+    <div class="hp" aria-hidden="true">
+      <label for="website">Leave this empty</label>
+      <input id="website" name="website" type="text" tabindex="-1" autocomplete="off">
+    </div>
+
+    <div class="field challenge">
+      <label for="answer">Quick check: {{ form.question }}</label>
+      <input id="answer" name="answer" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" required
+             autocomplete="off" aria-describedby="answer-help">
+      <p class="help" id="answer-help">Answer with a number. This keeps robots out.</p>
+    </div>
+
+    <button class="go" type="submit">{{ p.button }}</button>
+  </form>
+</section>
+
+<section class="card slim">
+  {% if p.kind == 'password' %}
+  <h2>Forgot your username instead?</h2>
+  <p><a href="/forgot-username">Get your username by email</a>.</p>
+  {% else %}
+  <h2>Forgot your password too?</h2>
+  <p><a href="/forgot">Get a reset link by email</a>.</p>
+  {% endif %}
+  <p>Accounts made in the game itself (not on this site) have no email address, so we cannot send anything for them.</p>
+</section>
+{% endblock %}

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GodsWar Editor</title>
+<meta name="csrf" content="__CSRF__">
+<link rel="stylesheet" href="/static/ui/ui-kit.css">
+<link rel="stylesheet" href="/static/shared/shared.css">
+<link rel="stylesheet" href="/static/shell.css">
+</head>
+<body class="gw-text">
+<div id="gw-livebanner" class="gw-livebanner hidden" role="alert"></div>
+<header class="gw-top">
+  <a class="gw-brand" href="#/home" data-help="Home: what this editor can change and how the game sees it.">
+    <span class="gw-sprite gw-camp-sparta gw-brand-ico" aria-hidden="true"></span>GodsWar Editor</a>
+  <span id="gw-db" class="gw-badge">database ...</span>
+  <span id="gw-mode" class="gw-badge">...</span>
+  <span id="gw-server" class="gw-badge">server ...</span>
+  <span id="gw-caps" class="gw-badge">live edits ...</span>
+  <span class="gw-top-fill"></span>
+  <button id="gw-signout" class="gw-btnx small" type="button" hidden>Sign out</button>
+  <span id="gw-charpick"></span>
+  <button id="gw-chg" class="gw-btnx small" type="button" data-help="Every change made with this editor, with its SQL, and Undo.">Change log <span id="gw-chg-count" class="gw-pill">0</span></button>
+  <label class="gw-zoom" data-help="Page zoom (the game's windows are drawn at 1 design pixel = 1 screen pixel).">Zoom
+    <select id="gw-zoom" aria-label="Page zoom"><option value="1">100%</option><option value="1.25">125%</option><option value="1.5">150%</option></select></label>
+</header>
+<div id="gw-statusline" class="gw-statusline"><span id="gw-status" class="gw-status" role="status" aria-live="polite"></span></div>
+<div class="gw-body">
+  <nav id="gw-side" class="gw-side" aria-label="Game systems"></nav>
+  <main id="gw-page" class="gw-page" tabindex="-1"></main>
+</div>
+<script src="/static/shared/core.js"></script>
+<script src="/static/shared/attribute-families.js"></script>
+<script src="/static/shared/render.js"></script>
+<script src="/static/shared/tooltip.js"></script>
+<script src="/static/shared/picker.js"></script>
+<script src="/static/shared/fields.js"></script>
+<script src="/static/shared/changes.js"></script>
+<script src="/static/shell.js"></script>
+<script src="/static/session.js"></script>
+</body>
+</html>

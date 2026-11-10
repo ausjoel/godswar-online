@@ -1,0 +1,131 @@
+/* static/modules/pets.css - the Pets & mounts page only (every rule starts with .gw-mod-pets; its modals are wrapped
+   in a .gw-mod-pets div too). Layout copies PetUI.xml / PetDetailUI.xml / ItemBagsExUI.xml Mount tab (UI-STYLE.md 6.2, 6.4). */
+.gw-mod-pets .pt-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 8px; font: 12px var(--gw-font); }
+.gw-mod-pets .pt-tabs { display: flex; gap: 2px; margin: 0 0 40px; border-bottom: 1px solid #2e5468; }
+.gw-mod-pets .pt-block { margin-top: -30px; margin-bottom: 40px; }
+.gw-mod-pets .pt-cols { display: flex; flex-wrap: wrap; gap: 16px 18px; align-items: flex-start; }
+.gw-mod-pets .gw-win { position: relative; font: 12px var(--gw-font); color: #fff; }
+.gw-mod-pets .pt-shedwin { width: 355px; max-width: 100%; box-sizing: border-box; }
+.gw-mod-pets .pt-detail { width: 470px; max-width: 100%; box-sizing: border-box; }
+.gw-mod-pets .pt-mountwin { width: 330px; max-width: 100%; box-sizing: border-box; }
+.gw-mod-pets .pt-mounts { width: 430px; max-width: 100%; box-sizing: border-box; }
+.gw-mod-pets .pt-medit { width: 640px; max-width: 100%; box-sizing: border-box; }
+.gw-mod-pets .pt-ro .pt-input, .gw-mod-pets .pt-ro .gw-nf, .gw-mod-pets .pt-ro .pt-bar, .gw-mod-pets .pt-ro .pt-pips, .gw-mod-pets .pt-ro .pt-aptbtn,
+.gw-mod-pets .pt-ro .pt-seg, .gw-mod-pets .pt-ro .pt-chk, .gw-mod-pets .pt-ro .gw-check, .gw-mod-pets .pt-ro .gw-cellx.locked { pointer-events: none; opacity: .6; }
+
+/* rows, labels, values */
+.gw-mod-pets .pt-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 6px 0; }
+.gw-mod-pets .pt-top { display: flex; gap: 12px; align-items: flex-start; margin: 4px 0 8px; }
+.gw-mod-pets .pt-kv { display: grid; grid-template-columns: max-content 1fr; gap: 3px 8px; align-items: center; flex: 1; min-width: 0; }
+.gw-mod-pets .pt-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 5px 10px; align-items: center; margin: 4px 0 8px; }
+.gw-mod-pets .gw-label { color: var(--gw-label, #6bccfe); cursor: help; }
+.gw-mod-pets .gw-value { color: var(--gw-value, #fff77c); }
+.gw-mod-pets .pt-label2 { margin: 8px 0 4px; }
+.gw-mod-pets .pt-note { font-size: 10.5px; }
+.gw-mod-pets .pt-inline { display: inline-flex; gap: 6px; align-items: center; }
+.gw-mod-pets .pt-seg { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.gw-mod-pets .pt-input { height: 22px; padding: 0 6px; border: 1px solid #2e5468; border-radius: 2px; background: #0a1820; color: var(--gw-value, #fff77c);
+  font: 12px var(--gw-font); min-width: 0; box-sizing: border-box; }
+.gw-mod-pets .pt-input:focus { outline: 2px solid #ffe066; outline-offset: 1px; }
+.gw-mod-pets .pt-input.bad { background: #4a1b1b; color: #ffb3ad; }
+.gw-mod-pets .pt-input.changed { background: #234a2c; color: #fff; }
+.gw-mod-pets .pt-input[disabled] { opacity: .5; }
+.gw-mod-pets .pt-num { width: 72px; text-align: right; }
+.gw-mod-pets .pt-sec { margin: 12px 0 0; }
+.gw-mod-pets .pt-sectitle { color: var(--gw-label, #6bccfe); margin: 0 0 4px; font: 12px var(--gw-font); }
+.gw-mod-pets .pt-species { display: inline-flex; align-items: center; gap: 6px; }
+.gw-mod-pets .pt-species .gw-icon { transform: scale(.75); transform-origin: left center; margin-right: -9px; }
+.gw-mod-pets .pt-aptbtn { height: 24px; padding: 0 10px; border: 1px solid #2e5468; border-radius: 3px; background: #0b1a22; cursor: pointer; font: 700 12px var(--gw-font); }
+.gw-mod-pets .pt-aptbtn:hover { border-color: #6bccfe; }
+.gw-mod-pets .pt-findings, .gw-mod-pets .pt-probs { margin: 8px 0 0; padding: 6px 8px; border: 1px solid #6b3a2e; border-radius: 3px; background: #1b0d0a; font-size: 11px; }
+.gw-mod-pets .pt-away { margin: 8px 0; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+
+/* the pet shed (PetUI: 8 cells, 4 x 2 in a sub-panel) */
+.gw-mod-pets .pt-presbtns { display: flex; flex-direction: column; gap: 4px; }
+.gw-mod-pets .pt-shed { display: grid; grid-template-columns: repeat(4, 58px); gap: 10px 6px; justify-content: space-around; }
+.gw-mod-pets .pt-shedcell { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 58px; min-width: 0; }
+.gw-mod-pets .pt-cap { font-size: 10px; max-width: 58px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
+.gw-mod-pets .gw-cellx.pt-on { outline: 2px solid #ffe066; outline-offset: 0; }
+.gw-mod-pets .gw-cellx.pt-carried::before, .gw-mod-pets .gw-cellx.pt-summoned::before { content: ""; position: absolute; right: 2px; top: 2px; width: 8px; height: 8px; border-radius: 50%; z-index: 2; }
+.gw-mod-pets .gw-cellx.pt-carried::before { background: #6bccfe; box-shadow: 0 0 4px #6bccfe; }
+.gw-mod-pets .gw-cellx.pt-summoned::before { background: #4cff7a; box-shadow: 0 0 4px #4cff7a; }
+.gw-mod-pets .gw-cellx.empty { cursor: pointer; }
+
+/* care bars (PetDetailUI Satiety / Amity / Lifetime: a 116 x 13 bar; here wider and draggable) */
+.gw-mod-pets .pt-bars { display: flex; flex-direction: column; gap: 4px; }
+.gw-mod-pets .pt-barrow { display: grid; grid-template-columns: 62px minmax(100px, 1fr) auto; gap: 6px; align-items: center; }
+.gw-mod-pets .pt-barrow .gw-nf-chip, .gw-mod-pets .pt-barrow .gw-nf-label { display: none; }
+.gw-mod-pets .pt-barrow .gw-nf-input { width: 74px; }
+.gw-mod-pets .pt-barrow .gw-nf-hint { display: none; }
+.gw-mod-pets .pt-bar { position: relative; height: 13px; border-radius: 7px; background: #120c0c; border: 1px solid #5d2a2a; cursor: ew-resize; touch-action: none; overflow: hidden; }
+.gw-mod-pets .pt-bar:focus-visible { outline: 2px solid #ffe066; outline-offset: 1px; }
+.gw-mod-pets .pt-bar-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 7px; background: linear-gradient(#ff8a7a, #c0201a 55%, #7a0d0a); }
+.gw-mod-pets .pt-bar-fill.pt-life { background: linear-gradient(#ffd27a, #d08a10 55%, #7a4a05); }
+.gw-mod-pets .pt-bar-fill.pt-en { background: linear-gradient(#9ad8ff, #2a8ad0 55%, #0a4a7a); }
+.gw-mod-pets .pt-bar-txt { position: absolute; inset: 0; text-align: center; font: 700 10px/13px var(--gw-font); color: #fff; pointer-events: none; }
+
+/* talents (6 cells) and skills (12 cells, 6 x 2) */
+.gw-mod-pets .pt-cells6 { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; justify-items: center; }
+.gw-mod-pets .pt-talcell { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 58px; }
+.gw-mod-pets .pt-talcell .pt-cap { max-width: 58px; font-size: 9.5px; }
+.gw-mod-pets .gw-cellx.pt-talon::after { content: ""; position: absolute; inset: 3px; box-shadow: inset 0 0 0 1px #4cff7a, inset 0 0 8px #4cff7a88; pointer-events: none; }
+.gw-mod-pets .pt-cells12 { display: grid; grid-template-columns: repeat(6, 42px); gap: 7px; justify-content: space-between; }
+.gw-mod-pets .gw-cellx.pt-avail { opacity: .6; cursor: pointer; }
+.gw-mod-pets .gw-cellx.locked { cursor: pointer; }
+.gw-mod-pets .gw-cellx.pt-warn::after { content: "!"; position: absolute; right: 3px; top: 1px; color: #ff6b5e; font: 700 12px var(--gw-font); }
+
+/* soul contract pips */
+.gw-mod-pets .pt-pips { display: inline-flex; gap: 3px; flex-wrap: wrap; }
+.gw-mod-pets .pt-pip { min-width: 22px; height: 20px; padding: 0 4px; border: 1px solid #2e5468; border-radius: 10px; background: #0b1a22; color: #9fc3d4; font: 11px var(--gw-font); cursor: pointer; }
+.gw-mod-pets .pt-pip.on { background: #3a2a6a; color: #e6dcff; border-color: #8a6aff; }
+.gw-mod-pets .pt-pip.cur { outline: 2px solid #ffe066; outline-offset: 0; }
+
+/* numbers + savvy table */
+.gw-mod-pets .pt-nums { display: flex; flex-direction: column; gap: 4px; }
+.gw-mod-pets .pt-nums .gw-nf-label { min-width: 90px; }
+.gw-mod-pets .pt-svt { border-collapse: collapse; width: 100%; font: 11.5px var(--gw-font); }
+.gw-mod-pets .pt-svt th { color: #9fc3d4; font-weight: 400; text-align: right; padding: 0 3px 3px; cursor: help; }
+.gw-mod-pets .pt-svt td { padding: 2px 3px; text-align: right; white-space: nowrap; }
+.gw-mod-pets .pt-svt td:first-child { text-align: left; }
+.gw-mod-pets .pt-soul { color: #b99aff; }
+.gw-mod-pets .pt-tot { font-weight: 700; }
+.gw-mod-pets .pt-svsum { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; font-size: 11px; cursor: help; }
+.gw-mod-pets .pt-chk { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.gw-mod-pets .pt-rofacts summary { color: #8aa3b0; cursor: pointer; }
+
+/* dialogs: aptitude grid, skill library, add pet */
+.gw-mod-pets .pt-aptgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+.gw-mod-pets .pt-apttile { display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 6px 8px; border: 1px solid #2e5468; border-radius: 3px; background: #0a1820cc;
+  color: #cfe3ec; font: 11px var(--gw-font); cursor: pointer; }
+.gw-mod-pets .pt-apttile:hover { border-color: #6bccfe; }
+.gw-mod-pets .pt-apttile.cur { border-color: #ffe066; }
+.gw-mod-pets .pt-apttile b { font-size: 12.5px; }
+.gw-mod-pets .pt-aptchips { display: flex; flex-wrap: wrap; gap: 4px; }
+.gw-mod-pets .pt-libwrap { display: flex; flex-direction: column; gap: 4px; }
+.gw-mod-pets .pt-libcols { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 14px; align-items: start; }
+@media (max-width: 900px) { .gw-mod-pets .pt-libcols { grid-template-columns: 1fr; } }
+.gw-mod-pets .pt-libdetail, .gw-mod-pets .pt-addform { min-width: 0; font: 12px var(--gw-font); }
+.gw-mod-pets .pt-libdetail .gw-tooltip, .gw-mod-pets .pt-skilldlg .gw-tooltip, .gw-mod-pets .pt-mprev .gw-tooltip { position: static; max-width: none; }
+.gw-mod-pets .pt-libfoot { justify-content: flex-end; }
+.gw-mod-pets .pt-trait { margin-right: 8px; }
+.gw-mod-pets .pt-skilldlg { min-width: min(460px, 86vw); font: 12px var(--gw-font); }
+
+/* mounts (ItemBagsExUI Mount tab: the riding cell, then the five gear cells 52 px apart) */
+.gw-mod-pets .pt-ride { display: flex; justify-content: center; margin: 18px 0 14px; }
+.gw-mod-pets .pt-ridecell, .gw-mod-pets .pt-gearcell { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.gw-mod-pets .pt-ridecell .gw-cellx { transform: scale(1.4); margin: 8px; }
+.gw-mod-pets .pt-gearrow { display: flex; justify-content: space-between; gap: 6px; margin: 4px 0 10px; }
+.gw-mod-pets .pt-mlist { display: flex; flex-direction: column; gap: 3px; max-height: 60vh; overflow-y: auto; }
+.gw-mod-pets .pt-mrow { display: grid; grid-template-columns: 42px 1fr; grid-template-rows: auto auto; column-gap: 8px; align-items: center; text-align: left; padding: 3px 6px;
+  border: 1px solid #1d3a4a; border-radius: 3px; background: #0a1820cc; color: #e8f4fa; cursor: pointer; font: 12px var(--gw-font); }
+.gw-mod-pets .pt-mrow > .gw-cellx { grid-row: 1 / span 2; }
+.gw-mod-pets .pt-mrow:hover { border-color: #6bccfe; }
+.gw-mod-pets .pt-mrow.on { border-color: #ffe066; background: #1b2a12cc; }
+.gw-mod-pets .pt-msub { color: #8aa3b0; font-size: 11px; }
+.gw-mod-pets .pt-medcols { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 700px) { .gw-mod-pets .pt-medcols { grid-template-columns: 1fr; } }
+.gw-mod-pets .pt-qchips { display: flex; flex-wrap: wrap; gap: 3px; }
+.gw-mod-pets .pt-q { min-width: 34px; font-weight: 700; }
+.gw-mod-pets .pt-quiet .gw-nf-chip, .gw-mod-pets .gw-nf.pt-quiet .gw-nf-chip { display: none; }
+.gw-mod-pets .pt-q.pt-over { border-style: dashed; opacity: .8; }
+.gw-mod-pets .pt-capwarn { margin: 4px 0; font-size: 11px; max-width: 420px; }

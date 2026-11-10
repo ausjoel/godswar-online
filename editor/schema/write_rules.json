@@ -1,0 +1,4644 @@
+{
+  "schema_version": 1,
+  "written": "2026-10-28",
+  "task": "safety",
+  "source": {
+    "reborn": "GodsWar-2.51/emulators/src/godswar-server @ b85a1244 (S/ = src/Godswar.Server/)",
+    "live_schema": "PostgreSQL 'godswar' on the VPS, read in BEGIN READ ONLY on 2026-10-28: 225 tables, 37 views",
+    "doc": "WRITE-RULES.md (same folder)"
+  },
+  "legend": {
+    "class": {
+      "character_state": "per-character rows; the server reads them at world entry and per operation",
+      "character_session_owned": "per-character rows that the game session rewrites from memory",
+      "account": "account rows",
+      "guild_state": "guild rows shared by several characters",
+      "evidence": "ledgers, claims, audits, archives: never edited",
+      "bookkeeping": "server counters / fencing state: never edited",
+      "published_content": "immutable content revisions pinned at start-up",
+      "authoring_content": "mutable source tables the running game does not read",
+      "startup_content": "mutable content read once at start-up",
+      "gm_override": "GM content tables read once at start-up",
+      "runtime_setting": "settings read at each use",
+      "hot_setting": "settings the server reloads while running",
+      "capture": "research data"
+    },
+    "editor": {
+      "edit": "normal editor field",
+      "edit_advanced": "behind an 'advanced' switch with a warning",
+      "insert_only": "the editor appends rows, never changes them",
+      "read_only": "shown, not editable (the UI says why)",
+      "hidden": "not shown"
+    },
+    "applies": {
+      "now": "the server reads it at the next use",
+      "next_login": "the character sees it at the next world entry (it must be offline to edit)",
+      "after_restart": "gw251 restart needed",
+      "new_revision_and_restart": "needs a new content publication and a restart; not offered",
+      "never": "the server does not read it",
+      "not_editable": "never written by the editor",
+      "live": "applied by the running server through a round2 management endpoint"
+    }
+  },
+  "online_check": {
+    "signals": [
+      "character_base.checkpoint_owner_id IS NOT NULL (session owns the character)",
+      "accounts.login_presence_token IS NOT NULL (player in the world)",
+      "accounts.login_status <> 0 (login server / character select)",
+      "GET /admin/online lists the character (only when /admin/capabilities advertises it)"
+    ],
+    "where": "before the write AND inside the write transaction after SELECT ... FOR UPDATE OF c, a",
+    "stale": "a crashed server can leave checkpoint_owner_id set: refuse; clear only with the server stopped"
+  },
+  "capabilities": {
+    "probe": "GET http://127.0.0.1:<mgmt>/admin/capabilities (mgmt 9090 live; timeout 2 s; 404 or no answer = none)",
+    "expected_shape": {
+      "version": 1,
+      "server": "<build id>",
+      "auth": {
+        "scheme": "bearer",
+        "token_file": "<path readable by the editor via sudo -n>"
+      },
+      "online": "/admin/online",
+      "operations": {
+        "<capability name>": {
+          "method": "POST",
+          "path": "/admin/...",
+          "online": true,
+          "offline": true,
+          "fields": [
+            "..."
+          ],
+          "cas": true
+        }
+      }
+    },
+    "names_used": [
+      "account.ban",
+      "character.give_item",
+      "character.item_delete",
+      "character.item_set",
+      "character.kick",
+      "character.level",
+      "character.move",
+      "character.mute",
+      "character.rename",
+      "character.talent_points",
+      "character.wallet",
+      "character.zodiac_energy",
+      "rates.reload"
+    ],
+    "rule": "use an operation only if it is advertised with online=true; send the expected old value (CAS) and a request id; otherwise fall back to 'log out first'"
+  },
+  "tables": {
+    "character_base": {
+      "group": "character",
+      "label": "Character",
+      "editor": "edit",
+      "key": [
+        "id"
+      ],
+      "server_reads": "login_snapshot (PostgresCharacterSnapshotReader.Core.cs) + per-operation locked reads",
+      "server_writes": "per_operation_locked for wallet / level / talent / zodiac / guild; checkpoint_fenced for position and HP/MP (flushed from session memory)",
+      "applies": "next_login",
+      "online": {
+        "edit": "refuse",
+        "why": "the server reads this when the character enters the world and keeps its own copy in memory for the session; the client is never told about a database change",
+        "live": "per-field live_capability when /admin/capabilities advertises it"
+      },
+      "offline": "safe: the next world entry reads the edited row",
+      "while_running": "safe for an offline character; the server holds no copy of it",
+      "revision": {
+        "rule": "bump the counter named in the field's 'revision' by exactly +1 in the same UPDATE; never write a counter back to a lower value; never touch checkpoint_owner_*",
+        "counters": [
+          "wallet_revision",
+          "inventory_revision",
+          "position_revision",
+          "vitals_revision",
+          "pet_shed_revision",
+          "medusa_reward_revision",
+          "fighter_level_seal_revision"
+        ]
+      },
+      "invariants": [
+        "lock character_base + accounts FOR UPDATE OF c, a, then re-check offline inside the transaction",
+        "the character must have a character_economy_baseline row before wallet_revision or inventory_revision moves off 0; if it has none and both are 0, insert it exactly as PostgresCharacterEconomyBaseline.EnsureAsync does (baseline_source 'runtime_cutover', plus character_inventory_baseline_items) in the same transaction; if it has none and a revision is already > 0, refuse - every later shop / forge / bag command would fail",
+        "all CHECK constraints of character_base (31): currencies 0..2147483647, exp uint32, pet shed 2..8, warehouse 40..360 step 40, lifecycle timestamps, checkpoint owner pair",
+        "unique index ux_character_base_active_name_ci (lower(name) among active characters)",
+        "guild columns change only together with guild_members (Guild editor)"
+      ],
+      "fields": {
+        "id": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "primary key; referenced by every character table"
+        },
+        "account_id": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "owner account (FK accounts, cascade); moving a character between accounts also needs account_realm and the one-active-slot index"
+        },
+        "server_id": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "realm (FK server); the snapshot only reads characters of the process realm (PostgresCharacterSnapshotReader.Core.cs:322-324)"
+        },
+        "name": {
+          "applies": "next_login",
+          "editor": "edit",
+          "min_len": 1,
+          "max_len": 31,
+          "rule": "ASCII letters, digits, _ - . and inner spaces, at most 31 (32-byte packet fields keep a terminating zero); unique without case among active characters (index ux_character_base_active_name_ci) and not the name of a deleted character that can still be restored; stored only here (guilds, parties and rankings read it by character id); the name is sent to other players at world entry, so online renames are refused",
+          "live_capability": "character.rename"
+        },
+        "gender": {
+          "applies": "next_login",
+          "editor": "edit",
+          "enum": [
+            "male",
+            "female"
+          ],
+          "rule": "CHECK character_base_gender_check"
+        },
+        "GM": {
+          "applies": "never",
+          "editor": "read_only",
+          "why": "not read by this server; GM rights come from the DeveloperCommandOptions account allowlist in appsettings.json"
+        },
+        "camp": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "faction: quests, maps, guilds and NPC data depend on it; no server path changes it"
+        },
+        "profession": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "class: skills, talents and class-locked gear depend on it; no server path changes it"
+        },
+        "fighter_job_lv": {
+          "applies": "next_login",
+          "editor": "edit",
+          "min": 1,
+          "max": 200,
+          "rule": "PlayerExperienceCatalog.MaximumLevel = 200 (S/State/PlayerExperienceCatalog.cs:5). DB-authoritative: kills read it FOR UPDATE (PostgresGameStore.Progression.cs:79-86), so an online edit is not lost, but the client and the session's stats stay at the old level until relog",
+          "live_capability": "character.level"
+        },
+        "fighter_job_exp": {
+          "applies": "next_login",
+          "editor": "edit",
+          "min": 0,
+          "max": 4294967295,
+          "rule": "CHECK uint32; keep it below the cost of the next level or the next kill levels up (PlayerExperienceCatalog.Apply)",
+          "live_capability": "character.level"
+        },
+        "scholar_job_lv": {
+          "applies": "never",
+          "editor": "read_only",
+          "why": "not read by this server (1.0 leftover)"
+        },
+        "scholar_job_exp": {
+          "applies": "never",
+          "editor": "read_only",
+          "why": "not read by this server (1.0 leftover)"
+        },
+        "curHP": {
+          "applies": "next_login",
+          "editor": "edit",
+          "min": 0,
+          "revision": "vitals_revision",
+          "rule": "the session flushes HP/MP from memory (GameClientHandler.CharacterCheckpoints.cs, fenced by vitals_revision): an online edit is overwritten or makes the session's next flush fail"
+        },
+        "curMP": {
+          "applies": "next_login",
+          "editor": "edit",
+          "min": 0,
+          "revision": "vitals_revision",
+          "rule": "as curHP"
+        },
+        "vitals_revision": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "fencing counter; bumped by +1 with curHP/curMP"
+        },
+        "status": {
+          "applies": "never",
+          "editor": "read_only",
+          "why": "not read by this server"
+        },
+        "belief": {
+          "applies": "next_login",
+          "editor": "edit",
+          "min": 0,
+          "max": 255,
+          "rule": "faith; read by the snapshot (PostgresCharacterSnapshotReader.Core.cs:224)"
+        },
+        "zodiac_type": {
+          "applies": "next_login",
+          "editor": "edit",
+          "min": 0,
+          "max": 12
+        },
+        "zodiac_lucky_status": {
+          "applies": "next_login",
+          "editor": "edit_advanced"
+        },
+        "zodiac_lucky_expires_at": {
+          "applies": "next_login",
+          "editor": "edit_advanced"
+        },
+        "zodiac_level": {
+          "applies": "next_login",
+          "editor": "edit",
+          "min": 1,
+          "max": 30,
+          "rule": "storage-cap ladder has 30 levels (S/State/ZodiacEnergyCatalog.cs:7-39)"
+        },
+        "zodiac_energy": {
+          "applies": "next_login",
+          "editor": "edit",
+          "min": 0,
+          "rule": "must not exceed the storage cap of zodiac_level (ZodiacEnergyCatalog.StorageLimits; level 1 = 1,000 ... level 30 = 1,090,000)",
+          "live_capability": "character.zodiac_energy"
+        },
+        "zodiac_energy_remainder_x100": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "server accrual remainder (hundredths)"
+        },
+        "zodiac_online_day": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "server online-time bookkeeping"
+        },
+        "zodiac_online_duration_ticks": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "server online-time bookkeeping"
+        },
+        "zodiac_last_online_at": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "server online-time bookkeeping"
+        },
+        "zodiac_last_compensation_day": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "server bookkeeping"
+        },
+        "zodiac_accumulated_exp_x100": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "server bookkeeping"
+        },
+        "zodiac_accumulated_talent_exp_x100": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "server bookkeeping"
+        },
+        "prestige": {
+          "applies": "never",
+          "editor": "read_only",
+          "why": "not read by this server"
+        },
+        "earl_rank": {
+          "applies": "never",
+          "editor": "read_only",
+          "why": "not read by this server"
+        },
+        "consortia": {
+          "applies": "next_login",
+          "editor": "read_only",
+          "why": "guild id; written only together with guild_members and consortia_job/guild_duty by PostgresGuildStore - edit it in the Guild editor, never alone"
+        },
+        "consortia_job": {
+          "applies": "next_login",
+          "editor": "read_only",
+          "why": "as consortia"
+        },
+        "consortia_contribute": {
+          "applies": "next_login",
+          "editor": "edit_advanced",
+          "min": 0,
+          "rule": "guild contribution; worship spends it (PostgresGuildStore.Worship.cs:106)"
+        },
+        "guild_duty": {
+          "applies": "next_login",
+          "editor": "read_only",
+          "why": "FK guild_duties; written with consortia by PostgresGuildStore"
+        },
+        "store_num": {
+          "applies": "never",
+          "editor": "read_only",
+          "why": "not read by this server (warehouse size is warehouse_capacity)"
+        },
+        "bag_num": {
+          "applies": "never",
+          "editor": "read_only",
+          "why": "not read by this server (the kit bag always projects 96 slots)"
+        },
+        "hair_style": {
+          "applies": "next_login",
+          "editor": "edit",
+          "min": 0,
+          "max": 255
+        },
+        "face_shap": {
+          "applies": "next_login",
+          "editor": "edit",
+          "min": 0,
+          "max": 255
+        },
+        "Map": {
+          "applies": "next_login",
+          "editor": "edit",
+          "revision": "position_revision",
+          "rule": "must exist in map_templates; position is flushed from memory (fenced by position_revision) - online edits are overwritten",
+          "live_capability": "character.move"
+        },
+        "Pos_X": {
+          "applies": "next_login",
+          "editor": "edit",
+          "revision": "position_revision",
+          "live_capability": "character.move"
+        },
+        "Pos_Z": {
+          "applies": "next_login",
+          "editor": "edit",
+          "revision": "position_revision",
+          "live_capability": "character.move"
+        },
+        "Money": {
+          "applies": "next_login",
+          "editor": "edit",
+          "min": 0,
+          "max": 2147483647,
+          "revision": "wallet_revision",
+          "label": "Silver",
+          "rule": "CHECK; needs an economy baseline row first (see invariants)",
+          "live_capability": "character.wallet"
+        },
+        "Stone": {
+          "applies": "next_login",
+          "editor": "edit",
+          "min": 0,
+          "max": 2147483647,
+          "revision": "wallet_revision",
+          "label": "Gold",
+          "live_capability": "character.wallet"
+        },
+        "BindingGold": {
+          "applies": "next_login",
+          "editor": "edit",
+          "min": 0,
+          "max": 2147483647,
+          "revision": "wallet_revision",
+          "label": "Bound Gold",
+          "live_capability": "character.wallet"
+        },
+        "medusa_honor_points": {
+          "applies": "next_login",
+          "editor": "edit",
+          "min": 0,
+          "max": 2147483647,
+          "revision": "wallet_revision",
+          "label": "Honor",
+          "live_capability": "character.wallet"
+        },
+        "exchange_point": {
+          "applies": "next_login",
+          "editor": "edit",
+          "min": 0,
+          "max": 2147483647,
+          "revision": "wallet_revision",
+          "label": "Exchange points",
+          "live_capability": "character.wallet"
+        },
+        "exchange_medal": {
+          "applies": "next_login",
+          "editor": "edit",
+          "min": 0,
+          "max": 2147483647,
+          "revision": "wallet_revision",
+          "label": "Exchange medals",
+          "live_capability": "character.wallet"
+        },
+        "SkillPoint": {
+          "applies": "next_login",
+          "editor": "edit",
+          "min": 0,
+          "max": 2147483647,
+          "label": "Talent points",
+          "rule": "DB-authoritative (talent upgrade reads it under the row lock)",
+          "live_capability": "character.talent_points"
+        },
+        "SkillExp": {
+          "applies": "next_login",
+          "editor": "edit",
+          "min": 0,
+          "max": 99,
+          "label": "Talent EXP",
+          "rule": "100 talent EXP = 1 point (TalentExperienceCatalog); keep below 100"
+        },
+        "holy_suit_points": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "derived: recompute_character_holy_suit_points() sums the equipped holy-suit codes; recomputed after every equipment change"
+        },
+        "MaxHP": {
+          "applies": "next_login",
+          "editor": "edit_advanced",
+          "min": 1,
+          "rule": "base maximum; the session recomputes the real maximum from level, gear and buffs"
+        },
+        "MaxMP": {
+          "applies": "next_login",
+          "editor": "edit_advanced",
+          "min": 1,
+          "rule": "as MaxHP"
+        },
+        "Register_time": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "creation time; lifecycle CHECK uses it"
+        },
+        "LastLogin_time": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "server bookkeeping"
+        },
+        "mutetime": {
+          "applies": "never",
+          "editor": "read_only",
+          "why": "stock server ignores it; round2 /mute uses it (unix seconds) - edit through the live endpoint when advertised",
+          "live_capability": "character.mute"
+        },
+        "wallet_revision": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "ledger key; bumped +1 with any wallet column"
+        },
+        "inventory_revision": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "ledger key; bumped +1 with any item change"
+        },
+        "position_revision": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "fencing counter; bumped +1 with Map/Pos"
+        },
+        "checkpoint_owner_id": {
+          "applies": "not_editable",
+          "editor": "hidden",
+          "why": "the game session that owns the character (online signal). Never written by the editor; clear it only with the server stopped"
+        },
+        "checkpoint_owner_generation": {
+          "applies": "not_editable",
+          "editor": "hidden",
+          "why": "fencing token"
+        },
+        "character_slot": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "CHECK = 0"
+        },
+        "lifecycle_state": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "delete/restore go through the lifecycle command executor (outbox events, account_realm versions)"
+        },
+        "lifecycle_version": {
+          "applies": "not_editable",
+          "editor": "hidden",
+          "why": "server bookkeeping"
+        },
+        "deleted_at": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "lifecycle CHECK"
+        },
+        "restore_until": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "lifecycle CHECK"
+        },
+        "purge_after": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "lifecycle CHECK"
+        },
+        "progression_reward_revision": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "CAS counter of kill rewards"
+        },
+        "fighter_level_sealed": {
+          "applies": "next_login",
+          "editor": "edit",
+          "type": "bool",
+          "revision": "fighter_level_seal_revision",
+          "rule": "CHECK: only with level 1..200"
+        },
+        "pet_shed_capacity": {
+          "applies": "next_login",
+          "editor": "edit",
+          "min": 2,
+          "max": 8,
+          "revision": "pet_shed_revision",
+          "rule": "owned pets must fit (the 10237 pet list throws otherwise, PacketBuilder.Pets.cs:160-185)"
+        },
+        "pet_shed_revision": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "bumped +1 with pet_shed_capacity"
+        },
+        "faction_crier_revision": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "evidence counter"
+        },
+        "online_award_revision": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "evidence counter"
+        },
+        "warehouse_capacity": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "trigger guard_character_warehouse_capacity: only increases, warehouse_revision must advance by exactly 1, and the deferred trigger require_warehouse_capacity_evidence needs a warehouse_expansion_settlements row. Give Storage Box Keys (item 4102) instead; client limit 160"
+        },
+        "warehouse_revision": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "may only advance together with capacity (trigger)"
+        },
+        "medusa_reward_revision": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "bumped +1 with selected_title_id"
+        },
+        "selected_title_id": {
+          "applies": "next_login",
+          "editor": "edit",
+          "min": 0,
+          "revision": "medusa_reward_revision",
+          "rule": "0 or a title the character owns (character_title_ownership / atlantis_ / wonderland_ tables); the server's own selection bumps medusa_reward_revision (PostgresCharacterTitleSelectionStore.cs:67)"
+        },
+        "fighter_level_seal_revision": {
+          "applies": "not_editable",
+          "editor": "read_only",
+          "why": "bumped +1 with fighter_level_sealed"
+        },
+        "quest_current_id": {
+          "applies": "never",
+          "editor": "read_only",
+          "why": "not read by this server"
+        },
+        "quest_completed_ids": {
+          "applies": "never",
+          "editor": "hidden",
+          "why": "legacy column, copied once into character_quests by a migration (PostgresSchemaMigrationCatalog.CharacterQuests.cs:52); the server reads completed quests from character_quests state 1"
+        }
+      },
+      "reborn_py": {
+        "status": "partly_wrong",
+        "notes": [
+          "edits columns the server never reads (store_num, bag_num, prestige, earl_rank, scholar_*, GM, status, quest_current_id, mutetime): saved but have no effect",
+          "edits consortia / consortia_job / guild_duty alone (desyncs guild_members)",
+          "zodiac_level 0..32767 and zodiac_energy unbounded; server range 1..30 and the storage cap",
+          "fighter_level_sealed without fighter_level_seal_revision, pet_shed_capacity without pet_shed_revision, selected_title_id without ownership check or medusa_reward_revision",
+          "no economy-baseline check before bumping wallet_revision / inventory_revision"
+        ]
+      },
+      "evidence": [
+        "S/Infrastructure/Characters/PostgresCharacterCheckpointStore.Ownership.cs:8-58",
+        "S/Infrastructure/Characters/PostgresCharacterCheckpointStore.Writes.cs",
+        "S/Game/GameClientHandler.CharacterRefresh.cs:7-50",
+        "S/Infrastructure/Inventory/PostgresCharacterEconomyBaseline.cs",
+        "S/State/PostgresGameStore.Progression.cs:61-143"
+      ],
+      "rows_live": 5,
+      "class": "character_state"
+    },
+    "character_items": {
+      "group": "inventory",
+      "label": "Items (equipment, bag, warehouse)",
+      "editor": "edit",
+      "key": [
+        "id"
+      ],
+      "server_reads": "login_snapshot + per-operation locked reads (every bag/forge/shop command locks the rows it touches)",
+      "server_writes": "per_operation_locked; each server change also writes character_inventory_ledger + command_inbox and bumps inventory_revision",
+      "applies": "next_login",
+      "online": {
+        "edit": "refuse",
+        "why": "the server reads this when the character enters the world and keeps its own copy in memory for the session; the client is never told about a database change",
+        "live": "character.give_item / character.item_set / character.item_delete when advertised"
+      },
+      "offline": "safe",
+      "while_running": "safe for an offline character",
+      "revision": {
+        "rule": "every item insert/update/delete/move bumps character_base.inventory_revision by +1 in the same transaction (one bump per edit)",
+        "counters": [
+          "character_base.inventory_revision"
+        ]
+      },
+      "invariants": [
+        "lock character_base + accounts FOR UPDATE OF c, a, then re-check offline inside the transaction",
+        "the character must have a character_economy_baseline row before wallet_revision or inventory_revision moves off 0; if it has none and both are 0, insert it exactly as PostgresCharacterEconomyBaseline.EnsureAsync does (baseline_source 'runtime_cutover', plus character_inventory_baseline_items) in the same transaction; if it has none and a revision is already > 0, refuse - every later shop / forge / bag command would fail",
+        "keep the row id (item instance id) on move/swap - ledgers, baselines and sealed_pet_items refer to it; a delete + insert creates a new instance",
+        "one row per (user_id, item_location, slot_index): unique index ux_character_items_location_slot",
+        "item_location 0 equipment 0..23 (real slots 0-12, 15-20), 1 bag 0..95 visible (CHECK allows 0..32767), 2 server temp (never write), 3 warehouse 0..warehouse_capacity-1 (trigger guard_character_warehouse_item_slot)",
+        "prop_id FK item_templates (RESTRICT) and must be in the pinned official_item_template_content; stack 1..Overlap; quality 0..20 (client shows up to Q10), grade 0..25 (client G12), bound 0/1",
+        "an equipment slot takes only its kind (EquipmentSlots.cs); mount gear needs a mount and player lv >= mount lv >= gear lv (EquipmentEligibility.cs:120-150)",
+        "class_attribute1 / elemental_attribute1-2 only on the eligible gear list and grade 1..25 (CHECKs); holy sockets: value needs effect and level, socket count 0..6",
+        "after any change to equipped slots 0..11 call public.recompute_character_holy_suit_points(cid)",
+        "items linked in sealed_pet_items (packed pets) are read-only: they cannot enter the warehouse and bound ones cannot change owner (triggers)",
+        "write one character_item_audit row per changed item (source 'gwadmin-web')"
+      ],
+      "reborn_py": {
+        "status": "ok",
+        "notes": [
+          "keeps row ids on move, audit rows, revision bump, holy-suit recompute, slot/kind checks; no economy-baseline check (see character_base)"
+        ]
+      },
+      "evidence": [
+        "S/State/PostgresGameStore.cs:35-38",
+        "S/State/EquipmentSlots.cs:7-26",
+        "S/Infrastructure/Inventory/PostgresKitBagItemMoveCommandExecutor.Mutation.cs:136",
+        "live: pg_constraint of character_items (23 checks)"
+      ],
+      "rows_live": 36,
+      "class": "character_state"
+    },
+    "character_item_audit": {
+      "group": "inventory",
+      "label": "Item audit trail",
+      "editor": "insert_only",
+      "key": [
+        "id"
+      ],
+      "server_reads": "never (diagnostics)",
+      "server_writes": "append_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "invariants": [
+        "append one row per item the editor changes; never update or delete rows"
+      ],
+      "reborn_py": {
+        "status": "ok"
+      },
+      "rows_live": 6,
+      "class": "evidence"
+    },
+    "character_pets": {
+      "group": "pets",
+      "label": "Pets",
+      "editor": "edit",
+      "key": [
+        "id"
+      ],
+      "server_reads": "login_snapshot + per-command locked reads (LockPetAsync)",
+      "server_writes": "per_operation_locked with revision CAS, durable command inbox/outbox",
+      "applies": "next_login",
+      "online": {
+        "edit": "refuse",
+        "why": "the summoned pet is a live world entity and the session keeps the pet projection; the client is not told"
+      },
+      "offline": "safe if the validators pass",
+      "while_running": "safe for an offline character; a pet that fails a start-up validator does not hurt the running server but stops the NEXT restart",
+      "revision": {
+        "rule": "revision = revision + 1 on every changed pet row",
+        "counters": [
+          "revision"
+        ]
+      },
+      "invariants": [
+        "pets of the character: lock the character row first (same as every write)",
+        "aptitude 1..16; talent_mask must equal f(aptitude) (CHECK ck_character_pets_quality_innate_talents); has_owner_merge_talent = bit 16",
+        "at most one carried, one summoned, one contributing pet per character (unique partial indexes); summoned => carried; opened_skill_slots <= available_skill_slots <= 12; active pet skills only in opened cells",
+        "new rows need hatch-rank evidence that matches a sealed pet_content_hatch_rank_steps row (trigger guard_pet_hatch_rank_evidence); aptitude and evidence are immutable afterwards",
+        "initial_savvy_source_version = 'basic-plus-scaled-growth-v3' and exactly 6 stat rows, or the next level-up throws (PostgresPetDurableCommandExecutor.Level.cs:52-64)",
+        "every change bumps character_pets.revision (and the stat / skill rows' revision) by +1 - the server's pet commands compare it (AND revision = @revision)",
+        "owned pets <= character_base.pet_shed_capacity",
+        "run the three start-up validators (gwadmin-web/reborn_validators.py) before COMMIT: one failing pet stops the whole server from starting (PostgresGameStore.cs:233-238)",
+        "sealed (packed) pets - activity_state 'sealed' / rows in sealed_pet_items - are read-only"
+      ],
+      "reborn_py": {
+        "status": "ok",
+        "notes": [
+          "aptitude change uses a replica-mode window for one statement then re-asserts the savvy aggregate - keep it that narrow"
+        ]
+      },
+      "evidence": [
+        "S/State/DatabaseMigrations/PostgresSchemaMigrationCatalog.Pets.cs:108",
+        "S/State/PostgresGameStore.PetEggs.cs:270-385",
+        "gwadmin-web/reborn_validators.py"
+      ],
+      "rows_live": 1,
+      "class": "character_state"
+    },
+    "character_pet_stat_values": {
+      "group": "pets",
+      "label": "Pet savvy (six stats)",
+      "editor": "edit",
+      "key": [
+        "pet_id",
+        "stat_code"
+      ],
+      "server_reads": "login_snapshot + per command",
+      "server_writes": "per_operation_locked",
+      "applies": "next_login",
+      "online": {
+        "edit": "refuse",
+        "why": "the server reads this when the character enters the world and keeps its own copy in memory for the session; the client is never told about a database change"
+      },
+      "revision": {
+        "rule": "revision + 1 per changed row",
+        "counters": [
+          "revision"
+        ]
+      },
+      "invariants": [
+        "exactly six rows (stat_code 1..6)",
+        "added_savvy = (base_growth_rate + growth_acceleration) x level",
+        "basic savvy total >= birth baseline (deferred trigger assert_character_pet_basic_savvy_aggregate)",
+        "start-up validators"
+      ],
+      "reborn_py": {
+        "status": "ok"
+      },
+      "rows_live": 6,
+      "class": "character_state"
+    },
+    "character_pet_skills": {
+      "group": "pets",
+      "label": "Pet skills",
+      "editor": "edit",
+      "key": [
+        "pet_id",
+        "skill_id"
+      ],
+      "server_reads": "login_snapshot",
+      "server_writes": "per_operation_locked",
+      "applies": "next_login",
+      "online": {
+        "edit": "refuse",
+        "why": "the server reads this when the character enters the world and keeps its own copy in memory for the session; the client is never told about a database change"
+      },
+      "revision": {
+        "rule": "revision + 1 per changed row; also bump the pet row",
+        "counters": [
+          "revision"
+        ]
+      },
+      "invariants": [
+        "slot 0..11, one skill per cell, active only in opened cells (ValidatePetSkillCells, PacketBuilder.Pets.cs:396-410)",
+        "skill id fits u16 and exists in the published pet skill content",
+        "family-restricted skills only on their species unless forced"
+      ],
+      "reborn_py": {
+        "status": "ok"
+      },
+      "rows_live": 1,
+      "class": "character_state"
+    },
+    "character_pet_character_bonuses": {
+      "group": "pets",
+      "label": "Pet owner-merge bonuses",
+      "editor": "read_only",
+      "key": [
+        "pet_id",
+        "effect_code"
+      ],
+      "server_reads": "login_snapshot (owner-merge projection)",
+      "server_writes": "owner merge commands (balance_revision from the published owner-merge content)",
+      "applies": "not_editable",
+      "online": {
+        "edit": "refuse",
+        "why": "the server reads this when the character enters the world and keeps its own copy in memory for the session; the client is never told about a database change"
+      },
+      "why": "derived from a merge against a published balance revision; edit the merge state through the game",
+      "reborn_py": {
+        "status": "ok",
+        "notes": [
+          "dumped/restored with the pet only"
+        ]
+      },
+      "rows_live": 0,
+      "class": "character_state"
+    },
+    "character_pet_basic_savvy_previews": {
+      "group": "pets",
+      "label": "Pet re-roll previews (pending)",
+      "editor": "read_only",
+      "key": [
+        "user_id"
+      ],
+      "server_reads": "per command (accept/cancel a preview)",
+      "server_writes": "per_operation_locked",
+      "applies": "not_editable",
+      "online": {
+        "edit": "refuse",
+        "why": "the server reads this when the character enters the world and keeps its own copy in memory for the session; the client is never told about a database change"
+      },
+      "why": "a pending re-roll stores expected_pet_revision; any pet edit bumps the revision, so the server rejects the stale preview - that is intended. Deleting a preview cancels it (advanced, offline only)",
+      "reborn_py": {
+        "status": "ok"
+      },
+      "rows_live": 0,
+      "class": "character_state"
+    },
+    "character_pet_growth_previews": {
+      "group": "pets",
+      "label": "Pet re-roll previews (pending)",
+      "editor": "read_only",
+      "key": [
+        "user_id"
+      ],
+      "server_reads": "per command (accept/cancel a preview)",
+      "server_writes": "per_operation_locked",
+      "applies": "not_editable",
+      "online": {
+        "edit": "refuse",
+        "why": "the server reads this when the character enters the world and keeps its own copy in memory for the session; the client is never told about a database change"
+      },
+      "why": "a pending re-roll stores expected_pet_revision; any pet edit bumps the revision, so the server rejects the stale preview - that is intended. Deleting a preview cancels it (advanced, offline only)",
+      "reborn_py": {
+        "status": "ok"
+      },
+      "rows_live": 0,
+      "class": "character_state"
+    },
+    "sealed_pet_items": {
+      "group": "pets",
+      "label": "Packed pets (pet in an item)",
+      "editor": "read_only",
+      "key": [
+        "id"
+      ],
+      "server_reads": "login_snapshot + per command",
+      "server_writes": "seal/unseal commands",
+      "applies": "not_editable",
+      "online": {
+        "edit": "refuse",
+        "why": "the server reads this when the character enters the world and keeps its own copy in memory for the session; the client is never told about a database change"
+      },
+      "why": "links a character_items row to a sealed pet; triggers keep owner, bound snapshot and warehouse rules (sync_sealed_pet_item_owner, guard_warehouse_sealed_pet_link, validate_active_sealed_pet_link_trigger)",
+      "reborn_py": {
+        "status": "ok"
+      },
+      "rows_live": 0,
+      "class": "character_state"
+    },
+    "character_skills": {
+      "group": "skills",
+      "label": "Skills",
+      "editor": "edit",
+      "key": [
+        "user_id",
+        "skill_id"
+      ],
+      "server_reads": "login_snapshot",
+      "server_writes": "skill-book learn",
+      "applies": "next_login",
+      "online": {
+        "edit": "refuse",
+        "why": "the skill bar is sent at world entry"
+      },
+      "invariants": [
+        "skill_id FK skill_templates and present in the pinned gameplay_skill_combat_definitions",
+        "class skills only for that class (class_skills view)",
+        "skill_level 0..the skill's maximum"
+      ],
+      "reborn_py": {
+        "status": "partly_wrong",
+        "notes": [
+          "skill_level accepted up to 32767; no class check"
+        ]
+      },
+      "rows_live": 15,
+      "class": "character_state"
+    },
+    "character_talents": {
+      "group": "skills",
+      "label": "Talents",
+      "editor": "edit",
+      "key": [
+        "user_id",
+        "talent_id"
+      ],
+      "server_reads": "login_snapshot + talent upgrade (locked)",
+      "server_writes": "per_operation_locked (outbox event per upgrade)",
+      "applies": "next_login",
+      "online": {
+        "edit": "refuse",
+        "why": "the server reads this when the character enters the world and keeps its own copy in memory for the session; the client is never told about a database change"
+      },
+      "revision": {
+        "rule": "outbox_revision + 1 on a changed row (the outbox stream is 'ordered_sparse', gaps are fine)",
+        "counters": [
+          "outbox_revision"
+        ]
+      },
+      "invariants": [
+        "talent_id FK talent_templates; class talents only",
+        "rank 0..100 (TalentProgression.RankCap = 100); the admin's client shows at most 60 - warn above 60"
+      ],
+      "reborn_py": {
+        "status": "partly_wrong",
+        "notes": [
+          "rank accepted up to 32767; outbox_revision not bumped"
+        ]
+      },
+      "rows_live": 1,
+      "class": "character_state"
+    },
+    "character_zodiac_skill_grids": {
+      "group": "zodiac",
+      "label": "Zodiac skill grids",
+      "editor": "edit",
+      "key": [
+        "user_id",
+        "grid_index"
+      ],
+      "server_reads": "login_snapshot + grid commands (locked)",
+      "server_writes": "per_operation_locked",
+      "applies": "next_login",
+      "online": {
+        "edit": "refuse",
+        "why": "the server reads this when the character enters the world and keeps its own copy in memory for the session; the client is never told about a database change"
+      },
+      "invariants": [
+        "grid 0..15, level 0..50 (ZodiacSkillGridActivation.MaximumGridLevel)",
+        "selected skill must belong to that grid"
+      ],
+      "reborn_py": {
+        "status": "ok"
+      },
+      "rows_live": 1,
+      "class": "character_state"
+    },
+    "character_quests": {
+      "group": "quests",
+      "label": "Quests (accepted and completed)",
+      "editor": "edit",
+      "key": [
+        "character_id",
+        "quest_id"
+      ],
+      "server_reads": "login_snapshot (state 0 = in progress, 1 = completed; PostgresCharacterSnapshotReader.Core.cs:302-319)",
+      "server_writes": "session_flush: SaveCharacterQuestStateAsync DELETEs every row not in the session's list and upserts the rest (PostgresGameStore.QuestState.cs:15-82)",
+      "applies": "next_login",
+      "online": {
+        "edit": "refuse",
+        "why": "the session's quest list replaces the table on its next save - an online edit is deleted"
+      },
+      "invariants": [
+        "state is 0 (in progress) or 1 (completed); completed = a row with state 1, progress 0",
+        "at most 20 in-progress quests (GameClientHandler.Quests.cs:33)"
+      ],
+      "reborn_py": {
+        "status": "wrong",
+        "notes": [
+          "'mark done / not done' writes character_base.quest_completed_ids, which the server never reads; use character_quests state 1 / delete the row",
+          "the completed list shown comes from that legacy column"
+        ]
+      },
+      "rows_live": 2,
+      "class": "character_session_owned"
+    },
+    "character_quest_daily": {
+      "group": "quests",
+      "label": "Daily quest counters",
+      "editor": "edit_advanced",
+      "key": [
+        "character_id",
+        "quest_id"
+      ],
+      "server_reads": "login_snapshot (LoadQuestDailyCompletionsAsync)",
+      "server_writes": "session_flush (upsert from memory)",
+      "applies": "next_login",
+      "online": {
+        "edit": "refuse",
+        "why": "overwritten by the session"
+      },
+      "invariants": [
+        "deleting a row resets that quest's daily count; the quota day rolls at 12:00 server time (QuestDailyState.cs:19)"
+      ],
+      "rows_live": 0,
+      "class": "character_session_owned"
+    },
+    "character_quest_appraisal": {
+      "group": "quests",
+      "label": "Quest appraisal (+10% EXP)",
+      "editor": "edit_advanced",
+      "key": [
+        "character_id"
+      ],
+      "server_reads": "per_use",
+      "server_writes": "per_operation_locked",
+      "applies": "next_login",
+      "online": {
+        "edit": "refuse",
+        "why": "the server reads this when the character enters the world and keeps its own copy in memory for the session; the client is never told about a database change"
+      },
+      "rows_live": 0,
+      "class": "character_state"
+    },
+    "character_title_ownership": {
+      "group": "titles",
+      "label": "Titles owned",
+      "editor": "read_only",
+      "server_reads": "login_snapshot",
+      "server_writes": "instance reward settlement",
+      "applies": "not_editable",
+      "online": {
+        "edit": "refuse",
+        "why": "the server reads this when the character enters the world and keeps its own copy in memory for the session; the client is never told about a database change"
+      },
+      "why": "each row is earned by a recorded instance run (FK to the reward rows); the selected title (character_base.selected_title_id) is editable",
+      "rows_live": 0,
+      "class": "evidence"
+    },
+    "atlantis_character_title_ownership": {
+      "group": "titles",
+      "label": "Titles owned",
+      "editor": "read_only",
+      "server_reads": "login_snapshot",
+      "server_writes": "instance reward settlement",
+      "applies": "not_editable",
+      "online": {
+        "edit": "refuse",
+        "why": "the server reads this when the character enters the world and keeps its own copy in memory for the session; the client is never told about a database change"
+      },
+      "why": "each row is earned by a recorded instance run (FK to the reward rows); the selected title (character_base.selected_title_id) is editable",
+      "rows_live": 0,
+      "class": "evidence"
+    },
+    "wonderland_character_title_ownership": {
+      "group": "titles",
+      "label": "Titles owned",
+      "editor": "read_only",
+      "server_reads": "login_snapshot",
+      "server_writes": "instance reward settlement",
+      "applies": "not_editable",
+      "online": {
+        "edit": "refuse",
+        "why": "the server reads this when the character enters the world and keeps its own copy in memory for the session; the client is never told about a database change"
+      },
+      "why": "each row is earned by a recorded instance run (FK to the reward rows); the selected title (character_base.selected_title_id) is editable",
+      "rows_live": 0,
+      "class": "evidence"
+    },
+    "character_experience_modifiers": {
+      "group": "buffs",
+      "label": "EXP boosts (potions, events)",
+      "editor": "edit_advanced",
+      "server_reads": "per_use (PostgresExperienceBoostStateReader on each reward)",
+      "server_writes": "per_operation_locked; online ticks consumed by the interval settlement",
+      "applies": "next_login",
+      "online": {
+        "edit": "refuse",
+        "why": "the reward uses the new row at once, but the buff icon and timer in the client stay until relog"
+      },
+      "invariants": [
+        "trigger set_character_progression_boost_online_duration recomputes remaining_online_ticks when activated_at/expires_at change - set those, not the ticks"
+      ],
+      "rows_live": 0,
+      "class": "character_state"
+    },
+    "character_bag_consumable_cooldowns": {
+      "group": "buffs",
+      "label": "Potion cooldowns",
+      "editor": "edit_advanced",
+      "server_reads": "per_use",
+      "server_writes": "per_operation_locked",
+      "applies": "next_login",
+      "online": {
+        "edit": "refuse",
+        "why": "the server reads this when the character enters the world and keeps its own copy in memory for the session; the client is never told about a database change"
+      },
+      "invariants": [
+        "deleting a row ends that cooldown"
+      ],
+      "rows_live": 0,
+      "class": "character_state"
+    },
+    "character_lucky_gods_wish": {
+      "group": "daily_limits",
+      "label": "Daily / weekly event counters",
+      "editor": "edit_advanced",
+      "server_reads": "per_use (read under a row lock when the player uses the feature)",
+      "server_writes": "per_operation_locked",
+      "applies": "next_login",
+      "online": {
+        "edit": "allowed_with_warning",
+        "why": "DB-authoritative: the next use reads the edited row; the open NPC window may show the old count until reopened"
+      },
+      "invariants": [
+        "delete the row to reset a counter; never raise a counter above the cap in server_rates (cap.* keys) or the CHECK"
+      ],
+      "rows_live": 0,
+      "class": "character_state"
+    },
+    "character_wishing_pool_usage": {
+      "group": "daily_limits",
+      "label": "Daily / weekly event counters",
+      "editor": "edit_advanced",
+      "server_reads": "per_use (read under a row lock when the player uses the feature)",
+      "server_writes": "per_operation_locked",
+      "applies": "next_login",
+      "online": {
+        "edit": "allowed_with_warning",
+        "why": "DB-authoritative: the next use reads the edited row; the open NPC window may show the old count until reopened"
+      },
+      "invariants": [
+        "delete the row to reset a counter; never raise a counter above the cap in server_rates (cap.* keys) or the CHECK"
+      ],
+      "rows_live": 0,
+      "class": "character_state"
+    },
+    "character_zeus_gift_daily": {
+      "group": "daily_limits",
+      "label": "Daily / weekly event counters",
+      "editor": "edit_advanced",
+      "server_reads": "per_use (read under a row lock when the player uses the feature)",
+      "server_writes": "per_operation_locked",
+      "applies": "next_login",
+      "online": {
+        "edit": "allowed_with_warning",
+        "why": "DB-authoritative: the next use reads the edited row; the open NPC window may show the old count until reopened"
+      },
+      "invariants": [
+        "delete the row to reset a counter; never raise a counter above the cap in server_rates (cap.* keys) or the CHECK"
+      ],
+      "rows_live": 0,
+      "class": "character_state"
+    },
+    "character_zeus_gift_weekly": {
+      "group": "daily_limits",
+      "label": "Daily / weekly event counters",
+      "editor": "edit_advanced",
+      "server_reads": "per_use (read under a row lock when the player uses the feature)",
+      "server_writes": "per_operation_locked",
+      "applies": "next_login",
+      "online": {
+        "edit": "allowed_with_warning",
+        "why": "DB-authoritative: the next use reads the edited row; the open NPC window may show the old count until reopened"
+      },
+      "invariants": [
+        "delete the row to reset a counter; never raise a counter above the cap in server_rates (cap.* keys) or the CHECK"
+      ],
+      "rows_live": 0,
+      "class": "character_state"
+    },
+    "character_zeus_luck_entries": {
+      "group": "daily_limits",
+      "label": "Daily / weekly event counters",
+      "editor": "edit_advanced",
+      "server_reads": "per_use (read under a row lock when the player uses the feature)",
+      "server_writes": "per_operation_locked",
+      "applies": "next_login",
+      "online": {
+        "edit": "allowed_with_warning",
+        "why": "DB-authoritative: the next use reads the edited row; the open NPC window may show the old count until reopened"
+      },
+      "invariants": [
+        "delete the row to reset a counter; never raise a counter above the cap in server_rates (cap.* keys) or the CHECK"
+      ],
+      "rows_live": 0,
+      "class": "character_state"
+    },
+    "medusa_daily_entries": {
+      "group": "daily_limits",
+      "label": "Daily / weekly event counters",
+      "editor": "edit_advanced",
+      "server_reads": "per_use (read under a row lock when the player uses the feature)",
+      "server_writes": "per_operation_locked",
+      "applies": "next_login",
+      "online": {
+        "edit": "allowed_with_warning",
+        "why": "DB-authoritative: the next use reads the edited row; the open NPC window may show the old count until reopened"
+      },
+      "invariants": [
+        "delete the row to reset a counter; never raise a counter above the cap in server_rates (cap.* keys) or the CHECK"
+      ],
+      "rows_live": 0,
+      "class": "character_state"
+    },
+    "lelantine_farm_kill_points": {
+      "group": "daily_limits",
+      "label": "Daily / weekly event counters",
+      "editor": "edit_advanced",
+      "server_reads": "per_use (read under a row lock when the player uses the feature)",
+      "server_writes": "per_operation_locked",
+      "applies": "next_login",
+      "online": {
+        "edit": "allowed_with_warning",
+        "why": "DB-authoritative: the next use reads the edited row; the open NPC window may show the old count until reopened"
+      },
+      "invariants": [
+        "delete the row to reset a counter; never raise a counter above the cap in server_rates (cap.* keys) or the CHECK"
+      ],
+      "rows_live": 0,
+      "class": "character_state"
+    },
+    "lelantine_farm_donations": {
+      "group": "daily_limits",
+      "label": "Daily / weekly event counters",
+      "editor": "edit_advanced",
+      "server_reads": "per_use (read under a row lock when the player uses the feature)",
+      "server_writes": "per_operation_locked",
+      "applies": "next_login",
+      "online": {
+        "edit": "allowed_with_warning",
+        "why": "DB-authoritative: the next use reads the edited row; the open NPC window may show the old count until reopened"
+      },
+      "invariants": [
+        "delete the row to reset a counter; never raise a counter above the cap in server_rates (cap.* keys) or the CHECK"
+      ],
+      "rows_live": 0,
+      "class": "character_state"
+    },
+    "legacy_instance_daily_entries": {
+      "group": "daily_limits",
+      "label": "Dungeon daily entries",
+      "editor": "edit_advanced",
+      "server_reads": "per_use",
+      "server_writes": "per_operation_locked",
+      "applies": "next_login",
+      "online": {
+        "edit": "allowed_with_warning",
+        "why": "read under lock at the next entry"
+      },
+      "invariants": [
+        "a row referenced by legacy_instance_opal_payments (paid entry) must not be deleted"
+      ],
+      "rows_live": 0,
+      "class": "character_state"
+    },
+    "holy_suit_daily_exp_storage": {
+      "group": "daily_limits",
+      "label": "Holy Box daily EXP (per account)",
+      "editor": "edit_advanced",
+      "server_reads": "per_use",
+      "server_writes": "per_operation_locked",
+      "applies": "now",
+      "online": {
+        "edit": "allowed_with_warning",
+        "why": "account-level counter read at the next Store"
+      },
+      "rows_live": 0,
+      "class": "character_state"
+    },
+    "character_progression_interval_authority": {
+      "group": "bookkeeping",
+      "label": "Online-interval settlement state",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "aggregate_revision CAS of the zodiac/online settlement",
+      "rows_live": 5,
+      "class": "bookkeeping"
+    },
+    "pet_durable_stream_versions": {
+      "group": "bookkeeping",
+      "label": "Pet command stream version",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "its presence disables raw pet mutations in the stock store (PostgresGameStore.PetDurabilityGuards.cs)",
+      "rows_live": 0,
+      "class": "bookkeeping"
+    },
+    "monster_death_pet_experience": {
+      "group": "evidence",
+      "label": "Pet EXP from kills",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "rows_live": 1,
+      "class": "evidence"
+    },
+    "accounts": {
+      "group": "account",
+      "label": "Accounts",
+      "editor": "edit",
+      "key": [
+        "id"
+      ],
+      "server_reads": "per_login (login server) + donator tier per stat projection",
+      "server_writes": "login/logout (login_status, login_presence_token, times)",
+      "applies": "next_login",
+      "online": {
+        "edit": "refuse",
+        "why": "login_status / login_presence_token are the online signals; ban needs a kick (round2 /ban)"
+      },
+      "fields": {
+        "id": {
+          "editor": "read_only",
+          "applies": "not_editable",
+          "why": "primary key"
+        },
+        "username": {
+          "editor": "edit_advanced",
+          "applies": "next_login",
+          "rule": "unique; AccountUsername rules"
+        },
+        "password": {
+          "editor": "edit_advanced",
+          "applies": "next_login",
+          "rule": "never plain text: a versioned verifier gws$pbkdf2-sha256$v1$<iterations>$<salt b64, 16 bytes>$<hash b64, 32 bytes> (Security/Authentication/PasswordVerifierRecord.cs:8-10,103). Build it with hashlib.pbkdf2_hmac over the exact bytes the login path feeds the KDF; prove it with a headless login on a copy before enabling"
+        },
+        "email": {
+          "editor": "edit",
+          "applies": "now"
+        },
+        "status": {
+          "editor": "edit",
+          "applies": "next_login",
+          "rule": "round2: 1 = banned (login and game ports refuse); use the live ban endpoint to also kick",
+          "live_capability": "account.ban"
+        },
+        "donator_tier": {
+          "editor": "edit",
+          "applies": "next_login"
+        },
+        "donator_expires_at": {
+          "editor": "edit",
+          "applies": "next_login"
+        },
+        "login_status": {
+          "editor": "hidden",
+          "applies": "not_editable",
+          "why": "online signal"
+        },
+        "login_presence_token": {
+          "editor": "hidden",
+          "applies": "not_editable",
+          "why": "online signal"
+        },
+        "character_lifecycle_version": {
+          "editor": "read_only",
+          "applies": "not_editable"
+        },
+        "uuid": {
+          "editor": "read_only",
+          "applies": "not_editable"
+        },
+        "last_login_time": {
+          "editor": "read_only",
+          "applies": "not_editable"
+        },
+        "last_logout_time": {
+          "editor": "read_only",
+          "applies": "not_editable"
+        },
+        "last_login_ip": {
+          "editor": "read_only",
+          "applies": "not_editable"
+        },
+        "last_login_mac": {
+          "editor": "read_only",
+          "applies": "not_editable"
+        },
+        "total_online_time": {
+          "editor": "read_only",
+          "applies": "not_editable"
+        },
+        "editor_admin": {
+          "editor": "edit",
+          "applies": "now",
+          "rule": "Separate editor authorization; revoked sessions fail on their next request."
+        }
+      },
+      "rows_live": 5,
+      "class": "account"
+    },
+    "account_realm": {
+      "group": "account",
+      "label": "Account per realm",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "character lifecycle version counter",
+      "rows_live": 5,
+      "class": "bookkeeping"
+    },
+    "account_entitlements": {
+      "group": "account",
+      "label": "Account entitlements (battle pass, quotas)",
+      "editor": "edit_advanced",
+      "server_reads": "per_use",
+      "server_writes": "per_operation_locked",
+      "applies": "now",
+      "online": {
+        "edit": "allowed_with_warning",
+        "why": "read at the next use"
+      },
+      "rows_live": 0,
+      "class": "character_state"
+    },
+    "guilds": {
+      "group": "guild",
+      "label": "Guilds",
+      "editor": "edit_advanced",
+      "server_reads": "per_use (PostgresGuildStore) + GuildPanelStatusCache per online member",
+      "server_writes": "per_operation_locked",
+      "applies": "next_login",
+      "online": {
+        "edit": "refuse",
+        "why": "members' guild panels and altar bonuses are cached per online character"
+      },
+      "invariants": [
+        "guild_members.character_id is unique (one guild per character) and must agree with character_base.consortia / consortia_job / guild_duty - write both in one transaction",
+        "guilds.lord_character_id FK RESTRICT",
+        "all members of the guild should be offline"
+      ],
+      "rows_live": 0,
+      "class": "guild_state"
+    },
+    "guild_members": {
+      "group": "guild",
+      "label": "Guilds",
+      "editor": "edit_advanced",
+      "server_reads": "per_use (PostgresGuildStore) + GuildPanelStatusCache per online member",
+      "server_writes": "per_operation_locked",
+      "applies": "next_login",
+      "online": {
+        "edit": "refuse",
+        "why": "members' guild panels and altar bonuses are cached per online character"
+      },
+      "invariants": [
+        "guild_members.character_id is unique (one guild per character) and must agree with character_base.consortia / consortia_job / guild_duty - write both in one transaction",
+        "guilds.lord_character_id FK RESTRICT",
+        "all members of the guild should be offline"
+      ],
+      "rows_live": 0,
+      "class": "guild_state"
+    },
+    "guild_buildings": {
+      "group": "guild",
+      "label": "Guilds",
+      "editor": "edit_advanced",
+      "server_reads": "per_use (PostgresGuildStore) + GuildPanelStatusCache per online member",
+      "server_writes": "per_operation_locked",
+      "applies": "next_login",
+      "online": {
+        "edit": "refuse",
+        "why": "members' guild panels and altar bonuses are cached per online character"
+      },
+      "invariants": [
+        "guild_members.character_id is unique (one guild per character) and must agree with character_base.consortia / consortia_job / guild_duty - write both in one transaction",
+        "guilds.lord_character_id FK RESTRICT",
+        "all members of the guild should be offline"
+      ],
+      "rows_live": 0,
+      "class": "guild_state"
+    },
+    "guild_altar_worship": {
+      "group": "guild",
+      "label": "Guilds",
+      "editor": "edit_advanced",
+      "server_reads": "per_use (PostgresGuildStore) + GuildPanelStatusCache per online member",
+      "server_writes": "per_operation_locked",
+      "applies": "next_login",
+      "online": {
+        "edit": "refuse",
+        "why": "members' guild panels and altar bonuses are cached per online character"
+      },
+      "invariants": [
+        "guild_members.character_id is unique (one guild per character) and must agree with character_base.consortia / consortia_job / guild_duty - write both in one transaction",
+        "guilds.lord_character_id FK RESTRICT",
+        "all members of the guild should be offline"
+      ],
+      "rows_live": 0,
+      "class": "guild_state"
+    },
+    "character_currency_ledger": {
+      "group": "evidence",
+      "label": "Economy ledgers",
+      "why": "immutable (triggers *_immutable / *_no_truncate), each row tied to a command_inbox entry; admin edits do not add rows, so the reconciliation report lists them as drift",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 0,
+      "class": "evidence"
+    },
+    "character_inventory_ledger": {
+      "group": "evidence",
+      "label": "Economy ledgers",
+      "why": "immutable (triggers *_immutable / *_no_truncate), each row tied to a command_inbox entry; admin edits do not add rows, so the reconciliation report lists them as drift",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 1,
+      "class": "evidence"
+    },
+    "character_economy_baseline": {
+      "group": "evidence",
+      "label": "Economy opening baseline",
+      "why": "immutable; the only allowed write is the missing-baseline insert that mirrors PostgresCharacterEconomyBaseline.EnsureAsync (revisions 0)",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 5,
+      "class": "evidence"
+    },
+    "character_inventory_baseline_items": {
+      "group": "evidence",
+      "label": "Economy opening baseline",
+      "why": "immutable; the only allowed write is the missing-baseline insert that mirrors PostgresCharacterEconomyBaseline.EnsureAsync (revisions 0)",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 34,
+      "class": "evidence"
+    },
+    "command_inbox": {
+      "group": "evidence",
+      "label": "Command inbox / outbox",
+      "why": "guarded by triggers (guard_command_inbox_mutation, guard_outbox_event_mutation, lease consistency); the outbox dispatcher owns them",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 84,
+      "class": "evidence"
+    },
+    "command_audit": {
+      "group": "evidence",
+      "label": "Command inbox / outbox",
+      "why": "guarded by triggers (guard_command_inbox_mutation, guard_outbox_event_mutation, lease consistency); the outbox dispatcher owns them",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 84,
+      "class": "evidence"
+    },
+    "outbox_events": {
+      "group": "evidence",
+      "label": "Command inbox / outbox",
+      "why": "guarded by triggers (guard_command_inbox_mutation, guard_outbox_event_mutation, lease consistency); the outbox dispatcher owns them",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 83,
+      "class": "evidence"
+    },
+    "outbox_consumer_positions": {
+      "group": "evidence",
+      "label": "Command inbox / outbox",
+      "why": "guarded by triggers (guard_command_inbox_mutation, guard_outbox_event_mutation, lease consistency); the outbox dispatcher owns them",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 6,
+      "class": "evidence"
+    },
+    "monster_death_reward_settlements": {
+      "group": "evidence",
+      "label": "Settlement / claim evidence",
+      "why": "records of what the server paid out; idempotency keys for retries; never edited",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 1,
+      "class": "evidence"
+    },
+    "monster_loot_pickup_claims": {
+      "group": "evidence",
+      "label": "Settlement / claim evidence",
+      "why": "records of what the server paid out; idempotency keys for retries; never edited",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 0,
+      "class": "evidence"
+    },
+    "quest_reward_item_claims": {
+      "group": "evidence",
+      "label": "Settlement / claim evidence",
+      "why": "records of what the server paid out; idempotency keys for retries; never edited",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 1,
+      "class": "evidence"
+    },
+    "faction_crier_daily_claims": {
+      "group": "evidence",
+      "label": "Settlement / claim evidence",
+      "why": "records of what the server paid out; idempotency keys for retries; never edited",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 0,
+      "class": "evidence"
+    },
+    "faction_crier_exchange_settlements": {
+      "group": "evidence",
+      "label": "Settlement / claim evidence",
+      "why": "records of what the server paid out; idempotency keys for retries; never edited",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 0,
+      "class": "evidence"
+    },
+    "faction_crier_weekly_reclaims": {
+      "group": "evidence",
+      "label": "Settlement / claim evidence",
+      "why": "records of what the server paid out; idempotency keys for retries; never edited",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 0,
+      "class": "evidence"
+    },
+    "online_award_claim_settlements": {
+      "group": "evidence",
+      "label": "Settlement / claim evidence",
+      "why": "records of what the server paid out; idempotency keys for retries; never edited",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 0,
+      "class": "evidence"
+    },
+    "warehouse_expansion_settlements": {
+      "group": "evidence",
+      "label": "Settlement / claim evidence",
+      "why": "records of what the server paid out; idempotency keys for retries; never edited",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 0,
+      "class": "evidence"
+    },
+    "wonderland_boss_loot_claims": {
+      "group": "evidence",
+      "label": "Settlement / claim evidence",
+      "why": "records of what the server paid out; idempotency keys for retries; never edited",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 0,
+      "class": "evidence"
+    },
+    "wonderland_chest_claims": {
+      "group": "evidence",
+      "label": "Settlement / claim evidence",
+      "why": "records of what the server paid out; idempotency keys for retries; never edited",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 0,
+      "class": "evidence"
+    },
+    "wonderland_title_runs": {
+      "group": "evidence",
+      "label": "Settlement / claim evidence",
+      "why": "records of what the server paid out; idempotency keys for retries; never edited",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 0,
+      "class": "evidence"
+    },
+    "wonderland_title_members": {
+      "group": "evidence",
+      "label": "Settlement / claim evidence",
+      "why": "records of what the server paid out; idempotency keys for retries; never edited",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 0,
+      "class": "evidence"
+    },
+    "wonderland_title_milestones": {
+      "group": "evidence",
+      "label": "Settlement / claim evidence",
+      "why": "records of what the server paid out; idempotency keys for retries; never edited",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 0,
+      "class": "evidence"
+    },
+    "medusa_completion_rewards": {
+      "group": "evidence",
+      "label": "Settlement / claim evidence",
+      "why": "records of what the server paid out; idempotency keys for retries; never edited",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 0,
+      "class": "evidence"
+    },
+    "medusa_completion_reward_members": {
+      "group": "evidence",
+      "label": "Settlement / claim evidence",
+      "why": "records of what the server paid out; idempotency keys for retries; never edited",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 0,
+      "class": "evidence"
+    },
+    "atlantis_completion_rewards": {
+      "group": "evidence",
+      "label": "Settlement / claim evidence",
+      "why": "records of what the server paid out; idempotency keys for retries; never edited",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 0,
+      "class": "evidence"
+    },
+    "atlantis_completion_reward_members": {
+      "group": "evidence",
+      "label": "Settlement / claim evidence",
+      "why": "records of what the server paid out; idempotency keys for retries; never edited",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 0,
+      "class": "evidence"
+    },
+    "legacy_instance_opal_payments": {
+      "group": "evidence",
+      "label": "Settlement / claim evidence",
+      "why": "records of what the server paid out; idempotency keys for retries; never edited",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 0,
+      "class": "evidence"
+    },
+    "pet_operation_audit": {
+      "group": "evidence",
+      "label": "Settlement / claim evidence",
+      "why": "records of what the server paid out; idempotency keys for retries; never edited",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 0,
+      "class": "evidence"
+    },
+    "server_time_zone_audit": {
+      "group": "evidence",
+      "label": "Audit / migration history",
+      "why": "history written by triggers or the migrator",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 2,
+      "class": "evidence"
+    },
+    "server_rates_log": {
+      "group": "evidence",
+      "label": "Audit / migration history",
+      "why": "history written by triggers or the migrator",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 22,
+      "class": "evidence"
+    },
+    "online_award_publication_audit": {
+      "group": "evidence",
+      "label": "Audit / migration history",
+      "why": "history written by triggers or the migrator",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 1,
+      "class": "evidence"
+    },
+    "warehouse_expansion_policy_audit": {
+      "group": "evidence",
+      "label": "Audit / migration history",
+      "why": "history written by triggers or the migrator",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 3,
+      "class": "evidence"
+    },
+    "schema_migrations": {
+      "group": "evidence",
+      "label": "Audit / migration history",
+      "why": "history written by triggers or the migrator",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 194,
+      "class": "evidence"
+    },
+    "server_data_migrations": {
+      "group": "evidence",
+      "label": "Audit / migration history",
+      "why": "history written by triggers or the migrator",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 1,
+      "class": "evidence"
+    },
+    "pet_growth_reconciliation_archive": {
+      "group": "evidence",
+      "label": "Migration archives",
+      "why": "old values kept by data migrations",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 0,
+      "class": "evidence"
+    },
+    "pet_growth_savvy_semantics_v2_archive": {
+      "group": "evidence",
+      "label": "Migration archives",
+      "why": "old values kept by data migrations",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 0,
+      "class": "evidence"
+    },
+    "pet_initial_savvy_reconciliation_archive": {
+      "group": "evidence",
+      "label": "Migration archives",
+      "why": "old values kept by data migrations",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 0,
+      "class": "evidence"
+    },
+    "pet_initial_savvy_v3_legacy_archive": {
+      "group": "evidence",
+      "label": "Migration archives",
+      "why": "old values kept by data migrations",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 0,
+      "class": "evidence"
+    },
+    "pet_phoenix_growth_activation_archive": {
+      "group": "evidence",
+      "label": "Migration archives",
+      "why": "old values kept by data migrations",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 0,
+      "class": "evidence"
+    },
+    "pet_savvy_semantics_reconciliation_archive": {
+      "group": "evidence",
+      "label": "Migration archives",
+      "why": "old values kept by data migrations",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 0,
+      "class": "evidence"
+    },
+    "pet_scaled_added_value_v3_archive": {
+      "group": "evidence",
+      "label": "Migration archives",
+      "why": "old values kept by data migrations",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 0,
+      "class": "evidence"
+    },
+    "character_pet_talent_reconciliation_072": {
+      "group": "evidence",
+      "label": "Migration archives",
+      "why": "old values kept by data migrations",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "server_writes": "append_only",
+      "rows_live": 0,
+      "class": "evidence"
+    },
+    "item_template_content_definitions": {
+      "group": "content.items",
+      "label": "Item definitions (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 3488,
+      "class": "published_content"
+    },
+    "item_template_content_publication": {
+      "group": "content.items",
+      "label": "Item definitions (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 1,
+      "class": "published_content"
+    },
+    "item_template_content_revisions": {
+      "group": "content.items",
+      "label": "Item definitions (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 1,
+      "class": "published_content"
+    },
+    "item_attribute_content_definitions": {
+      "group": "content.items",
+      "label": "Item definitions (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 216,
+      "class": "published_content"
+    },
+    "item_material_content_definitions": {
+      "group": "content.items",
+      "label": "Item definitions (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 102,
+      "class": "published_content"
+    },
+    "equipment_rank_content_definitions": {
+      "group": "content.items",
+      "label": "Item definitions (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 24,
+      "class": "published_content"
+    },
+    "holy_suit_consumable_content_definitions": {
+      "group": "content.items",
+      "label": "Item definitions (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 13,
+      "class": "published_content"
+    },
+    "holy_suit_effect_content_definitions": {
+      "group": "content.items",
+      "label": "Item definitions (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 9,
+      "class": "published_content"
+    },
+    "holy_suit_operation_policy_content_definitions": {
+      "group": "content.items",
+      "label": "Item definitions (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 1,
+      "class": "published_content"
+    },
+    "holy_suit_tier_content_definitions": {
+      "group": "content.items",
+      "label": "Item definitions (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 8,
+      "class": "published_content"
+    },
+    "holy_suit_upgrade_content_definitions": {
+      "group": "content.items",
+      "label": "Item definitions (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 70,
+      "class": "published_content"
+    },
+    "gameplay_class_definitions": {
+      "group": "content.world",
+      "label": "Maps, monsters, bosses, classes, skills, talents (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 4,
+      "class": "published_content"
+    },
+    "gameplay_content_publication": {
+      "group": "content.world",
+      "label": "Maps, monsters, bosses, classes, skills, talents (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 1,
+      "class": "published_content"
+    },
+    "gameplay_content_revisions": {
+      "group": "content.world",
+      "label": "Maps, monsters, bosses, classes, skills, talents (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 1,
+      "class": "published_content"
+    },
+    "gameplay_map_address_points": {
+      "group": "content.world",
+      "label": "Maps, monsters, bosses, classes, skills, talents (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 378,
+      "class": "published_content"
+    },
+    "gameplay_map_definitions": {
+      "group": "content.world",
+      "label": "Maps, monsters, bosses, classes, skills, talents (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 81,
+      "class": "published_content"
+    },
+    "gameplay_map_links": {
+      "group": "content.world",
+      "label": "Maps, monsters, bosses, classes, skills, talents (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 50,
+      "class": "published_content"
+    },
+    "gameplay_monster_templates": {
+      "group": "content.world",
+      "label": "Maps, monsters, bosses, classes, skills, talents (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 1246,
+      "class": "published_content"
+    },
+    "gameplay_pending_world_boss_areas": {
+      "group": "content.world",
+      "label": "Maps, monsters, bosses, classes, skills, talents (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 1,
+      "class": "published_content"
+    },
+    "gameplay_skill_book_definitions": {
+      "group": "content.world",
+      "label": "Maps, monsters, bosses, classes, skills, talents (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 225,
+      "class": "published_content"
+    },
+    "gameplay_skill_combat_definitions": {
+      "group": "content.world",
+      "label": "Maps, monsters, bosses, classes, skills, talents (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 227,
+      "class": "published_content"
+    },
+    "gameplay_talent_definitions": {
+      "group": "content.world",
+      "label": "Maps, monsters, bosses, classes, skills, talents (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 73,
+      "class": "published_content"
+    },
+    "gameplay_talent_effect_definitions": {
+      "group": "content.world",
+      "label": "Maps, monsters, bosses, classes, skills, talents (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 19,
+      "class": "published_content"
+    },
+    "gameplay_world_boss_definitions": {
+      "group": "content.world",
+      "label": "Maps, monsters, bosses, classes, skills, talents (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 19,
+      "class": "published_content"
+    },
+    "monster_content_publication": {
+      "group": "content.spawns",
+      "label": "Monster spawns (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 1,
+      "class": "published_content"
+    },
+    "monster_content_revisions": {
+      "group": "content.spawns",
+      "label": "Monster spawns (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 1,
+      "class": "published_content"
+    },
+    "monster_spawn_definitions": {
+      "group": "content.spawns",
+      "label": "Monster spawns (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 3341,
+      "class": "published_content"
+    },
+    "npc_content_publication": {
+      "group": "content.npcs",
+      "label": "NPC placement (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 1,
+      "class": "published_content"
+    },
+    "npc_content_revisions": {
+      "group": "content.npcs",
+      "label": "NPC placement (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 1,
+      "class": "published_content"
+    },
+    "npc_spawn_definitions": {
+      "group": "content.npcs",
+      "label": "NPC placement (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 416,
+      "class": "published_content"
+    },
+    "npc_dialogue_bindings": {
+      "group": "content.npcs",
+      "label": "NPC dialogue (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 36,
+      "class": "published_content"
+    },
+    "npc_dialogue_profile_entries": {
+      "group": "content.npcs",
+      "label": "NPC dialogue (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 95,
+      "class": "published_content"
+    },
+    "npc_dialogue_profiles": {
+      "group": "content.npcs",
+      "label": "NPC dialogue (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 23,
+      "class": "published_content"
+    },
+    "npc_dialogue_publication": {
+      "group": "content.npcs",
+      "label": "NPC dialogue (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 1,
+      "class": "published_content"
+    },
+    "npc_dialogue_revisions": {
+      "group": "content.npcs",
+      "label": "NPC dialogue (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 1,
+      "class": "published_content"
+    },
+    "npc_dialogue_texts": {
+      "group": "content.npcs",
+      "label": "NPC dialogue (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 416,
+      "class": "published_content"
+    },
+    "enter_bootstrap_packets": {
+      "group": "content.world",
+      "label": "World-entry bootstrap packets (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 0,
+      "class": "published_content"
+    },
+    "enter_bootstrap_publication": {
+      "group": "content.world",
+      "label": "World-entry bootstrap packets (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 1,
+      "class": "published_content"
+    },
+    "enter_bootstrap_revisions": {
+      "group": "content.world",
+      "label": "World-entry bootstrap packets (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 1,
+      "class": "published_content"
+    },
+    "pet_content_aptitude_definitions": {
+      "group": "content.pets",
+      "label": "Pet rules (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 16,
+      "class": "published_content"
+    },
+    "pet_content_experience_steps": {
+      "group": "content.pets",
+      "label": "Pet rules (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 119,
+      "class": "published_content"
+    },
+    "pet_content_hatch_rank_steps": {
+      "group": "content.pets",
+      "label": "Pet rules (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 48,
+      "class": "published_content"
+    },
+    "pet_content_merge_rank_lookup": {
+      "group": "content.pets",
+      "label": "Pet rules (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 200,
+      "class": "published_content"
+    },
+    "pet_content_merge_rank_species_factors": {
+      "group": "content.pets",
+      "label": "Pet rules (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 45,
+      "class": "published_content"
+    },
+    "pet_content_merge_rank_spirit_steps": {
+      "group": "content.pets",
+      "label": "Pet rules (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 6,
+      "class": "published_content"
+    },
+    "pet_content_merge_savvy_lookup": {
+      "group": "content.pets",
+      "label": "Pet rules (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 200,
+      "class": "published_content"
+    },
+    "pet_content_merge_savvy_steps": {
+      "group": "content.pets",
+      "label": "Pet rules (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 9,
+      "class": "published_content"
+    },
+    "pet_content_native_profiles": {
+      "group": "content.pets",
+      "label": "Pet rules (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 540,
+      "class": "published_content"
+    },
+    "pet_content_publication": {
+      "group": "content.pets",
+      "label": "Pet rules (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 1,
+      "class": "published_content"
+    },
+    "pet_content_rebirth_steps": {
+      "group": "content.pets",
+      "label": "Pet rules (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 100,
+      "class": "published_content"
+    },
+    "pet_content_revisions": {
+      "group": "content.pets",
+      "label": "Pet rules (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 1,
+      "class": "published_content"
+    },
+    "pet_content_settings": {
+      "group": "content.pets",
+      "label": "Pet rules (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 1,
+      "class": "published_content"
+    },
+    "pet_content_species_definitions": {
+      "group": "content.pets",
+      "label": "Pet rules (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 45,
+      "class": "published_content"
+    },
+    "pet_owner_merge_content_publication": {
+      "group": "content.pets",
+      "label": "Pet rules (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 1,
+      "class": "published_content"
+    },
+    "pet_owner_merge_content_revisions": {
+      "group": "content.pets",
+      "label": "Pet rules (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 1,
+      "class": "published_content"
+    },
+    "pet_owner_merge_effect_bases": {
+      "group": "content.pets",
+      "label": "Pet rules (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 16,
+      "class": "published_content"
+    },
+    "pet_owner_merge_effect_types": {
+      "group": "content.pets",
+      "label": "Pet rules (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 18,
+      "class": "published_content"
+    },
+    "pet_owner_merge_rates": {
+      "group": "content.pets",
+      "label": "Pet rules (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 95,
+      "class": "published_content"
+    },
+    "pet_owner_merge_savvy_bands": {
+      "group": "content.pets",
+      "label": "Pet rules (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 5,
+      "class": "published_content"
+    },
+    "pet_owner_merge_savvy_types": {
+      "group": "content.pets",
+      "label": "Pet rules (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 6,
+      "class": "published_content"
+    },
+    "pet_skill_content_publication": {
+      "group": "content.pets",
+      "label": "Pet rules (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 1,
+      "class": "published_content"
+    },
+    "pet_skill_content_revisions": {
+      "group": "content.pets",
+      "label": "Pet rules (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 1,
+      "class": "published_content"
+    },
+    "pet_skill_curve_definitions": {
+      "group": "content.pets",
+      "label": "Pet rules (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 390,
+      "class": "published_content"
+    },
+    "pet_skill_curve_steps": {
+      "group": "content.pets",
+      "label": "Pet rules (published)",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "immutable revision rows (triggers *_immutable / *_insert_guard / *_bounded_insert); a change is a NEW revision + an atomic pointer move, then a restart. The process keeps its pinned revision until restart; a malformed revision stops start-up (fail closed). Not offered by the editor",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 1661,
+      "class": "published_content"
+    },
+    "faction_crier_balance_options": {
+      "group": "content.events",
+      "label": "Faction Crier exchange balance",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "balance revisions with a publication pointer; the server's own settings store publishes a new revision (CAS on the pointer, audit row) and game workers keep the start-up snapshot - restart to apply. Editable later only by mirroring that store",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 50,
+      "class": "published_content"
+    },
+    "faction_crier_balance_revisions": {
+      "group": "content.events",
+      "label": "Faction Crier exchange balance",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "balance revisions with a publication pointer; the server's own settings store publishes a new revision (CAS on the pointer, audit row) and game workers keep the start-up snapshot - restart to apply. Editable later only by mirroring that store",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 2,
+      "class": "published_content"
+    },
+    "faction_crier_balance_settings": {
+      "group": "content.events",
+      "label": "Faction Crier exchange balance",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "balance revisions with a publication pointer; the server's own settings store publishes a new revision (CAS on the pointer, audit row) and game workers keep the start-up snapshot - restart to apply. Editable later only by mirroring that store",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 1,
+      "class": "published_content"
+    },
+    "faction_crier_balance_tiers": {
+      "group": "content.events",
+      "label": "Faction Crier exchange balance",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "balance revisions with a publication pointer; the server's own settings store publishes a new revision (CAS on the pointer, audit row) and game workers keep the start-up snapshot - restart to apply. Editable later only by mirroring that store",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 14,
+      "class": "published_content"
+    },
+    "online_award_balance_entries": {
+      "group": "content.events",
+      "label": "Online award balance",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "balance revisions with a publication pointer; the server's own settings store publishes a new revision (CAS on the pointer, audit row) and game workers keep the start-up snapshot - restart to apply. Editable later only by mirroring that store",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 4,
+      "class": "published_content"
+    },
+    "online_award_balance_publication": {
+      "group": "content.events",
+      "label": "Online award balance",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "balance revisions with a publication pointer; the server's own settings store publishes a new revision (CAS on the pointer, audit row) and game workers keep the start-up snapshot - restart to apply. Editable later only by mirroring that store",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 1,
+      "class": "published_content"
+    },
+    "online_award_balance_revisions": {
+      "group": "content.events",
+      "label": "Online award balance",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "balance revisions with a publication pointer; the server's own settings store publishes a new revision (CAS on the pointer, audit row) and game workers keep the start-up snapshot - restart to apply. Editable later only by mirroring that store",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 1,
+      "class": "published_content"
+    },
+    "warehouse_expansion_policy_levels": {
+      "group": "content.items",
+      "label": "Warehouse expansion policy",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "balance revisions with a publication pointer; the server's own settings store publishes a new revision (CAS on the pointer, audit row) and game workers keep the start-up snapshot - restart to apply. Editable later only by mirroring that store",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 17,
+      "class": "published_content"
+    },
+    "warehouse_expansion_policy_publication": {
+      "group": "content.items",
+      "label": "Warehouse expansion policy",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "balance revisions with a publication pointer; the server's own settings store publishes a new revision (CAS on the pointer, audit row) and game workers keep the start-up snapshot - restart to apply. Editable later only by mirroring that store",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 1,
+      "class": "published_content"
+    },
+    "warehouse_expansion_policy_revisions": {
+      "group": "content.items",
+      "label": "Warehouse expansion policy",
+      "editor": "read_only",
+      "server_reads": "startup_pinned_revision (hash-checked)",
+      "server_writes": "publication_only",
+      "applies": "new_revision_and_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "balance revisions with a publication pointer; the server's own settings store publishes a new revision (CAS on the pointer, audit row) and game workers keep the start-up snapshot - restart to apply. Editable later only by mirroring that store",
+      "evidence": [
+        "docs/data-architecture-b20g-content-publication-capture-separation-20260801.md"
+      ],
+      "rows_live": 3,
+      "class": "published_content"
+    },
+    "item_attribute_templates": {
+      "group": "content.authoring",
+      "label": "Authoring source tables",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "mutable source rows; the server reads them only when it creates the first publication (and its publisher upserts reviewed values over them), so an edit has no effect in game",
+      "rows_live": 195,
+      "class": "authoring_content"
+    },
+    "item_grade_levels": {
+      "group": "content.authoring",
+      "label": "Authoring source tables",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "mutable source rows; the server reads them only when it creates the first publication (and its publisher upserts reviewed values over them), so an edit has no effect in game",
+      "rows_live": 25,
+      "class": "authoring_content"
+    },
+    "item_quality_levels": {
+      "group": "content.authoring",
+      "label": "Authoring source tables",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "mutable source rows; the server reads them only when it creates the first publication (and its publisher upserts reviewed values over them), so an edit has no effect in game",
+      "rows_live": 20,
+      "class": "authoring_content"
+    },
+    "equipment_rank_rules": {
+      "group": "content.authoring",
+      "label": "Authoring source tables",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "mutable source rows; the server reads them only when it creates the first publication (and its publisher upserts reviewed values over them), so an edit has no effect in game",
+      "rows_live": 24,
+      "class": "authoring_content"
+    },
+    "holy_suit_effect_templates": {
+      "group": "content.authoring",
+      "label": "Authoring source tables",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "mutable source rows; the server reads them only when it creates the first publication (and its publisher upserts reviewed values over them), so an edit has no effect in game",
+      "rows_live": 9,
+      "class": "authoring_content"
+    },
+    "holy_suit_tiers": {
+      "group": "content.authoring",
+      "label": "Authoring source tables",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "mutable source rows; the server reads them only when it creates the first publication (and its publisher upserts reviewed values over them), so an edit has no effect in game",
+      "rows_live": 8,
+      "class": "authoring_content"
+    },
+    "holy_suit_upgrade_requirements": {
+      "group": "content.authoring",
+      "label": "Authoring source tables",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "mutable source rows; the server reads them only when it creates the first publication (and its publisher upserts reviewed values over them), so an edit has no effect in game",
+      "rows_live": 70,
+      "class": "authoring_content"
+    },
+    "class_templates": {
+      "group": "content.authoring",
+      "label": "Authoring source tables",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "mutable source rows; the server reads them only when it creates the first publication (and its publisher upserts reviewed values over them), so an edit has no effect in game",
+      "rows_live": 4,
+      "class": "authoring_content"
+    },
+    "skill_book_templates": {
+      "group": "content.authoring",
+      "label": "Authoring source tables",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "mutable source rows; the server reads them only when it creates the first publication (and its publisher upserts reviewed values over them), so an edit has no effect in game",
+      "rows_live": 225,
+      "class": "authoring_content"
+    },
+    "talent_effect_templates": {
+      "group": "content.authoring",
+      "label": "Authoring source tables",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "mutable source rows; the server reads them only when it creates the first publication (and its publisher upserts reviewed values over them), so an edit has no effect in game",
+      "rows_live": 19,
+      "class": "authoring_content"
+    },
+    "map_templates": {
+      "group": "content.authoring",
+      "label": "Authoring source tables",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "mutable source rows; the server reads them only when it creates the first publication (and its publisher upserts reviewed values over them), so an edit has no effect in game",
+      "rows_live": 81,
+      "class": "authoring_content"
+    },
+    "map_links": {
+      "group": "content.authoring",
+      "label": "Authoring source tables",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "mutable source rows; the server reads them only when it creates the first publication (and its publisher upserts reviewed values over them), so an edit has no effect in game",
+      "rows_live": 50,
+      "class": "authoring_content"
+    },
+    "map_address_points": {
+      "group": "content.authoring",
+      "label": "Authoring source tables",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "mutable source rows; the server reads them only when it creates the first publication (and its publisher upserts reviewed values over them), so an edit has no effect in game",
+      "rows_live": 378,
+      "class": "authoring_content"
+    },
+    "map_routes": {
+      "group": "content.authoring",
+      "label": "Authoring source tables",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "mutable source rows; the server reads them only when it creates the first publication (and its publisher upserts reviewed values over them), so an edit has no effect in game",
+      "rows_live": 16,
+      "class": "authoring_content"
+    },
+    "map_safe_areas": {
+      "group": "content.authoring",
+      "label": "Authoring source tables",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "mutable source rows; the server reads them only when it creates the first publication (and its publisher upserts reviewed values over them), so an edit has no effect in game",
+      "rows_live": 16,
+      "class": "authoring_content"
+    },
+    "monster_templates": {
+      "group": "content.authoring",
+      "label": "Authoring source tables",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "mutable source rows; the server reads them only when it creates the first publication (and its publisher upserts reviewed values over them), so an edit has no effect in game",
+      "rows_live": 1246,
+      "class": "authoring_content"
+    },
+    "npc_appearance_templates": {
+      "group": "content.authoring",
+      "label": "Authoring source tables",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "mutable source rows; the server reads them only when it creates the first publication (and its publisher upserts reviewed values over them), so an edit has no effect in game",
+      "rows_live": 987,
+      "class": "authoring_content"
+    },
+    "npc_dialog_templates": {
+      "group": "content.authoring",
+      "label": "Authoring source tables",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "mutable source rows; the server reads them only when it creates the first publication (and its publisher upserts reviewed values over them), so an edit has no effect in game",
+      "rows_live": 34,
+      "class": "authoring_content"
+    },
+    "npc_function_templates": {
+      "group": "content.authoring",
+      "label": "Authoring source tables",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "mutable source rows; the server reads them only when it creates the first publication (and its publisher upserts reviewed values over them), so an edit has no effect in game",
+      "rows_live": 29,
+      "class": "authoring_content"
+    },
+    "npc_spawn_references": {
+      "group": "content.authoring",
+      "label": "Authoring source tables",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "mutable source rows; the server reads them only when it creates the first publication (and its publisher upserts reviewed values over them), so an edit has no effect in game",
+      "rows_live": 2104,
+      "class": "authoring_content"
+    },
+    "npc_text_templates": {
+      "group": "content.authoring",
+      "label": "Authoring source tables",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "mutable source rows; the server reads them only when it creates the first publication (and its publisher upserts reviewed values over them), so an edit has no effect in game",
+      "rows_live": 1129,
+      "class": "authoring_content"
+    },
+    "world_boss_areas": {
+      "group": "content.authoring",
+      "label": "Authoring source tables",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "mutable source rows; the server reads them only when it creates the first publication (and its publisher upserts reviewed values over them), so an edit has no effect in game",
+      "rows_live": 19,
+      "class": "authoring_content"
+    },
+    "pending_world_boss_areas": {
+      "group": "content.authoring",
+      "label": "Authoring source tables",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "mutable source rows; the server reads them only when it creates the first publication (and its publisher upserts reviewed values over them), so an edit has no effect in game",
+      "rows_live": 1,
+      "class": "authoring_content"
+    },
+    "pet_templates": {
+      "group": "content.authoring",
+      "label": "Authoring source tables",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "mutable source rows; the server reads them only when it creates the first publication (and its publisher upserts reviewed values over them), so an edit has no effect in game",
+      "rows_live": 46,
+      "class": "authoring_content"
+    },
+    "pet_aptitude_templates": {
+      "group": "content.authoring",
+      "label": "Authoring source tables",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "mutable source rows; the server reads them only when it creates the first publication (and its publisher upserts reviewed values over them), so an edit has no effect in game",
+      "rows_live": 16,
+      "class": "authoring_content"
+    },
+    "quest_monster_references": {
+      "group": "content.authoring",
+      "label": "Authoring source tables",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "mutable source rows; the server reads them only when it creates the first publication (and its publisher upserts reviewed values over them), so an edit has no effect in game",
+      "rows_live": 273,
+      "class": "authoring_content"
+    },
+    "guild_building_consume": {
+      "group": "content.authoring",
+      "label": "Authoring source tables",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "mutable source rows; the server reads them only when it creates the first publication (and its publisher upserts reviewed values over them), so an edit has no effect in game",
+      "rows_live": 6,
+      "class": "authoring_content"
+    },
+    "guild_defaults": {
+      "group": "content.authoring",
+      "label": "Authoring source tables",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "mutable source rows; the server reads them only when it creates the first publication (and its publisher upserts reviewed values over them), so an edit has no effect in game",
+      "rows_live": 11,
+      "class": "authoring_content"
+    },
+    "guild_levels": {
+      "group": "content.authoring",
+      "label": "Authoring source tables",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "mutable source rows; the server reads them only when it creates the first publication (and its publisher upserts reviewed values over them), so an edit has no effect in game",
+      "rows_live": 12,
+      "class": "authoring_content"
+    },
+    "item_templates": {
+      "group": "content.items",
+      "label": "Item templates (mutable mirror)",
+      "editor": "read_only",
+      "server_reads": "FK target of character_items.prop_id; per use only for the NPC sale price (stats.Money, CapitalShopSale.cs:247-257) and the Zeus gift stack (stats.Overlap, PostgresZeusGiftStore.cs:1220)",
+      "server_writes": "publisher upsert (PostgresItemTemplateBaselinePublisher.MutableAuthority.cs)",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "the game uses the pinned official_item_template_content; a publisher run overwrites this table from code. Use it (with the client catalogue) as the item LIBRARY only",
+      "rows_live": 3488,
+      "class": "authoring_content"
+    },
+    "skill_templates": {
+      "group": "content.authoring",
+      "label": "Skill / talent templates",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "FK targets of character_skills / character_talents; the running game uses the pinned gameplay_* definitions, so an edit has no effect",
+      "rows_live": 227,
+      "class": "authoring_content"
+    },
+    "talent_templates": {
+      "group": "content.authoring",
+      "label": "Skill / talent templates",
+      "editor": "read_only",
+      "server_reads": "first_publication_only",
+      "server_writes": "publisher upsert",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "FK targets of character_skills / character_talents; the running game uses the pinned gameplay_* definitions, so an edit has no effect",
+      "rows_live": 73,
+      "class": "authoring_content"
+    },
+    "guild_duties": {
+      "group": "content.guild",
+      "label": "Guild rules",
+      "editor": "read_only",
+      "server_reads": "per_use",
+      "applies": "now",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "guild_duties is an FK target; building types/levels drive altar bonuses (GuildAltarContent). Leave as shipped",
+      "rows_live": 7,
+      "class": "authoring_content"
+    },
+    "guild_building_types": {
+      "group": "content.guild",
+      "label": "Guild rules",
+      "editor": "read_only",
+      "server_reads": "per_use",
+      "applies": "now",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "guild_duties is an FK target; building types/levels drive altar bonuses (GuildAltarContent). Leave as shipped",
+      "rows_live": 17,
+      "class": "authoring_content"
+    },
+    "guild_building_levels": {
+      "group": "content.guild",
+      "label": "Guild rules",
+      "editor": "read_only",
+      "server_reads": "per_use",
+      "applies": "now",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "guild_duties is an FK target; building types/levels drive altar bonuses (GuildAltarContent). Leave as shipped",
+      "rows_live": 194,
+      "class": "authoring_content"
+    },
+    "monster_loot_tables": {
+      "group": "content.loot",
+      "label": "Field/dungeon loot",
+      "evidence": [
+        "S/Infrastructure/WorldContent/PostgresMonsterLootContentSnapshotReader.cs",
+        "S/ServerRuntimeBootstrapContext.cs:82-85"
+      ],
+      "editor": "edit",
+      "server_reads": "startup (read once into an immutable snapshot)",
+      "server_writes": "none",
+      "applies": "after_restart",
+      "online": {
+        "edit": "allowed",
+        "why": "nothing changes until the next restart"
+      },
+      "while_running": "safe to write; the running server keeps its snapshot",
+      "invariants": [
+        "validate exactly like the snapshot reader/constructor before COMMIT: a malformed row makes the NEXT start-up throw and the server stays down",
+        "after saving, rehearse: start the editor's test instance against a copy, or show 'restart needed' and offer 'restart and check readyz'",
+        "maximum_drops 1..32, chance in basis points 0..10000, quantity 1..255, item_id FK item_templates and in the pinned catalogue"
+      ],
+      "rows_live": 2,
+      "class": "startup_content"
+    },
+    "monster_loot_rules": {
+      "group": "content.loot",
+      "label": "Field/dungeon loot",
+      "evidence": [
+        "S/Infrastructure/WorldContent/PostgresMonsterLootContentSnapshotReader.cs",
+        "S/ServerRuntimeBootstrapContext.cs:82-85"
+      ],
+      "editor": "edit",
+      "server_reads": "startup (read once into an immutable snapshot)",
+      "server_writes": "none",
+      "applies": "after_restart",
+      "online": {
+        "edit": "allowed",
+        "why": "nothing changes until the next restart"
+      },
+      "while_running": "safe to write; the running server keeps its snapshot",
+      "invariants": [
+        "validate exactly like the snapshot reader/constructor before COMMIT: a malformed row makes the NEXT start-up throw and the server stays down",
+        "after saving, rehearse: start the editor's test instance against a copy, or show 'restart needed' and offer 'restart and check readyz'",
+        "maximum_drops 1..32, chance in basis points 0..10000, quantity 1..255, item_id FK item_templates and in the pinned catalogue"
+      ],
+      "rows_live": 3,
+      "class": "startup_content"
+    },
+    "quest_reward_slots": {
+      "group": "content.quests",
+      "label": "Quest reward overrides",
+      "evidence": [
+        "S/Infrastructure/WorldContent/PostgresQuestRewardContentSnapshotReader.cs"
+      ],
+      "editor": "edit",
+      "server_reads": "startup (read once into an immutable snapshot)",
+      "server_writes": "none",
+      "applies": "after_restart",
+      "online": {
+        "edit": "allowed",
+        "why": "nothing changes until the next restart"
+      },
+      "while_running": "safe to write; the running server keeps its snapshot",
+      "invariants": [
+        "validate exactly like the snapshot reader/constructor before COMMIT: a malformed row makes the NEXT start-up throw and the server stays down",
+        "after saving, rehearse: start the editor's test instance against a copy, or show 'restart needed' and offer 'restart and check readyz'"
+      ],
+      "rows_live": 0,
+      "class": "startup_content"
+    },
+    "quest_reward_values": {
+      "group": "content.quests",
+      "label": "Quest reward overrides",
+      "evidence": [
+        "S/Infrastructure/WorldContent/PostgresQuestRewardContentSnapshotReader.cs"
+      ],
+      "editor": "edit",
+      "server_reads": "startup (read once into an immutable snapshot)",
+      "server_writes": "none",
+      "applies": "after_restart",
+      "online": {
+        "edit": "allowed",
+        "why": "nothing changes until the next restart"
+      },
+      "while_running": "safe to write; the running server keeps its snapshot",
+      "invariants": [
+        "validate exactly like the snapshot reader/constructor before COMMIT: a malformed row makes the NEXT start-up throw and the server stays down",
+        "after saving, rehearse: start the editor's test instance against a copy, or show 'restart needed' and offer 'restart and check readyz'"
+      ],
+      "rows_live": 0,
+      "class": "startup_content"
+    },
+    "medusa_monster_rules": {
+      "group": "content.medusa",
+      "label": "Medusa Island rules",
+      "evidence": [
+        "S/Infrastructure/WorldInstances/PostgresMedusaMonsterContentSnapshotReader.cs",
+        "S/Infrastructure/WorldInstances/PostgresMedusaRewardPolicySnapshotReader.cs"
+      ],
+      "editor": "edit",
+      "server_reads": "startup (read once into an immutable snapshot)",
+      "server_writes": "none",
+      "applies": "after_restart",
+      "online": {
+        "edit": "allowed",
+        "why": "nothing changes until the next restart"
+      },
+      "while_running": "safe to write; the running server keeps its snapshot",
+      "invariants": [
+        "validate exactly like the snapshot reader/constructor before COMMIT: a malformed row makes the NEXT start-up throw and the server stays down",
+        "after saving, rehearse: start the editor's test instance against a copy, or show 'restart needed' and offer 'restart and check readyz'"
+      ],
+      "rows_live": 120,
+      "class": "startup_content"
+    },
+    "medusa_monster_loot_rules": {
+      "group": "content.medusa",
+      "label": "Medusa Island rules",
+      "evidence": [
+        "S/Infrastructure/WorldInstances/PostgresMedusaMonsterContentSnapshotReader.cs",
+        "S/Infrastructure/WorldInstances/PostgresMedusaRewardPolicySnapshotReader.cs"
+      ],
+      "editor": "edit",
+      "server_reads": "startup (read once into an immutable snapshot)",
+      "server_writes": "none",
+      "applies": "after_restart",
+      "online": {
+        "edit": "allowed",
+        "why": "nothing changes until the next restart"
+      },
+      "while_running": "safe to write; the running server keeps its snapshot",
+      "invariants": [
+        "validate exactly like the snapshot reader/constructor before COMMIT: a malformed row makes the NEXT start-up throw and the server stays down",
+        "after saving, rehearse: start the editor's test instance against a copy, or show 'restart needed' and offer 'restart and check readyz'"
+      ],
+      "rows_live": 27,
+      "class": "startup_content"
+    },
+    "medusa_completion_reward_rules": {
+      "group": "content.medusa",
+      "label": "Medusa Island rules",
+      "evidence": [
+        "S/Infrastructure/WorldInstances/PostgresMedusaMonsterContentSnapshotReader.cs",
+        "S/Infrastructure/WorldInstances/PostgresMedusaRewardPolicySnapshotReader.cs"
+      ],
+      "editor": "edit",
+      "server_reads": "startup (read once into an immutable snapshot)",
+      "server_writes": "none",
+      "applies": "after_restart",
+      "online": {
+        "edit": "allowed",
+        "why": "nothing changes until the next restart"
+      },
+      "while_running": "safe to write; the running server keeps its snapshot",
+      "invariants": [
+        "validate exactly like the snapshot reader/constructor before COMMIT: a malformed row makes the NEXT start-up throw and the server stays down",
+        "after saving, rehearse: start the editor's test instance against a copy, or show 'restart needed' and offer 'restart and check readyz'"
+      ],
+      "rows_live": 39,
+      "class": "startup_content"
+    },
+    "medusa_reward_title_definitions": {
+      "group": "content.medusa",
+      "label": "Medusa Island rules",
+      "evidence": [
+        "S/Infrastructure/WorldInstances/PostgresMedusaMonsterContentSnapshotReader.cs",
+        "S/Infrastructure/WorldInstances/PostgresMedusaRewardPolicySnapshotReader.cs"
+      ],
+      "editor": "edit",
+      "server_reads": "startup (read once into an immutable snapshot)",
+      "server_writes": "none",
+      "applies": "after_restart",
+      "online": {
+        "edit": "allowed",
+        "why": "nothing changes until the next restart"
+      },
+      "while_running": "safe to write; the running server keeps its snapshot",
+      "invariants": [
+        "validate exactly like the snapshot reader/constructor before COMMIT: a malformed row makes the NEXT start-up throw and the server stays down",
+        "after saving, rehearse: start the editor's test instance against a copy, or show 'restart needed' and offer 'restart and check readyz'"
+      ],
+      "rows_live": 6,
+      "class": "startup_content"
+    },
+    "monster_reward_settings": {
+      "group": "content.rates",
+      "label": "Global kill EXP multiplier and level gap",
+      "evidence": [
+        "S/Infrastructure/Rewards/PostgresMonsterRewardPolicySnapshotReader.cs",
+        "Polish/RATES.md"
+      ],
+      "editor": "edit",
+      "server_reads": "startup (read once into an immutable snapshot)",
+      "server_writes": "none",
+      "applies": "after_restart",
+      "online": {
+        "edit": "allowed",
+        "why": "nothing changes until the next restart"
+      },
+      "while_running": "safe to write; the running server keeps its snapshot",
+      "invariants": [
+        "validate exactly like the snapshot reader/constructor before COMMIT: a malformed row makes the NEXT start-up throw and the server stays down",
+        "after saving, rehearse: start the editor's test instance against a copy, or show 'restart needed' and offer 'restart and check readyz'",
+        "global_experience_multiplier_basis_points 10000..50000, maximum_lower_level_gap 0..199 (CHECKs); trigger trg_monster_reward_settings_update bumps revision"
+      ],
+      "rows_live": 1,
+      "class": "startup_content"
+    },
+    "monster_combat_balance": {
+      "group": "content.monsters",
+      "label": "Monster combat balance",
+      "evidence": [
+        "S/Infrastructure/WorldContent/PostgresWorldContentReaderLoader.MonsterCombatBalance.cs"
+      ],
+      "editor": "edit",
+      "server_reads": "startup (read once into an immutable snapshot)",
+      "server_writes": "none",
+      "applies": "after_restart",
+      "online": {
+        "edit": "allowed",
+        "why": "nothing changes until the next restart"
+      },
+      "while_running": "safe to write; the running server keeps its snapshot",
+      "invariants": [
+        "validate exactly like the snapshot reader/constructor before COMMIT: a malformed row makes the NEXT start-up throw and the server stays down",
+        "after saving, rehearse: start the editor's test instance against a copy, or show 'restart needed' and offer 'restart and check readyz'"
+      ],
+      "rows_live": 26,
+      "class": "startup_content"
+    },
+    "gm_monster_spawns": {
+      "group": "content.gm_overrides",
+      "label": "GM monster spawns / edits / attributes",
+      "evidence": [
+        "S/Application/World/MonsterOverrideSnapshot.cs:78-90 (a malformed row fails the load)"
+      ],
+      "editor": "edit",
+      "server_reads": "startup (read once into an immutable snapshot)",
+      "server_writes": "none",
+      "applies": "after_restart",
+      "online": {
+        "edit": "allowed",
+        "why": "nothing changes until the next restart"
+      },
+      "while_running": "safe to write; the running server keeps its snapshot",
+      "invariants": [
+        "validate exactly like the snapshot reader/constructor before COMMIT: a malformed row makes the NEXT start-up throw and the server stays down",
+        "after saving, rehearse: start the editor's test instance against a copy, or show 'restart needed' and offer 'restart and check readyz'",
+        "at most 20,000 spawns (MonsterOverrideSnapshot.MaximumSpawns)"
+      ],
+      "rows_live": 0,
+      "class": "gm_override"
+    },
+    "gm_monster_spawn_edits": {
+      "group": "content.gm_overrides",
+      "label": "GM monster spawns / edits / attributes",
+      "evidence": [
+        "S/Application/World/MonsterOverrideSnapshot.cs:78-90 (a malformed row fails the load)"
+      ],
+      "editor": "edit",
+      "server_reads": "startup (read once into an immutable snapshot)",
+      "server_writes": "none",
+      "applies": "after_restart",
+      "online": {
+        "edit": "allowed",
+        "why": "nothing changes until the next restart"
+      },
+      "while_running": "safe to write; the running server keeps its snapshot",
+      "invariants": [
+        "validate exactly like the snapshot reader/constructor before COMMIT: a malformed row makes the NEXT start-up throw and the server stays down",
+        "after saving, rehearse: start the editor's test instance against a copy, or show 'restart needed' and offer 'restart and check readyz'",
+        "at most 20,000 spawns (MonsterOverrideSnapshot.MaximumSpawns)"
+      ],
+      "rows_live": 0,
+      "class": "gm_override"
+    },
+    "gm_monster_attributes": {
+      "group": "content.gm_overrides",
+      "label": "GM monster spawns / edits / attributes",
+      "evidence": [
+        "S/Application/World/MonsterOverrideSnapshot.cs:78-90 (a malformed row fails the load)"
+      ],
+      "editor": "edit",
+      "server_reads": "startup (read once into an immutable snapshot)",
+      "server_writes": "none",
+      "applies": "after_restart",
+      "online": {
+        "edit": "allowed",
+        "why": "nothing changes until the next restart"
+      },
+      "while_running": "safe to write; the running server keeps its snapshot",
+      "invariants": [
+        "validate exactly like the snapshot reader/constructor before COMMIT: a malformed row makes the NEXT start-up throw and the server stays down",
+        "after saving, rehearse: start the editor's test instance against a copy, or show 'restart needed' and offer 'restart and check readyz'",
+        "at most 20,000 spawns (MonsterOverrideSnapshot.MaximumSpawns)"
+      ],
+      "rows_live": 0,
+      "class": "gm_override"
+    },
+    "gm_npc_spawns": {
+      "group": "content.gm_overrides",
+      "label": "GM NPCs and their dialogue",
+      "evidence": [
+        "S/Application/World/GmNpcOverrideSnapshot.cs:40-60"
+      ],
+      "editor": "edit",
+      "server_reads": "startup (read once into an immutable snapshot)",
+      "server_writes": "none",
+      "applies": "after_restart",
+      "online": {
+        "edit": "allowed",
+        "why": "nothing changes until the next restart"
+      },
+      "while_running": "safe to write; the running server keeps its snapshot",
+      "invariants": [
+        "validate exactly like the snapshot reader/constructor before COMMIT: a malformed row makes the NEXT start-up throw and the server stays down",
+        "after saving, rehearse: start the editor's test instance against a copy, or show 'restart needed' and offer 'restart and check readyz'",
+        "at most 2,000 spawns, 12 slots; button result numbers unique within a dialogue tree; template must be one the Origin client ships (round2 GmNpcDialoguePolicy.cs)"
+      ],
+      "rows_live": 0,
+      "class": "gm_override"
+    },
+    "gm_npc_dialogues": {
+      "group": "content.gm_overrides",
+      "label": "GM NPCs and their dialogue",
+      "evidence": [
+        "S/Application/World/GmNpcOverrideSnapshot.cs:40-60"
+      ],
+      "editor": "edit",
+      "server_reads": "startup (read once into an immutable snapshot)",
+      "server_writes": "none",
+      "applies": "after_restart",
+      "online": {
+        "edit": "allowed",
+        "why": "nothing changes until the next restart"
+      },
+      "while_running": "safe to write; the running server keeps its snapshot",
+      "invariants": [
+        "validate exactly like the snapshot reader/constructor before COMMIT: a malformed row makes the NEXT start-up throw and the server stays down",
+        "after saving, rehearse: start the editor's test instance against a copy, or show 'restart needed' and offer 'restart and check readyz'",
+        "at most 2,000 spawns, 12 slots; button result numbers unique within a dialogue tree; template must be one the Origin client ships (round2 GmNpcDialoguePolicy.cs)"
+      ],
+      "rows_live": 0,
+      "class": "gm_override"
+    },
+    "gm_npc_dialogue_pages": {
+      "group": "content.gm_overrides",
+      "label": "GM NPCs and their dialogue",
+      "evidence": [
+        "S/Application/World/GmNpcOverrideSnapshot.cs:40-60"
+      ],
+      "editor": "edit",
+      "server_reads": "startup (read once into an immutable snapshot)",
+      "server_writes": "none",
+      "applies": "after_restart",
+      "online": {
+        "edit": "allowed",
+        "why": "nothing changes until the next restart"
+      },
+      "while_running": "safe to write; the running server keeps its snapshot",
+      "invariants": [
+        "validate exactly like the snapshot reader/constructor before COMMIT: a malformed row makes the NEXT start-up throw and the server stays down",
+        "after saving, rehearse: start the editor's test instance against a copy, or show 'restart needed' and offer 'restart and check readyz'",
+        "at most 2,000 spawns, 12 slots; button result numbers unique within a dialogue tree; template must be one the Origin client ships (round2 GmNpcDialoguePolicy.cs)"
+      ],
+      "rows_live": 0,
+      "class": "gm_override"
+    },
+    "gm_npc_dialogue_buttons": {
+      "group": "content.gm_overrides",
+      "label": "GM NPCs and their dialogue",
+      "evidence": [
+        "S/Application/World/GmNpcOverrideSnapshot.cs:40-60"
+      ],
+      "editor": "edit",
+      "server_reads": "startup (read once into an immutable snapshot)",
+      "server_writes": "none",
+      "applies": "after_restart",
+      "online": {
+        "edit": "allowed",
+        "why": "nothing changes until the next restart"
+      },
+      "while_running": "safe to write; the running server keeps its snapshot",
+      "invariants": [
+        "validate exactly like the snapshot reader/constructor before COMMIT: a malformed row makes the NEXT start-up throw and the server stays down",
+        "after saving, rehearse: start the editor's test instance against a copy, or show 'restart needed' and offer 'restart and check readyz'",
+        "at most 2,000 spawns, 12 slots; button result numbers unique within a dialogue tree; template must be one the Origin client ships (round2 GmNpcDialoguePolicy.cs)"
+      ],
+      "rows_live": 0,
+      "class": "gm_override"
+    },
+    "gm_waypoints": {
+      "group": "content.gm_overrides",
+      "label": "GM waypoints",
+      "editor": "read_only",
+      "server_reads": "never",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "no reader in the source",
+      "rows_live": 0,
+      "class": "authoring_content"
+    },
+    "holy_spirit_balance_settings": {
+      "group": "content.items",
+      "label": "Holy spirit (cooled stone) balance",
+      "editor": "edit_advanced",
+      "server_reads": "startup (game workers never refresh)",
+      "server_writes": "management store: CAS on revision + clamps existing sockets",
+      "applies": "after_restart",
+      "online": {
+        "edit": "allowed",
+        "why": "takes effect after restart"
+      },
+      "invariants": [
+        "write exactly like PostgresHolySpiritBalanceStore.UpdateSql (revision CAS) AND its ClampSocketsSql in the same transaction - it rewrites character_items sockets above the new cap, so every affected owner must be offline"
+      ],
+      "rows_live": 1,
+      "class": "startup_content"
+    },
+    "legacy_instance_settings": {
+      "group": "content.instances",
+      "label": "Dungeon / Medusa entry settings",
+      "editor": "edit_advanced",
+      "server_reads": "per_use",
+      "server_writes": "varies",
+      "applies": "now",
+      "online": {
+        "edit": "allowed",
+        "why": "read at the next use"
+      },
+      "rows_live": 3,
+      "class": "runtime_setting"
+    },
+    "medusa_instance_settings": {
+      "group": "content.instances",
+      "label": "Dungeon / Medusa entry settings",
+      "editor": "edit_advanced",
+      "server_reads": "per_use",
+      "server_writes": "varies",
+      "applies": "now",
+      "online": {
+        "edit": "allowed",
+        "why": "read at the next use"
+      },
+      "rows_live": 1,
+      "class": "runtime_setting"
+    },
+    "medusa_pet_capture_rarity_weights": {
+      "group": "content.pets",
+      "label": "Medusa pet-capture rarity weights",
+      "editor": "edit_advanced",
+      "server_reads": "per_use",
+      "server_writes": "varies",
+      "applies": "now",
+      "online": {
+        "edit": "allowed",
+        "why": "read at the next use"
+      },
+      "rows_live": 22,
+      "class": "runtime_setting",
+      "invariants": [
+        "trigger trg_medusa_capture_rarity_total checks the weights' total"
+      ]
+    },
+    "faction_area_experience_control": {
+      "group": "content.events",
+      "label": "Faction-area EXP control (world bosses)",
+      "editor": "edit_advanced",
+      "server_reads": "per_use",
+      "server_writes": "varies",
+      "applies": "now",
+      "online": {
+        "edit": "allowed",
+        "why": "read at the next use"
+      },
+      "rows_live": 0,
+      "class": "runtime_setting"
+    },
+    "zeus_gift_limited_stock": {
+      "group": "content.events",
+      "label": "Zeus gift realm state",
+      "editor": "edit_advanced",
+      "server_reads": "per_use",
+      "server_writes": "varies",
+      "applies": "now",
+      "online": {
+        "edit": "allowed",
+        "why": "read at the next use"
+      },
+      "rows_live": 0,
+      "class": "runtime_setting"
+    },
+    "zeus_gift_realm_stones": {
+      "group": "content.events",
+      "label": "Zeus gift realm state",
+      "editor": "edit_advanced",
+      "server_reads": "per_use",
+      "server_writes": "varies",
+      "applies": "now",
+      "online": {
+        "edit": "allowed",
+        "why": "read at the next use"
+      },
+      "rows_live": 0,
+      "class": "runtime_setting"
+    },
+    "server": {
+      "group": "realm",
+      "label": "Realm row (name, address, ports, time zone)",
+      "editor": "edit_advanced",
+      "server_reads": "per_login (realm list) + startup",
+      "server_writes": "realm calendar store",
+      "applies": "after_restart",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "Calendar changes use audited revisions and require a coordinated game restart. Addresses and ports remain read-only.",
+      "rows_live": 2,
+      "class": "runtime_setting",
+      "fields": {
+        "id": {
+          "editor": "read_only",
+          "applies": "not_editable"
+        },
+        "name": {
+          "editor": "edit_advanced",
+          "applies": "next_login",
+          "rule": "1..35 printable ASCII bytes; the server list has a 36-byte terminated name field."
+        },
+        "identifier": {
+          "editor": "read_only",
+          "applies": "not_editable"
+        },
+        "ip_address": {
+          "editor": "read_only",
+          "applies": "not_editable"
+        },
+        "server_limit": {
+          "editor": "read_only",
+          "applies": "not_editable"
+        },
+        "enabled": {
+          "editor": "read_only",
+          "applies": "not_editable"
+        },
+        "display_order": {
+          "editor": "read_only",
+          "applies": "not_editable"
+        },
+        "game_port": {
+          "editor": "read_only",
+          "applies": "not_editable"
+        },
+        "recommended": {
+          "editor": "read_only",
+          "applies": "not_editable"
+        },
+        "time_zone_id": {
+          "editor": "edit_advanced",
+          "applies": "after_restart",
+          "rule": "IANA name recognized by host and PostgreSQL; next revision and trigger-generated audit required."
+        },
+        "time_zone_revision": {
+          "editor": "read_only",
+          "applies": "not_editable"
+        },
+        "time_zone_updated_at": {
+          "editor": "read_only",
+          "applies": "not_editable"
+        },
+        "time_zone_updated_by": {
+          "editor": "read_only",
+          "applies": "not_editable"
+        }
+      }
+    },
+    "server_rates": {
+      "group": "rates",
+      "label": "Server rates (multipliers and limits)",
+      "editor": "edit",
+      "server_reads": "poll every 5 s + POST /rates/reload",
+      "server_writes": "none",
+      "applies": "now",
+      "online": {
+        "edit": "allowed",
+        "why": "hot reload; no restart"
+      },
+      "invariants": [
+        "value within the row's own min_value..max_value (CHECK); the editor never carries its own bounds - round2 widens them in the table",
+        "optimistic check against the values the page loaded (409)",
+        "trigger trg_server_rates_revision bumps the revision; trg_server_rates_log writes server_rates_log"
+      ],
+      "reborn_py": {
+        "status": "ok",
+        "notes": [
+          "rates.py"
+        ]
+      },
+      "rows_live": 22,
+      "class": "hot_setting"
+    },
+    "server_rates_state": {
+      "group": "rates",
+      "label": "Rates revision state",
+      "editor": "read_only",
+      "applies": "not_editable",
+      "online": {
+        "edit": "n/a"
+      },
+      "rows_live": 1,
+      "class": "bookkeeping"
+    },
+    "monster_spawn_packets": {
+      "group": "research",
+      "label": "Packet captures (research)",
+      "editor": "hidden",
+      "server_reads": "never",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "research inputs, never runtime authority (B20G capture boundary)",
+      "rows_live": 0,
+      "class": "capture"
+    },
+    "npc_spawn_packets": {
+      "group": "research",
+      "label": "Packet captures (research)",
+      "editor": "hidden",
+      "server_reads": "never",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "research inputs, never runtime authority (B20G capture boundary)",
+      "rows_live": 0,
+      "class": "capture"
+    },
+    "packet_capture_sessions": {
+      "group": "research",
+      "label": "Packet captures (research)",
+      "editor": "hidden",
+      "server_reads": "never",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "research inputs, never runtime authority (B20G capture boundary)",
+      "rows_live": 0,
+      "class": "capture"
+    },
+    "packet_opcodes": {
+      "group": "research",
+      "label": "Packet captures (research)",
+      "editor": "hidden",
+      "server_reads": "never",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "research inputs, never runtime authority (B20G capture boundary)",
+      "rows_live": 14,
+      "class": "capture"
+    },
+    "packet_transactions": {
+      "group": "research",
+      "label": "Packet captures (research)",
+      "editor": "hidden",
+      "server_reads": "never",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "research inputs, never runtime authority (B20G capture boundary)",
+      "rows_live": 0,
+      "class": "capture"
+    },
+    "server_packet_templates": {
+      "group": "research",
+      "label": "Packet captures (research)",
+      "editor": "hidden",
+      "server_reads": "never",
+      "applies": "never",
+      "online": {
+        "edit": "n/a"
+      },
+      "why": "research inputs, never runtime authority (B20G capture boundary)",
+      "rows_live": 0,
+      "class": "capture"
+    },
+    "character_title_grants": {
+      "group": "titles",
+      "label": "Administrator title grants",
+      "editor": "edit",
+      "key": [
+        "character_id",
+        "title_id"
+      ],
+      "server_reads": "login_snapshot",
+      "server_writes": "administrator entitlement operations",
+      "applies": "next_login",
+      "online": {
+        "edit": "refuse",
+        "why": "title ownership is loaded at login; offline account and character locks are required"
+      },
+      "class": "character_state",
+      "why": "Separate grants; earned title evidence is never modified. Compatible runtime and schema required."
+    },
+    "npc_shop_overrides": {
+      "group": "content.npc",
+      "label": "NPC shop list overrides",
+      "evidence": [
+        "S/Infrastructure/Rates/NpcContentRuntime.cs"
+      ],
+      "editor": "edit",
+      "server_reads": "poll every 15 s + reload",
+      "server_writes": "none",
+      "applies": "now",
+      "online": {
+        "edit": "allowed",
+        "why": "players see it the next time they use the NPC"
+      },
+      "while_running": "safe to write; the server reloads it",
+      "invariants": []
+    },
+    "npc_teleport_overrides": {
+      "group": "content.npc",
+      "label": "NPC teleporter overrides",
+      "evidence": [
+        "S/Infrastructure/Rates/NpcContentRuntime.cs"
+      ],
+      "editor": "edit",
+      "server_reads": "poll every 15 s + reload",
+      "server_writes": "none",
+      "applies": "now",
+      "online": {
+        "edit": "allowed",
+        "why": "players see it the next time they use the NPC"
+      },
+      "while_running": "safe to write; the server reloads it",
+      "invariants": []
+    },
+    "item_activators": {
+      "group": "content.npc",
+      "label": "Reusable items that cast a buff",
+      "evidence": [
+        "S/Infrastructure/Rates/NpcContentRuntime.cs"
+      ],
+      "editor": "edit",
+      "server_reads": "poll every 15 s + reload",
+      "server_writes": "none",
+      "applies": "now",
+      "online": {
+        "edit": "allowed",
+        "why": "players see it the next time they use the item"
+      },
+      "while_running": "safe to write; the server reloads it",
+      "invariants": []
+    },
+
+    "event_schedule_overrides": {
+      "group": "content.npc",
+      "label": "Opening times (battlefields on the Events page; every gate on the Gates page)",
+      "evidence": [
+        "S/Infrastructure/Rates/NpcContentRuntime.cs"
+      ],
+      "editor": "edit",
+      "server_reads": "poll every 15 s + reload",
+      "server_writes": "none",
+      "applies": "now",
+      "online": {
+        "edit": "allowed",
+        "why": "players see it the next time they ask to enter"
+      },
+      "while_running": "safe to write; the server reloads it",
+      "invariants": []
+    },
+
+    "level_band_overrides": {
+      "group": "content.npc",
+      "label": "Gates: level band, opening mode and GM rule of every transporter, battlefield, instance and event",
+      "evidence": [
+        "S/Infrastructure/Rates/NpcContentRuntime.cs (finalise-server 759c1e8; finalise2 P1 adds schedule_mode + gm_bypass)",
+        "S/Application/Gates/GateCatalog.cs, GateSchedules.cs (finalise2 P1, GET /gate-content)"
+      ],
+      "editor": "edit",
+      "server_reads": "poll every 15 s + reload",
+      "server_writes": "none (created at start-up by the finalise-server build)",
+      "applies": "now",
+      "online": {
+        "edit": "allowed",
+        "why": "players meet the new band the next time they ask to enter"
+      },
+      "while_running": "safe to write; the server reloads it",
+      "invariants": ["minimum_level <= maximum_level (CHECK)", "schedule_mode IN (compiled, always, windows, closed) (CHECK)", "windows live in event_schedule_overrides (activity = the gate's window_activity)"]
+    },
+
+    "server_notices": {
+      "group": "content.npc",
+      "label": "Scheduled server notices",
+      "evidence": [
+        "S/Infrastructure/Rates/NpcContentRuntime.cs"
+      ],
+      "editor": "edit",
+      "server_reads": "poll every 15 s + reload",
+      "server_writes": "none",
+      "applies": "now",
+      "online": {
+        "edit": "allowed",
+        "why": "sent at the next scheduled minute"
+      },
+      "while_running": "safe to write; the server reloads it",
+      "invariants": []
+    },
+
+    "notice_settings": {
+      "group": "content.npc",
+      "label": "Notice settings",
+      "evidence": [
+        "S/Infrastructure/Rates/NpcContentRuntime.cs"
+      ],
+      "editor": "edit",
+      "server_reads": "poll every 15 s + reload",
+      "server_writes": "none",
+      "applies": "now",
+      "online": {
+        "edit": "allowed",
+        "why": "applies at the next notice"
+      },
+      "while_running": "safe to write; the server reloads it",
+      "invariants": []
+    },
+    "server_messages": {"group": "content.npc", "label": "Server messages (welcome line)", "evidence": ["S/Infrastructure/Rates/NpcContentRuntime.cs", "S/Game/GameSessionRegistry.Board.cs"], "editor": "edit", "server_reads": "poll every 15 s + reload", "server_writes": "none", "applies": "now", "online": {"edit": "allowed", "why": "shown at the next login"}, "while_running": "safe to write; the server reloads it", "invariants": []},
+    "seasonal_events": {"group": "content.npc", "label": "Seasonal events (on/off and dates)", "evidence": ["S/Infrastructure/Rates/NpcContentRuntime.cs", "S/Application/Seasons/SeasonalEvents.cs"], "editor": "edit", "server_reads": "poll every 15 s + reload", "server_writes": "none", "applies": "now", "online": {"edit": "allowed", "why": "envoys change at the next map entry; drops at the next kill"}, "while_running": "safe to write; the server reloads it", "invariants": []}
+  }
+}

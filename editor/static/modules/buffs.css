@@ -1,0 +1,12 @@
+.gw-buff-body{padding:1rem}.gw-buff-layout{display:grid;grid-template-columns:minmax(220px,1fr) minmax(260px,2fr);gap:1.5rem}.gw-buff-layout input[type=search],.gw-buff-layout select{display:block;width:100%;margin-bottom:.8rem}.gw-buff-layout select{min-height:260px}.gw-buff-layout input[type=number]{width:12rem;margin:.7rem}.gw-buff-effects{display:grid;grid-template-columns:1fr auto;gap:.5rem 1rem}.gw-buff-effects dt,.gw-buff-effects dd{margin:0}@media(max-width:700px){.gw-buff-layout{grid-template-columns:1fr}}
+
+.gw-buff-library{margin-top:1.5rem}.gw-buff-lib summary{cursor:pointer;font-weight:bold}.gw-buff-lib-bar{display:flex;gap:.8rem;flex-wrap:wrap;margin:.6rem 0}.gw-buff-lib-bar input[type=search]{flex:1 1 220px}
+.gw-buff-lib-list{max-height:520px;overflow:auto}.gw-buff-lib-row{display:flex;justify-content:space-between;gap:1rem;padding:.5rem 0;border-top:1px solid #1d3a4a}
+
+.gw-mod-buffs .gw-buff-cat { margin: 12px 0 4px; }
+.gw-mod-buffs .gw-buff-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; }
+.gw-mod-buffs .gw-buff-tile { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 4px 2px; background: #0f1b22; border: 1px solid #2e5468; color: inherit; cursor: pointer; min-height: 84px; }
+.gw-mod-buffs .gw-buff-tile:hover, .gw-mod-buffs .gw-buff-tile:focus { border-color: #f5c542; background: #1a2c36; }
+.gw-mod-buffs .gw-buff-tile.bad .gw-buff-tname { color: #ff8a7e; }
+.gw-mod-buffs .gw-buff-tile.can { border-color: #2e8a4e; }
+.gw-mod-buffs .gw-buff-tname { font-size: 11px; line-height: 1.2; text-align: center; overflow-wrap: anywhere; }

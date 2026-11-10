@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Choose a new password{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Choose a new password</h1>
+  <p class="lead">For the account <strong class="name">{{ username }}</strong>. The new password works in the game straight away.</p>
+
+  {% if error %}
+  <div class="alert" role="alert" id="form-error">{{ error }}</div>
+  {% endif %}
+
+  <form method="post" action="/reset" novalidate>
+    <input type="hidden" name="ts" value="{{ form.ts }}">
+    <input type="hidden" name="n" value="{{ form.n }}">
+    <input type="hidden" name="tok" value="{{ form.tok }}">
+    <input type="hidden" name="chk" value="{{ form.chk }}">
+    <input type="hidden" name="t" value="{{ t }}">
+    <input type="text" name="username" value="{{ username }}" autocomplete="username" hidden>
+
+    <div class="field{% if error %} bad{% endif %}">
+      <label for="password">New password</label>
+      <div class="pw">
+        <input id="password" name="password" type="password" required minlength="8" maxlength="32"
+               autocomplete="new-password" aria-describedby="password-help" autofocus>
+        <button type="button" class="show" data-for="password" hidden>Show</button>
+      </div>
+      <p class="help" id="password-help">8 to 32 characters, no spaces. Use a password you don't use anywhere else.</p>
+    </div>
+
+    <div class="field{% if error %} bad{% endif %}">
+      <label for="confirm">New password again</label>
+      <input id="confirm" name="confirm" type="password" required minlength="8" maxlength="32"
+             autocomplete="new-password" aria-describedby="confirm-help">
+      <p class="help" id="confirm-help" aria-live="polite"></p>
+    </div>
+
+    <button class="go" type="submit">Save the new password</button>
+  </form>
+</section>
+{% endblock %}
+{% block scripts %}<script src="/static/signup.js?v=1" defer></script>{% endblock %}

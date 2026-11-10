@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GodsWar Player Guide</title>
+<link rel="stylesheet" href="gw-guide.css">
+<style>
+:root { --ink:#1d1d1f; --muted:#5f6368; --line:#e3e3e8; --card:#fafafc; --accent:#8a5a00; --gold:#c08a1e; --code:#f2efe8; --warn:#b3261e; --bg:#ffffff; --link:#0b57d0; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.55 -apple-system,"Helvetica Neue",Helvetica,Arial,sans-serif; }
+  .page { max-width:880px; margin:0 auto; padding-block:28px 48px; padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px)); }
+  header { border-bottom:3px solid var(--gold); padding-bottom:10px; margin-bottom:20px; }
+  h1 { font-size:28px; margin:0; } h1 span { color:var(--accent); }
+  .meta { color:var(--muted); font-size:13px; margin-top:4px; }
+  h2 { font-size:17px; margin:0 0 8px; color:var(--accent); text-transform:uppercase; letter-spacing:.8px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin:0 0 16px; }
+  code { font:13px/1.4 "SF Mono",Menlo,Consolas,monospace; background:var(--code); border-radius:4px; padding:1px 6px; white-space:nowrap; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  td,th { text-align:left; padding:6px 8px; border-top:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-size:12.5px; }
+  tr:first-child td, tr:first-child th { border-top:none; }
+  td:first-child { width:36%; }
+  .btn { display:inline-block; background:var(--gold); color:#fff; text-decoration:none; padding:9px 16px; border-radius:8px; font-weight:600; }
+  a { color:var(--link); }
+  .tip { color:var(--muted); font-size:13px; }
+  .warn { color:var(--warn); font-weight:600; }
+  ul { margin:6px 0; padding-left:20px; }
+  @media (max-width:640px) {  code { white-space:normal; } td:first-child { width:46%; } }
+  
+  @media (prefers-color-scheme:dark) { :root:not([data-theme="light"]) { --ink:#eee; --muted:#a8abb0; --line:#3a3a40; --card:#232327; --accent:#e0a63a; --code:#33322e; --bg:#161618; --link:#8ab4f8; color-scheme:dark; } }
+  :root[data-theme="dark"] { --ink:#eee; --muted:#a8abb0; --line:#3a3a40; --card:#232327; --accent:#e0a63a; --code:#33322e; --bg:#161618; --link:#8ab4f8; color-scheme:dark; }
+  .step { display:flex; gap:12px; margin:10px 0; }
+  .n { flex:none; width:26px; height:26px; border-radius:50%; background:var(--gold); color:#fff; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:14px; }
+  .cols { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .cols section { margin:0; }
+  pre { background:var(--code); border-radius:6px; padding:10px 12px; overflow-x:auto; font:13px/1.4 "SF Mono",Menlo,Consolas,monospace; margin:6px 0; }
+
+</style>
+</head>
+<body><div class="page">
+
+<header>
+  <h1><span>GodsWar</span>: how to start playing</h1>
+  <div class="meta">Free private server · English · Mac and Windows · three steps</div>
+</header>
+
+<section>
+  <h2>Step 1 · Make your account</h2>
+  <p>Everything starts on the sign-up website:</p>
+  <p><a class="btn" href="https://YOUR-DOMAIN.example">https://YOUR-DOMAIN.example</a></p>
+  <table>
+    <tr><th>Username</th><td>4 to 16 lowercase letters and numbers. You type this name to log in to the game.</td></tr>
+    <tr><th>Password</th><td>8 to 32 characters, no spaces. Use one you don't use anywhere else.</td></tr>
+    <tr><th>Email</th><td>Used to look your account up if you need help. It is not verified yet.</td></tr>
+  </table>
+  <p class="tip">One account can hold every character you make. If the site says new accounts are closed, ask the admin.</p>
+</section>
+
+<div class="cols">
+<section>
+  <h2>Step 2 · Mac</h2>
+  <div class="step"><div class="n">1</div><div>Download <a href="https://YOUR-DOMAIN.example/downloads/files/GodsWar-Launcher-mac.zip">GodsWar-Launcher-mac.zip</a> (6 MB) and unzip it.</div></div>
+  <div class="step"><div class="n">2</div><div>On a Mac with an Apple chip (M1 or newer) install Rosetta once if you never have. Paste this into Terminal:
+    <pre>softwareupdate --install-rosetta --agree-to-license</pre></div></div>
+  <div class="step"><div class="n">3</div><div>Double-click <b>GodsWar Launcher</b>. macOS refuses the first time. Click <b>Done</b>, open <b>System Settings → Privacy &amp; Security</b>, scroll down and click <b>Open Anyway</b>.
+    No button? Paste this into Terminal (change the path if the launcher is somewhere else):
+    <pre>xattr -dr com.apple.quarantine ~/Downloads/"GodsWar Launcher.app"</pre></div></div>
+  <div class="step"><div class="n">4</div><div>The first start downloads the game (about 850 MB) and can take several minutes. A notification says what it is doing, and the game opens when it is ready. After that it only checks for updates.</div></div>
+  <p class="tip">Hold <b>Option</b> while the game opens to change window size or save your account.</p>
+</section>
+
+<section>
+  <h2>Step 2 · Windows</h2>
+  <div class="step"><div class="n">1</div><div>Download <a href="https://YOUR-DOMAIN.example/downloads/files/GodsWar-Launcher-windows.exe">GodsWar-Launcher-windows.exe</a> (6 MB). Put it anywhere you like.</div></div>
+  <div class="step"><div class="n">2</div><div>Double-click it. If Windows says it protected your PC, click <b>More info</b>, then <b>Run anyway</b>.</div></div>
+  <div class="step"><div class="n">3</div><div>If Windows asks about the firewall, choose <b>Allow</b>.</div></div>
+  <div class="step"><div class="n">4</div><div>The first start downloads the game (about 550 MB) into <code>%LOCALAPPDATA%\GodsWar</code>. A black window shows the progress and the game opens when it is ready. Next time it only checks for updates.</div></div>
+  <div class="step"><div class="n">5</div><div>Closes straight away or mentions <code>MSVCR80</code> or <code>d3dx9</code>? Install Microsoft's <i>Visual C++ 2005 Redistributable (x86)</i> and the <i>DirectX End-User Runtime</i>, then start it again.</div></div>
+  <p class="warn">The Windows version has not been test-played yet. If it fails, tell the admin what you saw.</p>
+</section>
+</div>
+
+<section style="margin-top:16px">
+  <h2>Step 3 · Log in and play</h2>
+  <p>Type the username and password from Step 1 on the login screen, pick a character slot and create your hero. Your skill bars and settings can be kept on the server: on Mac hold <b>Option</b> at launch, choose <b>Accounts</b> and save your account (the password goes in your Keychain).</p>
+</section>
+
+<section>
+  <h2>If something goes wrong</h2>
+  <table>
+    <tr><th>Can't log in</th><td>Check the username is lowercase and the password is exactly what you set. Make sure you made the account on the website above.</td></tr>
+    <tr><th>Forgot password or username</th><td>There is no self-service reset yet. Message the admin with your username and the email you signed up with.</td></tr>
+    <tr><th>Game closes by itself</th><td>Tell the admin roughly when it happened. On Mac the logs are in <code>~/Library/Logs/GodsWar</code>; please send them.</td></tr>
+    <tr><th>Stuck in a wall or map</th><td>Ask a GM. They can move your character from the editor.</td></tr>
+  </table>
+  <p class="tip">This is a community revival of GodsWar Online, run by a fan. It is not affiliated with IGG.</p>
+</section>
+
+</div></body></html>

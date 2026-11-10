@@ -1,0 +1,23 @@
+# GENERATED (the admin F-37): the Avatar of Pan's certificate draw. No source lists the original gifts.
+# One Pan's Gift Certificate (3899) = one draw; ten draws a day. Edit freely and rebuild.
+# weight = relative chance (the chance of a row is weight / sum of weights). quantity 1-99 (stacks never above 99).
+item_id,quantity,weight,note
+4211,1,120,Level 2 Sapphire
+4221,1,120,Level 2 Emerald
+4231,1,120,Level 2 Crystal
+4212,1,40,Level 3 Sapphire
+4222,1,40,Level 3 Emerald
+4232,1,40,Level 3 Crystal
+4174,2,100,Exp Pill
+4180,1,90,Talent Stone 1
+4181,1,40,Talent Stone 2
+4182,1,15,Talent Stone 3
+10132,5,80,Morning Dew 3
+10133,3,50,Morning Dew 4
+4523,1,40,Elixir of Talent I
+4524,1,20,Elixir of Talent II
+9020,1,40,Holy Box I
+9021,1,15,Holy Box II
+9022,1,5,Holy Box III
+4167,1,10,Talent Package I
+3934,1,15,Whelk Necklace

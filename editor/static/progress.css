@@ -1,0 +1,8 @@
+body{margin:0;background:#111820;color:#e8edf3;font:16px/1.55 system-ui,sans-serif}main{max-width:1050px;padding:32px;margin:auto}a{color:#9cd4ff}h1{margin-bottom:6px}#updated,#note{color:#afbdcb}.task{border:1px solid #344353;border-radius:10px;margin:12px 0;padding:18px}.task h2{font-size:18px;margin:0 0 8px}.task p{margin:6px 0}.badge{display:inline-block;border-radius:20px;padding:3px 12px;font-size:13px;background:#334155}.in_progress{background:#694c12;color:#ffe1a0}.done{background:#174e3c;color:#a6f1ca}.blocked{background:#702b37;color:#ffd1da}li{margin:12px 0}#error{color:#ffb6b6}
+pre{background:#080e15;border:1px solid #344353;padding:16px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:400px;overflow:auto;font-size:13px}#connection{color:#a6f1ca}
+#agents { border: 2px solid #777; border-radius: 6px; padding: 10px 14px; margin: 12px 0; }
+#agents h2, #agents h3 { margin: 4px 0; }
+#agents p { margin: 4px 0; }
+.agent-working { border-color: #3fb950 !important; }
+.agent-quiet { border-color: #d29922 !important; }
+.agent-limit, .agent-offline { border-color: #f85149 !important; }

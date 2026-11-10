@@ -1,0 +1,17 @@
+.gw-mod-npc_dialogue .npc-toolbar{display:flex;gap:10px;align-items:center;margin:14px 0;flex-wrap:wrap}
+.gw-mod-npc_dialogue .npc-toolbar input{min-width:300px;flex:1}
+.gw-mod-npc_dialogue .npc-layout{display:grid;grid-template-columns:minmax(230px,32%) minmax(0,1fr);gap:16px}
+.gw-mod-npc_dialogue .npc-list{max-height:590px;overflow:auto}
+.gw-mod-npc_dialogue .npc-row{display:block;text-align:left;width:100%;padding:10px;background:#0a2333;color:inherit;border:1px solid #315366;cursor:pointer}
+.gw-mod-npc_dialogue .npc-row.selected{border-color:#6bccfe;background:#183f54}
+.gw-mod-npc_dialogue .npc-row small{display:block;color:#a9bbc5;margin-top:5px}
+.gw-mod-npc_dialogue .npc-form{padding:16px;min-width:0}
+.gw-mod-npc_dialogue label{display:block;margin-bottom:14px}
+.gw-mod-npc_dialogue input,.gw-mod-npc_dialogue textarea{display:block;width:100%;box-sizing:border-box;margin-top:6px}
+.gw-mod-npc_dialogue textarea{min-height:220px;resize:vertical}
+.gw-mod-npc_dialogue pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}
+.gw-mod-npc_dialogue .npc-diff{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.gw-mod-npc_dialogue .npc-review details{margin:12px 0;padding:12px;border:1px solid #315366}
+.gw-mod-npc_dialogue .npc-history{padding:10px 0;border-bottom:1px solid #315366}
+.gw-mod-npc_dialogue .npc-history button{margin-left:12px}
+@media(max-width:850px){.gw-mod-npc_dialogue .npc-layout,.gw-mod-npc_dialogue .npc-diff{grid-template-columns:1fr}.gw-mod-npc_dialogue .npc-list{max-height:260px}}

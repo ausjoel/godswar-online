@@ -1,0 +1,129 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: godswar-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-godswar}
+      POSTGRES_USER: ${POSTGRES_USER:-godswar}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-godswar_dev_password}
+    ports:
+      - "${GODSWAR_POSTGRES_HOST_BIND_ADDRESS:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - godswar-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  server:
+    profiles: ["legacy-raw"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        GODSWAR_SOURCE_COMMIT: ${GODSWAR_SOURCE_COMMIT:-unknown}
+    container_name: godswar-server
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      GODSWAR_RUNTIME_PROFILE: LocalDevelopment
+      # Local diagnostic switch: with LocalDevelopment this disables the
+      # structured console boundary so the raw gameplay diagnostics reach the
+      # container log verbatim instead of being folded into counters. It changes
+      # logging only; no packet or game behaviour depends on it.
+      GODSWAR_LOCAL_GAMEPLAY_LOGS: ${GODSWAR_LOCAL_GAMEPLAY_LOGS:-false}
+      GODSWAR_STORAGE_PROVIDER: postgres
+      GODSWAR_POSTGRES_CONNECTION_STRING: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-godswar};Username=${POSTGRES_USER:-godswar};Password=${POSTGRES_PASSWORD:-godswar_dev_password};Pooling=true"
+      GODSWAR_LOGIN_BIND_HOST: 0.0.0.0
+      GODSWAR_LOGIN_PORT: 5999
+      GODSWAR_GAME_BIND_HOST: 0.0.0.0
+      GODSWAR_GAME_PORT: 7000
+      GODSWAR_GAME_PUBLIC_HOST: ${GODSWAR_GAME_PUBLIC_HOST:-127.1.1.110}
+      GODSWAR_MONSTER_RUNTIME: ${GODSWAR_MONSTER_RUNTIME:-Ecs}
+      GODSWAR_PLAYER_RUNTIME: ${GODSWAR_PLAYER_RUNTIME:-Ecs}
+      GODSWAR_AUTH_ALLOW_LEGACY_RAW_AUTHENTICATION: "true"
+      GODSWAR_DEVELOPER_COMMANDS_ENABLED: ${GODSWAR_DEVELOPER_COMMANDS_ENABLED:-false}
+      GODSWAR_DEVELOPER_ACCOUNT_IDS: ${GODSWAR_DEVELOPER_ACCOUNT_IDS:-}
+      GODSWAR_ZODIAC_ENERGY_ENABLED: ${GODSWAR_ZODIAC_ENERGY_ENABLED:-true}
+      GODSWAR_ZODIAC_ENERGY_TICK_SECONDS: ${GODSWAR_ZODIAC_ENERGY_TICK_SECONDS:-300}
+      GODSWAR_ZODIAC_BOOSTED_DAILY_SECONDS: ${GODSWAR_ZODIAC_BOOSTED_DAILY_SECONDS:-10800}
+      GODSWAR_ZODIAC_EMULATOR_BOOSTED_ENERGY_PER_TICK_X100: ${GODSWAR_ZODIAC_EMULATOR_BOOSTED_ENERGY_PER_TICK_X100:-2000}
+      GODSWAR_ZODIAC_EMULATOR_NORMAL_ENERGY_PER_TICK_X100: ${GODSWAR_ZODIAC_EMULATOR_NORMAL_ENERGY_PER_TICK_X100:-1000}
+      GODSWAR_ZODIAC_COMPENSATION_ONLINE_THRESHOLD_SECONDS: ${GODSWAR_ZODIAC_COMPENSATION_ONLINE_THRESHOLD_SECONDS:-3600}
+      GODSWAR_ZODIAC_COMPENSATION_SECONDS: ${GODSWAR_ZODIAC_COMPENSATION_SECONDS:-3600}
+      GODSWAR_ZODIAC_PERSISTENCE_INTERVAL_SECONDS: ${GODSWAR_ZODIAC_PERSISTENCE_INTERVAL_SECONDS:-30}
+      GODSWAR_MANAGEMENT_ENABLED: "true"
+      GODSWAR_MANAGEMENT_BIND_HOST: "127.0.0.1"
+      GODSWAR_MANAGEMENT_PORT: "9090"
+      # Test switch for the Zeus gift event. Off keeps the client's own rule that
+      # praying stones are only taken Monday to Friday.
+      GODSWAR_ZEUS_STONE_ANY_DAY: ${GODSWAR_ZEUS_STONE_ANY_DAY:-false}
+    ports:
+      - "127.1.1.110:${GODSWAR_LOGIN_HOST_PORT:-5999}:5999"
+      - "127.1.1.110:${GODSWAR_GAME_HOST_PORT:-7000}:7000"
+    healthcheck:
+      test: ["CMD", "/app/secure-healthcheck.sh"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+    stop_grace_period: 45s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    labels:
+      com.reborn.network.profile: legacy-raw-local-development
+      com.reborn.source.commit: ${GODSWAR_SOURCE_COMMIT:-unknown}
+    restart: unless-stopped
+
+  b20h-prometheus:
+    profiles: ["b20h-observation"]
+    image: prom/prometheus:v3.13.1@sha256:3c42b892cf723fa54d2f262c37a0e1f80aa8c8ddb1da7b9b0df9455a35a7f893
+    container_name: godswar-b20h-prometheus
+    depends_on:
+      server:
+        condition: service_healthy
+    network_mode: "service:server"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--storage.tsdb.wal-compression"
+      - "--web.listen-address=127.0.0.1:9091"
+      - "--query.max-concurrency=4"
+      - "--query.max-samples=1000000"
+    volumes:
+      - ./tools/docker/b20h/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./tools/docker/b20h/rules.yml:/etc/prometheus/b20h-rules.yml:ro
+      - ${GODSWAR_B20H_EVIDENCE_DIRECTORY:-./artifacts/b20h-observation/unstarted}/prometheus:/prometheus
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:9091/-/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 20s
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    labels:
+      com.reborn.observation.profile: b20h-alpha
+      com.reborn.source.commit: ${GODSWAR_SOURCE_COMMIT:-unknown}
+    restart: unless-stopped
+
+volumes:
+  godswar-postgres-data:

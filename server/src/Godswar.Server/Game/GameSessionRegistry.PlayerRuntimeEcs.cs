@@ -1,0 +1,216 @@
+using System.Runtime.CompilerServices;
+using Godswar.Server.Application.Characters;
+using Godswar.Server.Application.Progression;
+using Godswar.Server.Application.Zodiac;
+using Godswar.Server.Networking;
+using Godswar.Server.State;
+using Godswar.Server.World.Components.Players;
+using Godswar.Server.World.Systems.Combat;
+using Godswar.Server.World.Systems.Players;
+
+namespace Godswar.Server.Game;
+
+internal sealed partial class GameSessionRegistry
+{
+    private readonly PlayerRuntimeMode _playerRuntimeMode =
+        PlayerRuntimeMode.Ecs;
+    private readonly ConditionalWeakTable<
+        ClientSession,
+        PlayerRuntimeEcsAdapters> _playerRuntimeEcs = new();
+    private readonly ProcessPetHealingCooldownStore
+        _petHealingCooldowns = new();
+
+    public GameSessionRegistry(
+        IGameStore? store,
+        ZodiacEnergyOptions? zodiacEnergyOptions,
+        MonsterRuntimeMode monsterRuntimeMode,
+        PlayerRuntimeMode playerRuntimeMode,
+        ICharacterCheckpointCoordinator? checkpointCoordinator = null,
+        IProgressionIntervalSettlementCommandExecutor?
+            progressionIntervalSettlementCommands = null,
+        IZodiacLevelStore? zodiacLevelStore = null,
+        IExperienceBoostStateReader? experienceBoosts = null,
+        bool requiresDurablePlayerPersistence = false,
+        WorldInstanceRuntimeOptions? worldInstanceOptions = null,
+        GameplayRuntimeCatalogs? gameplayCatalogs = null,
+        GameplayItemContent? itemContent = null,
+        TrainingDummyPolicy? trainingDummies = null,
+        ICharacterRuntimeProjectionReader?
+            characterRuntimeProjections = null,
+        GuildAltarSettlementStore? guildAltarSettlements = null)
+        : this(
+            store,
+            zodiacEnergyOptions,
+            monsterRuntimeMode,
+            checkpointCoordinator,
+            progressionIntervalSettlementCommands,
+            zodiacLevelStore,
+            experienceBoosts,
+            requiresDurablePlayerPersistence,
+            worldInstanceOptions,
+            gameplayCatalogs,
+            itemContent,
+            trainingDummies,
+            characterRuntimeProjections,
+            guildAltarSettlements)
+    {
+        if (!Enum.IsDefined(playerRuntimeMode))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(playerRuntimeMode),
+                playerRuntimeMode,
+                "Unsupported player runtime mode.");
+        }
+
+        _playerRuntimeMode = playerRuntimeMode;
+    }
+
+    internal PlayerRuntimeMode PlayerRuntimeMode =>
+        _playerRuntimeMode;
+
+    internal PlayerOnlineDurationEcsSnapshot
+        GetPlayerOnlineDurationEcsDiagnostics(ClientSession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        return _playerRuntimeEcs.TryGetValue(
+            session,
+            out var adapters)
+            ? adapters.OnlineDuration.Snapshot()
+            : default;
+    }
+
+    internal PlayerRecoveryEcsDecision?
+        GetPlayerRecoveryEcsDiagnostics(ClientSession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        return _playerRuntimeEcs.TryGetValue(
+            session,
+            out var adapters)
+            ? adapters.Recovery.Snapshot()
+            : null;
+    }
+
+    internal PlayerMonsterDamageEcsDecision?
+        GetPlayerVitalsDamageEcsDiagnostics(ClientSession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        return _playerRuntimeEcs.TryGetValue(
+            session,
+            out var adapters)
+            ? adapters.IncomingDamage.Snapshot()
+            : null;
+    }
+
+    internal PlayerStatusEcsDecision?
+        GetPlayerStatusEcsDiagnostics(ClientSession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        return _playerRuntimeEcs.TryGetValue(
+            session,
+            out var adapters)
+            ? adapters.Status.Snapshot()
+            : null;
+    }
+
+    private PlayerRuntimeEcsAdapters GetPlayerRuntimeEcs(
+        ClientSession session) =>
+        _playerRuntimeEcs.GetValue(
+            session,
+            _ => new PlayerRuntimeEcsAdapters(
+                _petHealingCooldowns));
+
+    private void RemovePlayerRuntimeEcs(ClientSession session) =>
+        _playerRuntimeEcs.Remove(session);
+
+    private void ResetPlayerRecoveryEcs(ClientSession session)
+    {
+        if (_playerRuntimeEcs.TryGetValue(
+                session,
+                out var adapters))
+        {
+            adapters.Recovery.Reset();
+        }
+    }
+
+    private void ResetPlayerVitalsDamageEcs(
+        ClientSession session)
+    {
+        if (_playerRuntimeEcs.TryGetValue(
+                session,
+                out var adapters))
+        {
+            adapters.IncomingDamage.Reset();
+        }
+    }
+
+    private PlayerStatusEcsDecision EvaluatePlayerStatusEcsLocked(
+        ClientSession session,
+        PlayerStatusState state,
+        GameSessionContext context,
+        DateTimeOffset observedAt)
+    {
+        if (!ReferenceEquals(context.Session, session))
+        {
+            throw new ArgumentException(
+                "The status context belongs to a different session.",
+                nameof(context));
+        }
+
+        var decision = GetPlayerRuntimeEcs(session).Status.Evaluate(
+            context.Character,
+            context.ObjectId,
+            state.ExperienceBoosts,
+            state.RuntimeStatuses.Values,
+            observedAt);
+        state.RuntimeStatuses.Clear();
+        foreach (var status in decision.ActiveRuntimeStatuses)
+        {
+            state.RuntimeStatuses.Add(status.Kind, status);
+        }
+        RefreshSkillCastControlSnapshot(state);
+
+        return decision;
+    }
+
+    private void ObserveCommittedOnlineDurationEcs(
+        ClientSession session,
+        int accountId,
+        int characterId,
+        PlayerOnlineDurationTarget target,
+        DateTimeOffset onlineFrom,
+        DateTimeOffset onlineUntil)
+    {
+        if (_playerRuntimeMode != PlayerRuntimeMode.Ecs)
+        {
+            return;
+        }
+
+        GetPlayerRuntimeEcs(session).OnlineDuration.ObserveCommitted(
+            accountId,
+            characterId,
+            target,
+            onlineFrom,
+            onlineUntil);
+    }
+
+    private sealed class PlayerRuntimeEcsAdapters
+    {
+        public PlayerRuntimeEcsAdapters(
+            ProcessPetHealingCooldownStore petHealingCooldowns)
+        {
+            IncomingDamage = new PlayerVitalsDamageEcsAdapter(
+                petHealingCooldowns);
+        }
+
+        public PlayerCombatEcsAdapter Combat { get; } = new();
+
+        public PlayerVitalsDamageEcsAdapter IncomingDamage { get; }
+
+        public PlayerRecoveryEcsAdapter Recovery { get; } = new();
+
+        public PlayerStatusEcsAdapter Status { get; } = new();
+
+        public PlayerOnlineDurationEcsDiagnostics OnlineDuration { get; } =
+            new();
+    }
+}

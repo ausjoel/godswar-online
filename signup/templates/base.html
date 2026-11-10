@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="robots" content="noindex">
+{% if no_referrer %}<meta name="referrer" content="same-origin">
+{% endif %}
+<title>{% block title %}Create your account{% endblock %} · {{ server_name }}</title>
+<link rel="icon" type="image/png" href="/static/favicon.png">
+<link rel="stylesheet" href="/static/style.css?v=3">
+</head>
+<body>
+<div class="sky" aria-hidden="true"></div>
+<main class="wrap">
+  <header class="brand">
+    <img class="logo" src="/static/logo.png" width="512" height="268" alt="GodsWar">
+    <p class="tagline">{{ server_name }} · free account</p>
+  </header>
+  {% block content %}{% endblock %}
+  <footer class="foot">
+    <p><a href="/">Sign up</a> · <a href="/static/player-guide.html">How to play</a> · <a href="/rankings">Rankings</a>{% if mail_enabled %} · <a href="/forgot">Forgot password</a> · <a href="/forgot-username">Forgot username</a>{% endif %}</p>
+    <p>A fan-run revival server. Not connected with IGG.</p>
+  </footer>
+</main>
+{% block scripts %}{% endblock %}
+</body>
+</html>

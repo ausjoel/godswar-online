@@ -1,0 +1,149 @@
+using Godswar.Server.Application.Characters;
+using Godswar.Server.Packets;
+using Godswar.Server.State;
+
+namespace Godswar.Server.Game;
+
+internal sealed partial class GameClientHandler
+{
+    private async Task PublishPetOwnerMergeStartedAsync(
+        PetBootstrapSnapshot pet,
+        CancellationToken cancellationToken)
+    {
+        if (_character is null)
+        {
+            return;
+        }
+
+        _registry.SetPetOwnerMergePresentation(
+            _session,
+            active: true,
+            pet.Aptitude,
+            pet.CompletedRebirths);
+
+        await _session.SendAsync(
+            PacketBuilder.PetEnergy(
+                pet.CurrentEnergy,
+                pet.MaximumEnergy),
+            cancellationToken,
+            "PetOwnerMergeEnergyStart");
+        await _session.SendAsync(
+            BuildLocalPlayerStatusUpdate(),
+            cancellationToken,
+            "PetOwnerMergeStatusRefresh");
+        // The stock server sends the rebuilt owner/status state first and
+        // 10275 last. 10275 is what moves the native pet controls into their
+        // merged state; a later 10166 rebuild can restore the summon control.
+        await _session.SendAsync(
+            PacketBuilder.PetOwnerMergeStarted(
+                LocalPlayerObjectId,
+                pet.Aptitude,
+                pet.CompletedRebirths),
+            cancellationToken,
+            "PetOwnerMergeStarted");
+
+        await BroadcastPetOwnerMergeStatusAsync(
+            "PetOwnerMergeStartedStatusWorld",
+            cancellationToken);
+        await _registry.BroadcastToMapAsync(
+            _character.CurrentMap,
+            PacketBuilder.PetOwnerMergeStarted(
+                CurrentPlayerObjectId,
+                pet.Aptitude,
+                pet.CompletedRebirths),
+            cancellationToken,
+            _session,
+            "PetOwnerMergeStartedWorld");
+        StartPetOwnerMergeEnergyDrain();
+    }
+
+    private async Task PublishPetOwnerMergeEndedAsync(
+        PetBootstrapSnapshot pet,
+        bool restoreCompanion,
+        CancellationToken cancellationToken)
+    {
+        if (_character is null)
+        {
+            return;
+        }
+
+        _registry.SetPetOwnerMergePresentation(_session, active: false);
+        _registry.UpdateSummonedPet(
+            _session,
+            pet.IsCarried && pet.IsSummoned
+                ? pet
+                : null);
+
+        await _session.SendAsync(
+            PacketBuilder.PetEnergy(
+                pet.CurrentEnergy,
+                pet.MaximumEnergy),
+            cancellationToken,
+            "PetOwnerMergeEnergyEnd");
+        await _session.SendAsync(
+            PacketBuilder.PetOwnerMergeEnded(LocalPlayerObjectId),
+            cancellationToken,
+            "PetOwnerMergeEnded");
+        await _session.SendAsync(
+            BuildLocalPlayerStatusUpdate(),
+            cancellationToken,
+            "PetOwnerMergeEndedStatusRefresh");
+
+        await _registry.BroadcastToMapAsync(
+            _character.CurrentMap,
+            PacketBuilder.PetOwnerMergeEnded(
+                CurrentPlayerObjectId),
+            cancellationToken,
+            _session,
+            "PetOwnerMergeEndedWorld");
+        await BroadcastPetOwnerMergeStatusAsync(
+            "PetOwnerMergeEndedStatusWorld",
+            cancellationToken);
+
+        if (restoreCompanion && pet.IsCarried && pet.IsSummoned)
+        {
+            var petId = checked((uint)pet.PetId);
+            await _session.SendAsync(
+                PacketBuilder.PetOperationResult(
+                    petId,
+                    PetOperationResultCode.CallOutSucceeded),
+                cancellationToken,
+                "PetOwnerMergeCompanionRestore");
+            await _session.SendAsync(
+                PacketBuilder.PetWorldPresence(
+                    petId,
+                    LocalPlayerObjectId),
+                cancellationToken,
+                "PetOwnerMergeWorldPresenceRestore");
+        }
+
+        StartPetOwnerMergeEnergyRecharge();
+    }
+
+    private async Task BroadcastPetOwnerMergeStatusAsync(
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        if (_character is null)
+        {
+            return;
+        }
+
+        var status = await _registry.GetStatusSnapshotAsync(
+            _session,
+            DateTimeOffset.UtcNow,
+            cancellationToken);
+        var objectId = CurrentPlayerObjectId;
+        await BroadcastCampAwareAsync( // ITEMS-HERMES
+            _character.CurrentMap,
+            viewerCamp => PacketBuilder.RemotePlayerStatusUpdate(
+                _character,
+                objectId,
+                status.Aggregate,
+                _registry.TrainingDummySpawnPkMode(
+                    _character),
+                viewerCamp),
+            cancellationToken,
+            reason);
+    }
+}

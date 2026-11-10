@@ -1,0 +1,211 @@
+namespace Godswar.Server.Game;
+
+internal sealed partial class MonsterMapRuntime
+{
+    public MonsterRuntimeTick Advance(
+        DateTimeOffset now,
+        IReadOnlyList<MonsterCombatTarget>? combatTargets = null)
+    {
+        lock (_gate)
+        {
+            var targetsByCharacterId = (combatTargets ?? [])
+                .GroupBy(target => target.CharacterId)
+                .ToDictionary(group => group.Key, group => group.Last());
+            var updates = new List<MonsterRuntimeUpdate>(_pendingUpdates.Count + 4);
+            var deathsAnnouncedThisTick = new HashSet<uint>();
+            var returnStartsAnnouncedThisTick = new HashSet<uint>();
+            while (_pendingUpdates.TryDequeue(out var pendingUpdate))
+            {
+                updates.Add(pendingUpdate);
+                if (pendingUpdate.Kind == MonsterRuntimeUpdateKind.Died)
+                {
+                    deathsAnnouncedThisTick.Add(pendingUpdate.Monster.ObjectId);
+                }
+                else if (pendingUpdate.Kind == MonsterRuntimeUpdateKind.Started &&
+                         pendingUpdate.Monster.CombatPhase == MonsterCombatPhase.Returning)
+                {
+                    returnStartsAnnouncedThisTick.Add(pendingUpdate.Monster.ObjectId);
+                }
+            }
+
+            var positionsChanged = false;
+            List<MonsterRuntimeState>? respawnedStates = null;
+            foreach (var monster in _monsters.Values.OrderBy(monster => monster.Definition.ObjectId))
+            {
+                if (!monster.IsAlive)
+                {
+                    ValidateRespawnState(monster);
+                    if (deathsAnnouncedThisTick.Contains(monster.Definition.ObjectId))
+                    {
+                        continue;
+                    }
+
+                    if (monster.IsSpawned &&
+                        monster.DespawnAt is { } despawnAt &&
+                        now >= despawnAt)
+                    {
+                        monster.IsSpawned = false;
+                        updates.Add(new MonsterRuntimeUpdate(
+                            MonsterRuntimeUpdateKind.Despawned,
+                            CreateSnapshot(monster)));
+                        continue;
+                    }
+
+                    if (!monster.IsSpawned &&
+                        monster.RespawnAt is { } respawnAt &&
+                        now >= respawnAt)
+                    {
+                        var respawned = CreateRespawnedState(monster, now);
+                        (respawnedStates ??= []).Add(respawned);
+                        positionsChanged = true;
+                        updates.Add(new MonsterRuntimeUpdate(
+                            MonsterRuntimeUpdateKind.Respawned,
+                            CreateSnapshot(respawned)));
+                    }
+
+                    continue;
+                }
+
+                // ROUND3: passive actors still process lifecycle above, never combat or patrol.
+                if (_behaviorPolicy.Passive) continue;
+
+                if (monster.StunnedUntil is { } stunnedUntil)
+                {
+                    if (now < stunnedUntil)
+                    {
+                        continue;
+                    }
+
+                    monster.StunnedUntil = null;
+                    monster.NextAttackAt = now + TickInterval;
+                    monster.NextMovementStepAt =
+                        now + ElementalMovementInterval(monster);
+                }
+
+                if (monster.AggroCharacterId is { } aggroCharacterId)
+                {
+                    if (targetsByCharacterId.TryGetValue(aggroCharacterId, out var combatTarget) &&
+                        combatTarget.IsAlive &&
+                        DistanceSquared(monster.HomeX, monster.HomeZ, combatTarget.X, combatTarget.Z) <=
+                        (_behaviorPolicy.CombatLeashRadius + monster.AttackRange) *
+                        (_behaviorPolicy.CombatLeashRadius + monster.AttackRange))
+                    {
+                        positionsChanged |= AdvanceCombat(monster, combatTarget, now, updates);
+                        continue;
+                    }
+
+                    AddReturnStart(monster, now, updates);
+                    continue;
+                }
+
+                if (monster.CombatPhase == MonsterCombatPhase.Returning)
+                {
+                    if (!returnStartsAnnouncedThisTick.Contains(monster.Definition.ObjectId))
+                    {
+                        positionsChanged |= AdvanceReturnHome(monster, now, updates);
+                    }
+
+                    continue;
+                }
+
+                if (monster.CombatPhase == MonsterCombatPhase.AwaitingRetirement)
+                {
+                    if (ShouldRetireReturnedMonster(monster))
+                    {
+                        updates.Add(RetireReturnedMonster(monster, now));
+                    }
+                    else
+                    {
+                        SettleReturnedMonster(monster);
+                    }
+
+                    continue;
+                }
+
+                if (MonsterAggroPolicy.IsAggressive(
+                        monster.Definition.Tier,
+                        monster.Definition.TemplateKey) &&
+                    MonsterAggroPolicy.TrySelectNearestAggressiveTarget(
+                        targetsByCharacterId,
+                        monster.CurrentX,
+                        monster.CurrentZ,
+                        out var nearbyTarget,
+                        _behaviorPolicy.AggroDetectionRadius,
+                        monster.Definition.FactionCamp)) // PORTALS
+                {
+                    var stoppedPatrol = SetAggroTarget(
+                        monster,
+                        nearbyTarget.CharacterId,
+                        now);
+                    if (stoppedPatrol)
+                    {
+                        updates.Add(new MonsterRuntimeUpdate(
+                            MonsterRuntimeUpdateKind.Arrived,
+                            CreateSnapshot(monster),
+                            MovementEndField: 1));
+                    }
+                    positionsChanged |= AdvanceCombat(
+                        monster,
+                        nearbyTarget,
+                        now,
+                        updates);
+                    continue;
+                }
+
+                // ROUND3: stationary towers may attack, but never enter idle patrol.
+                if (_behaviorPolicy.Stationary) continue;
+
+                if (monster.IsMoving)
+                {
+                    while (monster.IsMoving && now >= monster.NextMovementStepAt)
+                    {
+                        var stepAt = monster.NextMovementStepAt;
+                        monster.CurrentX += monster.VelocityX;
+                        monster.CurrentZ += monster.VelocityZ;
+                        monster.RemainingMovementTicks--;
+                        monster.NextMovementStepAt +=
+                            ElementalMovementInterval(monster);
+                        positionsChanged = true;
+
+                        if (monster.RemainingMovementTicks != 0)
+                        {
+                            continue;
+                        }
+
+                        // Pin the final coordinates to the accepted target so float
+                        // accumulation can never drift beyond the home-radius bound.
+                        monster.CurrentX = monster.TargetX;
+                        monster.CurrentZ = monster.TargetZ;
+                        monster.IsMoving = false;
+                        monster.NextMovementAt = stepAt + NextIdleDelay(monster);
+                        updates.Add(new MonsterRuntimeUpdate(
+                            MonsterRuntimeUpdateKind.Arrived,
+                            CreateSnapshot(monster)));
+                    }
+
+                    continue;
+                }
+
+                if (now < monster.NextMovementAt)
+                {
+                    continue;
+                }
+
+                StartMovement(monster, now);
+                updates.Add(new MonsterRuntimeUpdate(
+                    MonsterRuntimeUpdateKind.Started,
+                    CreateSnapshot(monster)));
+            }
+
+            if (respawnedStates is not null)
+            {
+                foreach (var respawned in respawnedStates)
+                {
+                    _monsters[respawned.Definition.ObjectId] = respawned;
+                }
+            }
+
+            return new MonsterRuntimeTick(positionsChanged, updates);
+        }
+    }
+}

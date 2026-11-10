@@ -1,0 +1,6 @@
+.gw-mod-all_titles .gw-all-title-actions{display:flex;gap:12px;margin:12px 0}
+.gw-mod-all_titles .gw-all-title-list{max-width:1000px}
+.gw-mod-all_titles .gw-all-title{padding:8px 12px;margin:4px 0;border:1px solid #405664;background:#101f29}
+.gw-mod-all_titles .gw-all-title.owned{opacity:.75}
+.gw-mod-all_titles .gw-all-title.blocked{border-color:#987640}
+.gw-mod-all_titles .gw-all-title p{margin:4px 0 0}

@@ -1,0 +1,21 @@
+--- a/static/shell.js	2026-10-28 15:29:48
++++ b/static/shell.js	2026-10-28 15:29:48
+@@ -123,7 +123,7 @@
+     GW.clear(side);
+     side.append(navLink("#/home", h("span", { class: "gw-sprite gw-camp-athens", style: "transform:scale(.8)" }), "Home", "what you can edit", "", "home"));
+     side.append(h("div", { class: "gw-side-h" }, "Game systems"));
+-    for (const m of r.modules) side.append(navLink("#/" + m.name, iconFor(m), m.title, m.status === "ready" ? "" : m.status, m.status === "ready" ? "" : "coming", m.name));
++    for (const m of r.modules.filter(m => m.group !== "library")) side.append(navLink("#/" + m.name, iconFor(m), m.title, m.status === "ready" ? "" : m.status, m.status === "ready" ? "" : "coming", m.name));
+     for (const [name, err] of Object.entries(r.load_errors || {})) side.append(navLink("#/" + name, GW.icon(null, { name }), name, "failed to load: " + err, "error", name));
+     side.append(h("div", { class: "gw-side-h" }, "Library"));
+     side.append(navLink("#/library", GW.icon(604), "All items, skills ...", "every entry from your client", "", "library"));
+@@ -175,7 +175,8 @@
+     markNav(r.page);
+     page.scrollTop = 0;
+     if (r.page === "home") return home(page);
+-    if (r.page === "library") return library(page, r.rest[0] || "item");
++    // the Library module (modules/library.py) replaces the built-in Library page when it is loaded
++    if (r.page === "library" && !(modsInfo.library && modsInfo.library.js)) return library(page, r.rest[0] || "item");
+     if (r.page === "kit") return kit(page);
+     const info = modsInfo[r.page];
+     if (!info) { page.append(h("div", { class: "gw-dim" }, "There is no page '" + r.page + "'. ", h("a", { href: "#/home" }, "Home"))); return; }

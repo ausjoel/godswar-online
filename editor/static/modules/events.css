@@ -1,0 +1,8 @@
+.gw-mod-events .gw-ev-card { border: 1px solid #2e4a5c; border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; }
+.gw-mod-events .gw-ev-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 4px 0; }
+.gw-mod-events .gw-ev-notice { border-bottom: 1px solid #2e4a5c; padding: 8px 0; }
+.gw-mod-events .gw-ev-text { width: 100%; box-sizing: border-box; }
+.gw-mod-events .gw-ev-num { width: 72px; }
+.gw-mod-events .gw-ev-day { display: inline-flex; align-items: center; gap: 2px; }
+.gw-mod-events .gw-ev-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.gw-mod-events .gw-ev-fixed td { padding: 2px 12px 2px 0; }

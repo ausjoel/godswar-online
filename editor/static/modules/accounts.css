@@ -1,0 +1,26 @@
+/* static/modules/accounts.css - the Accounts page only (every rule starts with .gw-mod-accounts or .gw-acc-). */
+.gw-mod-accounts .gw-acc-cols { display: grid; grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); gap: 18px; align-items: start; margin-top: 40px; }
+@media (max-width: 860px) { .gw-mod-accounts .gw-acc-cols { grid-template-columns: 1fr; } }
+.gw-mod-accounts .gw-win { position: relative; }
+.gw-mod-accounts .gw-acc-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.gw-acc-input { height: 24px; padding: 0 6px; min-width: 0; border: 1px solid #3d6b86; border-radius: 3px; background: #06131b; color: #e8f4fa; font: 12px var(--gw-font); }
+.gw-acc-input[type="search"] { flex: 1 1 160px; }
+.gw-acc-input:focus { outline: 2px solid #ffe066; outline-offset: 1px; }
+.gw-mod-accounts .gw-acc-list { display: flex; flex-direction: column; gap: 3px; max-height: 70vh; overflow-y: auto; }
+.gw-mod-accounts .gw-acc-row { display: grid; grid-template-columns: 14px 1fr; grid-template-rows: auto auto; column-gap: 6px; text-align: left; padding: 5px 8px;
+  border: 1px solid #1d3a4a; border-radius: 3px; background: #0a1820cc; color: #e8f4fa; cursor: pointer; font: 12px var(--gw-font); }
+.gw-mod-accounts .gw-acc-row:hover { border-color: #6bccfe; }
+.gw-mod-accounts .gw-acc-row.on { border-color: #ffe066; background: #1b2a12cc; }
+.gw-mod-accounts .gw-acc-row .gw-dot { grid-row: 1 / span 2; align-self: center; }
+.gw-mod-accounts .gw-acc-row .nm { font-weight: 700; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.gw-mod-accounts .gw-acc-row .sub { color: #8aa3b0; font-size: 11px; }
+.gw-mod-accounts .gw-acc-detail h3 { margin: 14px 0 6px; color: var(--gw-title, #ffe066); font: 700 12px var(--gw-font); }
+.gw-mod-accounts .gw-acc-kv th { text-align: left; padding: 2px 12px 2px 0; color: #9fc3d4; font-weight: 400; }
+.gw-mod-accounts .gw-acc-kv td { padding: 2px 0; }
+.gw-mod-accounts .gw-acc-chars { display: flex; flex-wrap: wrap; gap: 6px; }
+.gw-mod-accounts .gw-acc-chars .gw-cp-row { text-decoration: none; }
+.gw-acc-grid { display: grid; grid-template-columns: max-content minmax(0, 320px); gap: 6px 12px; align-items: center; }
+.gw-acc-line { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 6px; }
+.gw-acc-pw { display: inline-flex; gap: 4px; align-items: center; }
+.gw-acc-pw .gw-acc-input { width: 200px; }
+.gw-acc-new { min-width: min(520px, 90vw); }

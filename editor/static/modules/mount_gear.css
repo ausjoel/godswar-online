@@ -1,0 +1,4 @@
+.gw-mod-mount_gear .mg-controls{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:12px 0}
+.gw-mod-mount_gear .mg-controls label{display:flex;gap:6px;align-items:center}
+.gw-mod-mount_gear .mg-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;padding:12px;background:#0b171f;border:1px solid #36505b}
+.gw-mod-mount_gear .mg-stats label{display:flex;gap:8px;align-items:center}

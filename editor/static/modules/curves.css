@@ -1,0 +1,21 @@
+.gw-mod-curves .gw-cv-maps { display: flex; flex-wrap: wrap; gap: 4px 14px; max-height: 160px; overflow-y: auto; }
+.gw-mod-curves .gw-cv-presets { display: flex; flex-wrap: wrap; gap: 10px; }
+.gw-mod-curves .gw-cv-preset { border: 1px solid #2e5468; padding: 8px; max-width: 520px; background: #0f1b22; }
+.gw-mod-curves .gw-cv-preset.gen { border-color: #8a6d1e; }
+.gw-mod-curves .gw-cv-preset .gw-chip { margin-left: 6px; }
+.gw-mod-curves .gw-cv-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 10px 0; }
+.gw-mod-curves .gw-cv-graphs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 16px; }
+.gw-mod-curves .gw-cv-svg { width: 100%; height: auto; background: #0b141a; border: 1px solid #2e5468; touch-action: none; }
+.gw-mod-curves .gw-cv-svg .grid { stroke: #22394a; stroke-width: 1; }
+.gw-mod-curves .gw-cv-svg .axis1 { stroke: #46708a; stroke-width: 1.5; stroke-dasharray: 4 3; }
+.gw-mod-curves .gw-cv-svg .lbl { fill: #8fb3c8; font-size: 10px; }
+.gw-mod-curves .gw-cv-svg .curve { fill: none; stroke: #f5c542; stroke-width: 2.5; }
+.gw-mod-curves .gw-cv-svg .pt { fill: #f5c542; stroke: #1f1806; stroke-width: 2; cursor: grab; }
+.gw-mod-curves .gw-cv-svg .pt:focus { outline: none; stroke: #fff; }
+.gw-mod-curves .gw-cv-svg .before { fill: #6c7a83; opacity: .7; }
+.gw-mod-curves .gw-cv-svg .after { fill: #f5c542; opacity: .85; }
+.gw-mod-curves .gw-cv-svg .elite { r: 5; }
+.gw-mod-curves .gw-cv-svg .after.boss, .gw-mod-curves .gw-cv-svg .before.boss { fill: #ff6b5e; r: 6; }
+.gw-mod-curves .gw-cv-leg { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+.gw-mod-curves .gw-cv-pts { width: 100%; max-width: 420px; }
+@media (max-width: 900px) { .gw-mod-curves .gw-cv-graphs { grid-template-columns: 1fr; } }

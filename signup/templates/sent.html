@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Check your email{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Check your email</h1>
+  <p class="lead">If an account uses that address, we have sent it an email
+  {% if p.kind == 'password' %}with a link to choose a new password. The link works once, for 1 hour.{% else %}with its username.{% endif %}</p>
+  <p>If that address is not confirmed yet, you get a link to confirm it instead. Confirm it, then ask again.</p>
+  <p>It can take a few minutes. No mail? Look in the spam or junk folder, and check that you typed the address you signed up with.</p>
+  <p class="small">For your safety this page looks the same whether or not the address has an account.</p>
+  <p><a class="go link" href="/">Back to the sign-up page</a></p>
+</section>
+{% endblock %}

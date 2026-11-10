@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+  <h1>Create your account</h1>
+  <p class="lead">One account lets you play every character on the server. It takes a minute.</p>
+
+  {% if closed %}
+  <div class="notice" role="status">New accounts cannot be made right now. Please come back later.</div>
+  {% else %}
+  {% if error %}
+  <div class="alert" role="alert" id="form-error">{{ error }}</div>
+  {% endif %}
+
+  <form method="post" action="/signup" novalidate autocomplete="on">
+    <input type="hidden" name="ts" value="{{ form.ts }}">
+    <input type="hidden" name="n" value="{{ form.n }}">
+    <input type="hidden" name="tok" value="{{ form.tok }}">
+    <input type="hidden" name="chk" value="{{ form.chk }}">
+
+    <div class="field{% if field == 'username' %} bad{% endif %}">
+      <label for="username">Username</label>
+      <input id="username" name="username" type="text" value="{{ v.username }}" required
+             minlength="4" maxlength="16" pattern="[a-z0-9]{4,16}" autocapitalize="none" autocorrect="off"
+             spellcheck="false" autocomplete="username" aria-describedby="username-help"
+             {% if field == 'username' or not field %}autofocus{% endif %}>
+      <p class="help" id="username-help">4 to 16 lowercase letters (a-z) and numbers. You type this name to log in to the game.</p>
+    </div>
+
+    <div class="field{% if field == 'password' %} bad{% endif %}">
+      <label for="password">Password</label>
+      <div class="pw">
+        <input id="password" name="password" type="password" required minlength="8" maxlength="32"
+               autocomplete="new-password" aria-describedby="password-help" {% if field == 'password' %}autofocus{% endif %}>
+        <button type="button" class="show" data-for="password" hidden>Show</button>
+      </div>
+      <p class="help" id="password-help">8 to 32 characters, no spaces. Use a password you don't use anywhere else.</p>
+    </div>
+
+    <div class="field{% if field == 'password' %} bad{% endif %}">
+      <label for="confirm">Password again</label>
+      <input id="confirm" name="confirm" type="password" required minlength="8" maxlength="32"
+             autocomplete="new-password" aria-describedby="confirm-help">
+      <p class="help" id="confirm-help" aria-live="polite"></p>
+    </div>
+
+    <div class="field{% if field == 'email' %} bad{% endif %}">
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" value="{{ v.email }}" required maxlength="254"
+             autocomplete="email" inputmode="email" aria-describedby="email-help" {% if field == 'email' %}autofocus{% endif %}>
+      <p class="help" id="email-help">Kept private. It will be used to help you if you forget your password.</p>
+    </div>
+
+    <div class="hp" aria-hidden="true">
+      <label for="website">Leave this empty</label>
+      <input id="website" name="website" type="text" tabindex="-1" autocomplete="off">
+    </div>
+
+    <div class="field challenge{% if field == 'answer' %} bad{% endif %}">
+      <label for="answer">Quick check: {{ form.question }}</label>
+      <input id="answer" name="answer" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" required
+             autocomplete="off" aria-describedby="answer-help" {% if field == 'answer' %}autofocus{% endif %}>
+      <p class="help" id="answer-help">Answer with a number. This keeps robots out.</p>
+    </div>
+
+    <button class="go" type="submit">Create account</button>
+  </form>
+  {% endif %}
+</section>
+
+<section class="card slim">
+  <h2>Already have an account?</h2>
+  <p>You don't need a new one. Just log in in the game.</p>
+  {% if mail_enabled %}<p>Forgot something? <a href="/forgot">Reset your password</a> or <a href="/forgot-username">find your username</a>.</p>{% endif %}
+</section>
+{% endblock %}
+{% block scripts %}<script src="/static/signup.js?v=1" defer></script>{% endblock %}

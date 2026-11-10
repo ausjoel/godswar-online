@@ -1,0 +1,40 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  leak-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -I tools/leak-scan.py
+  server-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: { global-json-file: server/global.json }
+      - run: dotnet build server/GodswarServer.sln -c Release
+  launcher:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: launcher/go.mod }
+      - run: cd launcher && go vet ./... && go test ./...
+  setup-end-to-end:
+    # Runs the real installer on a clean machine: installs PostgreSQL 17 and .NET, builds the server,
+    # loads the database, creates the admin account, starts the systemd service and logs in with the
+    # headless client test.
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          bash -n setup.sh
+          shellcheck setup.sh tools/*.sh
+          ./setup.sh --vps --dry-run --yes --ip 203.0.113.10
+          sudo ./setup.sh --local --yes --edition reborn --no-signup --no-firewall 2>&1 | tee setup.log
+          grep -q "passed (reached the character screen)" setup.log
+          sudo ./setup.sh --local --yes --skip-build 2>&1 | tee rerun.log   # re-run must be safe
+          grep -q "already loaded; keeping it" rerun.log
+      - if: failure()
+        run: sudo journalctl -u godswar --no-pager -n 200

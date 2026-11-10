@@ -1,0 +1,115 @@
+/* static/modules/inventory.css - the Inventory page and its gear editor (every rule starts with .gw-mod-inventory;
+   the editor windows carry the class too). Look: static/ui/UI-STYLE.md s.5-6 (bag window, warehouse, forge Gems tab). */
+.gw-mod-inventory .gw-inv-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 8px 0 4px; }
+.gw-mod-inventory .gw-inv-who { font-size: 13px; }
+.gw-mod-inventory .gw-inv-keys, .gw-mod-inventory .gw-inv-limits { display: inline-flex; align-items: center; gap: 4px; color: #cfe3ec; font-size: 11px; cursor: help; }
+.gw-mod-inventory .gw-inv-keys .gw-icon { transform: scale(.6); margin: -8px -6px; }
+.gw-mod-inventory .gw-inv-limits { border: 1px dashed #46555e; border-radius: 9px; padding: 1px 8px; }
+.gw-mod-inventory .gw-inv-main { display: grid; grid-template-columns: 300px minmax(560px, 590px) minmax(260px, 1fr); gap: 16px; align-items: start; margin-top: 4px; }
+@media (max-width: 1250px) { .gw-mod-inventory .gw-inv-main { grid-template-columns: 300px minmax(0, 1fr); } .gw-mod-inventory .gw-inv-colR { grid-column: 1 / -1; } }
+.gw-mod-inventory .gw-inv-colM { display: flex; flex-direction: column; gap: 16px; }
+.gw-mod-inventory .gw-inv-win { position: relative; }
+.gw-mod-inventory .gw-inv-off { opacity: .55; }
+.gw-mod-inventory .gw-inv-off .gw-cellx { pointer-events: none; }
+.gw-mod-inventory .gw-inv-small { font-size: 11px; margin: 4px 0; }
+.gw-mod-inventory .gw-inv-tabs { display: flex; flex-wrap: wrap; gap: 3px; border-bottom: 1px solid #2e5468; margin-bottom: 8px; }
+.gw-mod-inventory .gw-inv-lockedtab { opacity: .6; }
+
+/* paperdoll (ItemBagsExUI Equip / Fashion / Mount tabs) */
+.gw-mod-inventory .gw-inv-doll { position: relative; width: 272px; height: 226px; margin: 0 auto; }
+.gw-mod-inventory .gw-inv-figure { position: absolute; left: 106px; top: 46px; transform: scale(1.6); transform-origin: top left; opacity: .5; pointer-events: none; }
+.gw-mod-inventory .gw-inv-doll[data-tab="equip"] .gw-inv-figure { left: 72px; top: 30px; }
+.gw-mod-inventory .gw-inv-abs { position: absolute; }
+.gw-mod-inventory .gw-inv-cap { position: absolute; left: 2px; right: 2px; top: 0; bottom: 0; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 8.5px; line-height: 1.05; color: #7f98a5; pointer-events: none; overflow: hidden; }
+.gw-mod-inventory .gw-inv-mountnote { position: absolute; left: 100px; top: 8px; width: 88px; text-align: center; font-size: 10px; }
+.gw-mod-inventory .gw-inv-gearnote { position: absolute; left: 0; right: 0; top: 196px; text-align: center; font-size: 10px; }
+.gw-mod-inventory .gw-inv-money { display: grid; grid-template-columns: max-content 1fr 14px; gap: 2px 10px; align-items: center; margin: 8px 18px 0; }
+.gw-mod-inventory .gw-inv-mline { display: contents; }
+.gw-mod-inventory .gw-inv-mline .gw-value { text-align: right; }
+
+/* cell grids (cells touch, like the game) */
+.gw-mod-inventory .gw-inv-grid { display: grid; gap: 0; justify-content: start; }
+.gw-mod-inventory .gw-inv-grid.six { grid-template-columns: repeat(6, 42px); }
+.gw-mod-inventory .gw-inv-grid.ten { grid-template-columns: repeat(10, 42px); }
+.gw-mod-inventory .gw-inv-bags { display: grid; grid-template-columns: repeat(2, max-content); gap: 10px 22px; }
+.gw-mod-inventory .gw-inv-bagname { color: var(--gw-title); font-size: 11px; margin-bottom: 2px; cursor: help; }
+.gw-mod-inventory .gw-cellx.drop { outline: 2px solid #ffe066; outline-offset: -2px; }
+.gw-mod-inventory .gw-cellx.dragging { opacity: .4; }
+.gw-mod-inventory .gw-cellx.sealed::before { content: "pet"; position: absolute; right: 2px; top: 1px; font-size: 9px; color: #ffb36b; z-index: 1; }
+.gw-mod-inventory .gw-cellx.noclient { outline: 1px dashed #ff6b5e; outline-offset: -3px; }
+.gw-mod-inventory .gw-inv-gr { position: absolute; left: 3px; top: 1px; font: 700 10px var(--gw-font); }
+.gw-mod-inventory .gw-inv-sk { position: absolute; left: 3px; bottom: 1px; font-size: 7px; color: #9fd8ff; letter-spacing: -1px; }
+.gw-mod-inventory .gw-inv-whfoot { margin-top: 6px; font-size: 11px; }
+.gw-mod-inventory .gw-inv-temp { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px; border: 1px dashed #46555e; border-radius: 4px; }
+.gw-mod-inventory .gw-inv-temp .gw-cellx { pointer-events: auto; cursor: help; }
+.gw-mod-inventory .gw-inv-libwin .gw-pk-tile[draggable="true"] { cursor: grab; }
+
+/* ---------- the gear editor */
+.gw-inv-modal.gw-modal.wide { max-width: min(1080px, 97vw); }
+.gw-mod-inventory.gw-inv-ed { display: grid; grid-template-columns: 300px minmax(260px, 1fr) 320px; gap: 18px; align-items: start; }
+.gw-mod-inventory .gw-inv-edbanner { grid-column: 1 / -1; }
+.gw-mod-inventory .gw-inv-col h3 { margin: 10px 0 4px; color: var(--gw-title); font: 700 12px var(--gw-font); cursor: help; }
+.gw-mod-inventory .gw-inv-col h3:first-child { margin-top: 0; }
+.gw-mod-inventory .gw-inv-sockbox { position: relative; width: 220px; height: 176px; margin: 0 auto 4px; }
+.gw-mod-inventory .gw-inv-big { position: absolute; left: 56px; top: 34px; width: 108px; height: 108px; border-radius: 6px;
+  background-image: url(/static/catalog-icons.png); background-size: 6912px auto; background-repeat: no-repeat;
+  box-shadow: 0 0 0 2px #2e5468, 0 0 18px #31b7ff55; }
+.gw-mod-inventory .gw-inv-big.none { background: #10222c; color: #6f8d9b; font: 700 22px/108px var(--gw-font); text-align: center; }
+.gw-mod-inventory .gw-inv-sock { position: absolute; width: 40px; height: 40px; border-radius: 50%; padding: 0; cursor: pointer; overflow: hidden;
+  border: 2px solid #6bccfe; background: radial-gradient(#0d2633, #050d12); color: #9fd8ff; box-shadow: 0 0 8px #31b7ff66; }
+.gw-mod-inventory .gw-inv-sock .gw-icon { position: absolute; left: 0; top: 0; transform: scale(1); }
+.gw-mod-inventory .gw-inv-sock:hover { border-color: #ffe066; }
+.gw-mod-inventory .gw-inv-sock:focus-visible { outline: 2px solid #ffe066; outline-offset: 1px; }
+.gw-mod-inventory .gw-inv-sock.closed { opacity: .35; border-style: dashed; box-shadow: none; }
+.gw-mod-inventory .gw-inv-sock.closed:hover { opacity: .8; }
+.gw-mod-inventory .gw-inv-sock.beyond { border-color: #b4483d; }
+.gw-mod-inventory .gw-inv-sock.full { border-color: #ffe066; }
+.gw-mod-inventory .gw-inv-sock.s1 { left: 34px; top: 12px; } .gw-mod-inventory .gw-inv-sock.s2 { left: 146px; top: 12px; }
+.gw-mod-inventory .gw-inv-sock.s3 { left: 34px; top: 124px; } .gw-mod-inventory .gw-inv-sock.s4 { left: 146px; top: 124px; }
+.gw-mod-inventory .gw-inv-sock.s5 { left: 0; top: 68px; } .gw-mod-inventory .gw-inv-sock.s6 { left: 180px; top: 68px; }
+.gw-mod-inventory .gw-inv-sockbox.nosock .gw-inv-sock { display: none; }
+.gw-mod-inventory .gw-inv-sockplus { font: 700 18px/36px var(--gw-font); }
+.gw-mod-inventory .gw-inv-socklv { position: absolute; right: 4px; bottom: 2px; font: 700 10px var(--gw-font); color: #fff; }
+.gw-mod-inventory .gw-inv-iname { text-align: center; font: 700 14px var(--gw-font); margin-top: 2px; }
+.gw-mod-inventory .gw-inv-gear > .gw-dim { text-align: center; }
+.gw-mod-inventory .gw-inv-stepper { display: grid; grid-template-columns: 52px 26px 1fr 26px; grid-template-rows: auto auto; gap: 2px 4px; align-items: center; margin: 8px 0; }
+.gw-mod-inventory .gw-inv-stepper .gw-btnx.small { padding: 0; width: 26px; }
+.gw-mod-inventory .gw-inv-stepval { text-align: center; font: 700 12px var(--gw-font); white-space: nowrap; overflow: hidden; }
+.gw-mod-inventory .gw-inv-stepper.over .gw-inv-stepval { outline: 1px dashed #ffb36b; }
+.gw-mod-inventory .gw-inv-rangewrap { grid-column: 2 / -1; position: relative; display: block; }
+.gw-mod-inventory .gw-inv-range { width: 100%; accent-color: #6bccfe; }
+.gw-mod-inventory .gw-inv-capmark { position: absolute; top: -2px; width: 2px; height: 20px; background: #ffb36b; margin-left: -1px; pointer-events: auto; cursor: help; }
+.gw-mod-inventory .gw-inv-line { margin: 6px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.gw-mod-inventory .gw-inv-expbar { position: relative; width: 100%; height: 14px; border: 1px solid #2e5468; border-radius: 3px; background: #050d12; overflow: hidden; }
+.gw-mod-inventory .gw-inv-expbar span { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(#ffe066, #b8962e); }
+.gw-mod-inventory .gw-inv-expbar em { position: absolute; inset: 0; font: 10px/14px var(--gw-font); font-style: normal; text-align: center; color: #fff; text-shadow: 0 0 2px #000; }
+.gw-mod-inventory .gw-inv-attrs, .gw-mod-inventory .gw-inv-socklist { display: flex; flex-direction: column; gap: 3px; }
+.gw-mod-inventory .gw-inv-attr { text-align: left; padding: 4px 8px; border: 1px solid #1d3a4a; border-radius: 3px; background: rgba(0, 207, 255, .08); color: #fff; cursor: pointer; font: 12px var(--gw-font); }
+.gw-mod-inventory .gw-inv-attr:hover { border-color: #6bccfe; }
+.gw-mod-inventory .gw-inv-attr.empty { background: transparent; border-style: dashed; }
+.gw-mod-inventory .gw-inv-warnmark { color: #ffb36b; font-weight: 700; }
+.gw-mod-inventory .gw-inv-sel { height: 24px; background: #050d12; color: #fff; border: 1px solid #2e5468; border-radius: 3px; font: 12px var(--gw-font); width: 100%; }
+.gw-mod-inventory .gw-inv-tip .gw-tooltip { max-width: none; width: 100%; }
+.gw-mod-inventory .gw-inv-warns { margin: 8px 0; display: flex; flex-direction: column; gap: 3px; }
+.gw-mod-inventory .gw-inv-warn { color: #ffe27a; font-size: 11px; }
+.gw-mod-inventory .gw-inv-warn.over { color: #ffb36b; }
+.gw-mod-inventory .gw-inv-ovr { display: flex; align-items: center; gap: 5px; margin: 6px 0; color: #ffb36b; cursor: pointer; }
+.gw-mod-inventory .gw-inv-applies { margin: 6px 0; }
+.gw-mod-inventory .gw-inv-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.gw-mod-inventory .gw-inv-quick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.gw-mod-inventory .gw-inv-dis { opacity: .45; pointer-events: none; }
+.gw-mod-inventory.gw-inv-attrdlg { min-width: min(900px, 92vw); }
+.gw-mod-inventory .gw-inv-dlgcols { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+.gw-mod-inventory .gw-inv-gridhost { height: 320px; display: flex; flex-direction: column; }
+.gw-mod-inventory .gw-inv-attrinfo { display: flex; flex-direction: column; gap: 6px; }
+.gw-mod-inventory .gw-inv-attrinfo .tt-stone { display: flex; align-items: center; gap: 6px; font-weight: 700; }
+@media (max-width: 980px) { .gw-mod-inventory.gw-inv-ed, .gw-mod-inventory .gw-inv-dlgcols { grid-template-columns: 1fr; } }
+
+/* add many items */
+.gw-inv-batch-bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 8px; }
+.gw-inv-batch-field input[type=number] { width: 64px; }
+.gw-inv-batch-list { max-height: 50vh; overflow-y: auto; }
+.gw-inv-batch-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; border-bottom: 1px solid #2e5468; }
+.gw-inv-batch-name { flex: 1; min-width: 0; }
+.gw-inv-batch-row input[type=number] { width: 64px; }
+.gw-inv-batch-review { margin: 8px 0; }

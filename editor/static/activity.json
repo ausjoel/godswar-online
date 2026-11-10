@@ -1,0 +1,35 @@
+{
+  "id": "35f73a47-f6c2-4650-af1e-9c67d014ce9a",
+  "task": "Buff removal: permanent-source protection",
+  "started_at": "2026-10-30T09:35:37.288584+00:00",
+  "state": "succeeded",
+  "events": [
+    {
+      "time": "2026-10-30T09:35:37.288840+00:00",
+      "text": "Strengthening source protection: a permanent system-owned effect must stay protected even if it shares a known class-buff ID/kind. Revalidating the focused local suite before refreshing the Linux artifact."
+    },
+    {
+      "time": "2026-10-30T09:35:49.229203+00:00",
+      "text": "PASSED Potion healing plans preserve calculated vitals and concurrent damage "
+    },
+    {
+      "time": "2026-10-30T09:35:49.229221+00:00",
+      "text": "PASSED Title grant capability identifies compatible ownership readers and bounded full catalogue support "
+    },
+    {
+      "time": "2026-10-30T09:35:49.229224+00:00",
+      "text": "PASSED Editor buff catalogue and native duration validation preserve authored gameplay "
+    },
+    {
+      "time": "2026-10-30T09:35:49.229226+00:00",
+      "text": "PASSED Runtime buff inspection and removal fence recasts sessions expiry and derived effects "
+    },
+    {
+      "time": "2026-10-30T09:35:49.229227+00:00",
+      "text": "PASSED Default-deny authoritative PvP basic attack "
+    }
+  ],
+  "pid": 60794,
+  "observed_at": "2026-10-30T09:35:49.233230+00:00",
+  "exit_code": 0
+}

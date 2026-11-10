@@ -1,0 +1,135 @@
+using Godswar.Server.Ecs;
+using Godswar.Server.World.Components.Combat;
+using Godswar.Server.World.Components.Players;
+
+namespace Godswar.Server.World.Systems.Combat;
+
+/// <summary>
+/// Applies automatic pet Healing after an accepted, nonlethal monster hit.
+/// The preceding damage event is the sole trigger, so rejected, duplicate,
+/// stale, and zero-damage intents cannot consume the cooldown.
+/// </summary>
+internal sealed class PetHealingTalentSystem : IEcsSystem
+{
+    public const int SystemOrder =
+        MonsterPlayerDamageSystem.SystemOrder + 10;
+
+    private readonly ProcessPetHealingCooldownStore _cooldowns;
+    private readonly PetHealingCooldownTransaction? _transaction;
+
+    public PetHealingTalentSystem(
+        ProcessPetHealingCooldownStore cooldowns,
+        PetHealingCooldownTransaction? transaction = null)
+    {
+        _cooldowns = cooldowns ??
+            throw new ArgumentNullException(nameof(cooldowns));
+        _transaction = transaction;
+    }
+
+    public int Order => SystemOrder;
+
+    public void Update(EcsSystemContext context)
+    {
+        foreach (var damage in context.Events
+                     .Read<MonsterPlayerDamageAppliedEvent>())
+        {
+            if (damage.Killed ||
+                damage.AfterHealth <= 0 ||
+                damage.ResolvedAt == default ||
+                !context.World.Has<
+                    ActivePetHealingTalentComponent>(damage.Player))
+            {
+                continue;
+            }
+
+            var pet = context.World.Get<
+                ActivePetHealingTalentComponent>(damage.Player);
+            ref var vitals = ref context.World.Get<
+                PlayerVitalsComponent>(damage.Player);
+            var identity = context.World.Get<
+                PlayerIdentityComponent>(damage.Player);
+
+            if (!pet.IsCarried ||
+                !pet.IsSummoned ||
+                (pet.TalentMask &
+                 PetHealingTalentPolicy.HealingTalentMaskBit) == 0 ||
+                pet.PetId <= 0 ||
+                pet.Level <= 0 ||
+                vitals.CurrentHp != damage.AfterHealth ||
+                vitals.Revision != damage.AfterVitalsRevision ||
+                !PetHealingTalentPolicy.IsAtOrBelowTriggerThreshold(
+                    vitals.CurrentHp,
+                    vitals.MaximumHp))
+            {
+                continue;
+            }
+
+            var amount = PetHealingTalentPolicy.ResolveAmount(
+                pet.Aptitude,
+                pet.Level,
+                vitals.CurrentHp,
+                vitals.MaximumHp);
+            var intent = context.World.Get<
+                MonsterPlayerDamageIntentComponent>(damage.Player);
+            var resolvedHealing = checked((int)
+                ElementalBasisPointMath.Portion(
+                    amount.Resolved,
+                    intent.HealingReceivedBasisPoints));
+            var appliedHealing = Math.Min(
+                resolvedHealing,
+                Math.Max(0, vitals.MaximumHp - vitals.CurrentHp));
+            if (appliedHealing <= 0 ||
+                !_cooldowns.TryReserve(
+                    new PetHealingCooldownKey(
+                        identity.CharacterId,
+                        pet.PetId),
+                    damage.ResolvedAt,
+                    PetHealingTalentPolicy.Cooldown,
+                    out var cooldownReadyAt,
+                    out var cooldownReservation))
+            {
+                continue;
+            }
+
+            var transactionRecorded =
+                _transaction?.TryRecord(cooldownReservation) == true;
+            try
+            {
+                var beforeHealth = vitals.CurrentHp;
+                var beforeRevision = vitals.Revision;
+                vitals.CurrentHp = checked(
+                    vitals.CurrentHp + appliedHealing);
+                vitals.Revision = checked(vitals.Revision + 1);
+                context.Events.Publish(
+                    new PetHealingAppliedEvent(
+                        damage.Player,
+                        damage.AttackEventId,
+                        identity.CharacterId,
+                        identity.ObjectId,
+                        pet.PetId,
+                        PetHealingTalentPolicy.Version,
+                        resolvedHealing,
+                        appliedHealing,
+                        beforeHealth,
+                        vitals.CurrentHp,
+                        beforeRevision,
+                        vitals.Revision,
+                        damage.ResolvedAt,
+                        cooldownReadyAt,
+                        cooldownReservation));
+            }
+            catch
+            {
+                if (transactionRecorded)
+                {
+                    _transaction!.RollBack(_cooldowns);
+                }
+                else
+                {
+                    _cooldowns.RollBack(cooldownReservation);
+                }
+                throw;
+            }
+        }
+    }
+}

@@ -1,0 +1,76 @@
+# tests/test_guild.py --build round2 --reuse jgcm, 2026-10-28 06:49-06:59 UTC, db godswar_ed_guild, ports 60599/60600/60601, editor 58815
+ok   editor answers - database godswar_ed_guild
+ok   not the live database
+ok   server build is round2 - capabilities {'available': True, 'port': 60601, 'error': None, 'version': 1}
+     server build: round2 (kick offered)
+ok   guild overview - 4 guilds, 0 issues, 17 building types
+ok   reuse GtJgcmL
+ok   clean start: disband GtJgcmL's old guild #8 - {"change": {"engine": "rows", "id": "rw-20261028-064925-265726", "time": "2026-10-28T06:49:25", "database": "godswar_ed_guild", "character": "guild GtJgcmGuildX", "cid": null, "lock_cids": [12, 13], "
+ok   reuse GtJgcmM
+ok   reuse GtJgcmX
+ok   create guild GtJgcmGuild, leader GtJgcmL - guilds +1; guild_members +1; character_base ~1 (consortia,consortia_job,guild_duty)
+ok   the page shows GtJgcmL online - ["GtJgcmL"]
+ok   guild edit while a member is online is refused (423) - guild GtJgcmGuild: silver 777777: GtJgcmL is online. Each online member's guild window, rank tag and altar bonus are held by the game session, so a database edit would not reach them. The game server has no live guild ed
+ok   round2: the refusal offers Kick for the online member - [{"cid": 12, "name": "GtJgcmL", "reasons": ["a game session owns the character (checkpoint owner)", "the account is at the login / character screen (login_status=1)"]}]
+ok   round2: Kick disconnects GtJgcmL through the game server - {"ok": true, "result": "GtJgcmL was disconnected and is offline now"}
+ok   round2: the headless client was disconnected by the kick
+ok   round2: after the kick the same edit saves (guild Silver 777,777) - guilds ~1 (silver,updated_at)
+ok   the client receives its guild at login (10138): GtJgcmGuild, Silver 777777 - {"name": "GtJgcmGuild", "level": 1, "gold": 0, "proclamation": "", "silver": 777777, "bijou": 0, "member_limit": 100, "buildings": {}}
+ok   the client's member list (10143) shows GtJgcmL as Guild Leader (6) - [{"name": "GtJgcmL", "online": true, "duty": 6, "level": 1, "profession": 0, "gold": 0, "silver": 0}]
+ok   the character panel duty byte (10166) is 6 - {"duty": 6, "contribution": 0}
+ok   edit name, level 7, limit 250, Silver / Gold / gems, proclamation, refuse applications - guilds ~1 (bijou,gold,level,member_limit,name,proclamation,refuse_applications,silver...)
+ok   add GtJgcmM as Elite (3) - guild_members +1; character_base ~1 (consortia,consortia_job,guild_duty)
+ok   add GtJgcmX as Trainee (1) - guild_members +1; character_base ~1 (consortia,consortia_job,guild_duty)
+ok   GtJgcmM: Director (4), contributions Silver 5,555 / Gold 66, contribution points 900,000 - guild_members ~1 (contribution_gold,contribution_silver,duty); character_base ~1 (consortia_contribute,consortia_job,guild_duty)
+ok   building type 1 -> level 5 - guild_buildings +1
+ok   building type 13 -> level 12 - guild_buildings +1
+ok   building type 10 -> level 3 - guild_buildings +1
+ok   remove building type 10 (Apollo) - guild_buildings -1
+ok   GtJgcmM offers 600,000 points on Hephaestus (13) - guild_altar_worship +1
+ok   guild Double EXP +100% for 16 h to every member - character_experience_modifiers +2 ~1 (activated_at,expires_at,source)
+ok   hand the leadership to GtJgcmM (GtJgcmL -> Vice Leader) - guilds ~1 (lord_character_id,updated_at); guild_members ~2 (duty); character_base ~2 (consortia_job,guild_duty)
+ok   the page reads it all back - []
+ok   altar maths: 600,000 points on Hephaestus L12 pay 90.0% of 540 = 486 physical attack
+ok   10138: name GtJgcmGuildX, level 7, Silver 123456789, Gold 98765, gems 4321, limit 250 - {"name": "GtJgcmGuildX", "level": 7, "gold": 98765, "proclamation": "Welcome to the test guild", "silver": 123456789, "bijou": 4321, "member_limit": 250, "buildings": {"1": 5, "13": 12}}
+ok   10138: proclamation 'Welcome to the test guild'
+ok   10138: buildings {1: 5, 13: 12} (Footstone 5, Hephaestus 12, Apollo removed) - {"1": 5, "13": 12}
+ok   10143: GtJgcmM leader (6), GtJgcmL Vice Leader (5), GtJgcmX Trainee (1) - [{"name": "GtJgcmM", "online": true, "duty": 6, "level": 1, "profession": 0, "gold": 66, "silver": 5555}, {"name": "GtJgcmL", "online": false, "duty": 5, "level": 1, "profession": 0, "gold": 0, "silver": 0}, {"name": "GtJgcmX", "online": false, "duty": 1, "level": 1, "profession": 0, "gold": 0, "silver": 0}]
+ok   10143: GtJgcmM contributed Silver 5,555 / Gold 66
+ok   10166: the panel shows duty 6 and contribution 900,000 - {"duty": 6, "contribution": 900000}
+ok   10167: the [Guild] Double EXP status 1007 is on - [1007]
+ok   read-only field guilds.lord_character_id refused (403) - guilds.lord_character_id is not edited here: use 'Make leader', which also moves the duties
+ok   stale value refused (409) - guilds "id" = 9 changed since you opened it (expected silver=42)
+ok   stale building level refused (409) - Hephaestus is level 12 now, the page showed 3
+ok   removing the leader refused (400) - GtJgcmM leads the guild: make another member the leader first, or disband the guild
+ok   God Altar above its maximum level 8 refused (400) - God Altar level must be at most 8 (got 9)
+ok   duty 6 outside 'Make leader' refused (400) - the leader's duty changes only with 'Make leader' (it also updates the guild's leader)
+ok   a second guild with the same name (any case) refused - a guild called gtjgcmguildx exists already (names are unique, ignoring case)
+ok   a leader who is already in a guild refused - GtJgcmX is already in a guild (#9): remove them there first
+ok   Undo: leadership hand-over - rows identical to the pre-write snapshot (revision counters moved forward)
+ok   Undo: guild EXP boost - rows identical to the pre-write snapshot (revision counters moved forward)
+ok   Undo: altar offering - rows identical to the pre-write snapshot (revision counters moved forward)
+ok   Undo: Apollo removal - rows identical to the pre-write snapshot (revision counters moved forward)
+ok   Undo: Apollo build - rows identical to the pre-write snapshot (revision counters moved forward)
+ok   Undo: Hephaestus 12 - rows identical to the pre-write snapshot (revision counters moved forward)
+ok   Undo: Footstone 5 - rows identical to the pre-write snapshot (revision counters moved forward)
+ok   Undo: member edit - rows identical to the pre-write snapshot (revision counters moved forward)
+ok   Undo: add Trainee - rows identical to the pre-write snapshot (revision counters moved forward)
+ok   after the Undos: leader GtJgcmL again, 2 members, no buildings, no offerings, no boost - []
+ok   the server loads the undone state: GtJgcmL duty 6, GtJgcmM Elite (3) with no contributions, no buildings - [{"name": "GtJgcmL", "online": true, "duty": 6, "level": 1, "profession": 0, "gold": 0, "silver": 0}, {"name": "GtJgcmM", "online": false, "duty": 3, "level": 1, "profession": 0, "gold": 0, "silver": 0}] {"name": "GtJgcmGuildX", "level": 7, "gold": 98765, "proclamation": "Welcome to the test guild", "silver": 123456789, "bijou": 4321, "member_limit": 250, "buildings": {}}
+ok   10167: no [Guild] Double EXP after its Undo - []
+ok   remove GtJgcmM (membership + guild columns, as leaving does) - guild_members -1; character_base ~1 (consortia,consortia_job,guild_duty)
+ok   repair of an in-step character answers 'already in step' (400) - GtJgcmM is already in step
+ok   Undo: remove member - rows identical to the pre-write snapshot (revision counters moved forward)
+ok   disband GtJgcmGuildX - guilds -1; guild_members -2; character_base ~2 (consortia,consortia_job,guild_duty)
+ok   the guild is gone
+ok   after the disband the client gets no guild and the panel duty is 0 - [null, {"duty": 0, "contribution": 0}]
+ok   Undo: disband (the guild row and its identity id come back) - rows identical to the pre-write snapshot (revision counters moved forward)
+ok   after the Undo the server loads the guild again: GtJgcmGuildX with GtJgcmL and GtJgcmM - [{"name": "GtJgcmL", "online": false, "duty": 6, "level": 1, "profession": 0, "gold": 0, "silver": 0}, {"name": "GtJgcmM", "online": true, "duty": 3, "level": 1, "profession": 0, "gold": 0, "silver": 0}]
+ok   Undo: add member - rows identical to the pre-write snapshot (revision counters moved forward)
+ok   Undo: guild edit - rows identical to the pre-write snapshot (revision counters moved forward)
+ok   faction areas: 19 world-boss maps, 2 realms
+ok   Athens controls map 3: +50% EXP for 6 hours - faction_area_experience_control +1
+ok   the control row is active (camp 1, 5000 basis points)
+ok   Undo: faction control - rows identical to the pre-write snapshot (revision counters moved forward)
+ok   faction-area changes apply at the next reward (read per use): chip 'now'
+ALL OK

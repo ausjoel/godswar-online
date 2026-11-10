@@ -1,0 +1,552 @@
+using Godswar.Server.State;
+using Npgsql;
+
+namespace Godswar.Server.ProtocolChecks;
+
+internal static partial class PostgresPetLevelUpgradeIntegrationChecks
+{
+    private static async Task<PetLevelFixture> CreateFixtureAsync(
+        PostgresGameStore store,
+        string connectionString,
+        string token,
+        string username)
+    {
+        var account = await store.LoginOrCreateAccountAsync(
+            username,
+            string.Empty);
+        var foreignUsername = $"{username}_foreign";
+        GameAccount? foreignAccount = null;
+        int? ownerCharacterId = null;
+        int? otherCharacterId = null;
+        try
+        {
+            foreignAccount = await store.LoginOrCreateAccountAsync(
+                foreignUsername,
+                string.Empty);
+            var owner = await store.CreateCharacterAsync(
+                account.Id,
+                NewCharacter($"PetLevel{token}"));
+            ownerCharacterId = owner.Id;
+            var other = await store.CreateCharacterAsync(
+                foreignAccount.Id,
+                NewCharacter($"PetOther{token}"));
+            otherCharacterId = other.Id;
+
+            await using var connection =
+                new NpgsqlConnection(connectionString);
+            await connection.OpenAsync();
+            await using var transaction =
+                await connection.BeginTransactionAsync();
+            var successPetId = await InsertPetAsync(
+                connection,
+                transaction,
+                owner.Id,
+                $"Success{token}",
+                level: 1,
+                experience: 2_000,
+                activityState: "owned",
+                revision: 7);
+            var insufficientPetId = await InsertPetAsync(
+                connection,
+                transaction,
+                owner.Id,
+                $"LowExp{token}",
+                level: 2,
+                experience: 4_499,
+                activityState: "owned",
+                revision: 11);
+            var maximumPetId = await InsertPetAsync(
+                connection,
+                transaction,
+                owner.Id,
+                $"Maximum{token}",
+                level: 120,
+                experience: 10_000,
+                activityState: "owned",
+                revision: 5);
+            var unavailablePetId = await InsertPetAsync(
+                connection,
+                transaction,
+                owner.Id,
+                $"Sealed{token}",
+                level: 10,
+                experience: 1_000_000,
+                activityState: "sealed",
+                revision: 9);
+            var racePetId = await InsertPetAsync(
+                connection,
+                transaction,
+                owner.Id,
+                $"Race{token}",
+                level: 1,
+                experience: 1_500,
+                activityState: "owned",
+                revision: 21);
+            var malformedPetId = await InsertPetAsync(
+                connection,
+                transaction,
+                owner.Id,
+                $"Malformed{token}",
+                level: 1,
+                experience: 1_500,
+                activityState: "owned",
+                revision: 31);
+            await MakePetStatsMalformedAsync(
+                connection,
+                transaction,
+                malformedPetId);
+            var foreignPetId = await InsertPetAsync(
+                connection,
+                transaction,
+                otherCharacterId.Value,
+                $"Foreign{token}",
+                level: 1,
+                experience: 1_500,
+                activityState: "owned",
+                revision: 3);
+            await transaction.CommitAsync();
+
+            return new PetLevelFixture(
+                account.Id,
+                foreignAccount.Id,
+                owner.Id,
+                otherCharacterId.Value,
+                successPetId,
+                insufficientPetId,
+                maximumPetId,
+                unavailablePetId,
+                racePetId,
+                malformedPetId,
+                foreignPetId);
+        }
+        catch
+        {
+            await DeletePartialFixtureAsync(
+                connectionString,
+                account.Id,
+                username,
+                foreignAccount?.Id,
+                foreignUsername,
+                ownerCharacterId,
+                otherCharacterId);
+            throw;
+        }
+    }
+
+    private static GameCharacter NewCharacter(string name) => new()
+    {
+        Name = name,
+        Camp = GameDefaults.SpartaCamp,
+        Profession = 0,
+        Level = 80
+    };
+
+    private static async Task<long> InsertPetAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        int characterId,
+        string name,
+        short level,
+        long experience,
+        string activityState,
+        long revision)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+            INSERT INTO public.character_pets (
+                user_id,
+                species_id,
+                name,
+                sex,
+                level,
+                experience,
+                aptitude,
+                current_energy,
+                maximum_energy,
+                amity,
+                satiety,
+                remaining_lifetime,
+                activity_state,
+                revision,
+                initial_savvy_baseline_total,
+                initial_savvy_policy_version,
+                rarity_added_savvy_baseline_total,
+                rarity_added_savvy_policy_version,
+                initial_savvy_source_version,
+                birth_rank,
+                hatch_rank_roll,
+                hatch_rank_outcome_order,
+                hatch_rank_content_revision
+            )
+            VALUES (
+                @characterId,
+                1,
+                @name,
+                0,
+                @level,
+                @experience,
+                1,
+                100,
+                100,
+                100,
+                100,
+                600,
+                @activityState,
+                @revision,
+                303,
+                @initialSavvyPolicy,
+                303,
+                @initialSavvyPolicy,
+                @initialSavvySource,
+                (SELECT step.rank
+                 FROM public.pet_content_publication publication
+                 JOIN public.pet_content_hatch_rank_steps step
+                   ON step.revision = publication.revision
+                  AND step.aptitude = 1
+                  AND step.outcome_order = 0
+                 WHERE publication.family = 'pets'),
+                0,
+                0,
+                (SELECT revision
+                 FROM public.pet_content_publication
+                 WHERE family = 'pets')
+            )
+            RETURNING id;
+            """,
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("characterId", characterId);
+        command.Parameters.AddWithValue("name", name);
+        command.Parameters.AddWithValue("level", level);
+        command.Parameters.AddWithValue("experience", experience);
+        command.Parameters.AddWithValue(
+            "activityState",
+            activityState);
+        command.Parameters.AddWithValue("revision", revision);
+        command.Parameters.AddWithValue(
+            "initialSavvyPolicy",
+            PetInitialSavvyPolicy.Version);
+        command.Parameters.AddWithValue(
+            "initialSavvySource",
+            PetSavvyRuntimeSemantics.SourceVersion);
+        var petId =
+            (long)(await command.ExecuteScalarAsync()
+                   ?? throw new InvalidOperationException(
+                       "Pet level fixture insert returned no ID."));
+        await InsertPetStatsAsync(
+            connection,
+            transaction,
+            petId,
+            level);
+        return petId;
+    }
+
+    private static async Task<PetLevelState> ReadPetLevelAsync(
+        string connectionString,
+        long petId)
+    {
+        await using var connection =
+            new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT level, experience, activity_state, revision
+            FROM public.character_pets
+            WHERE id = @petId;
+            """,
+            connection);
+        command.Parameters.AddWithValue("petId", petId);
+        await using var reader = await command.ExecuteReaderAsync();
+        if (!await reader.ReadAsync())
+        {
+            throw new InvalidOperationException(
+                $"Pet level fixture {petId} disappeared.");
+        }
+
+        return new PetLevelState(
+            reader.GetInt16(0),
+            reader.GetInt64(1),
+            reader.GetString(2),
+            reader.GetInt64(3));
+    }
+
+    private static async Task DeleteFixtureAsync(
+        string connectionString,
+        PetLevelFixture fixture,
+        string username)
+    {
+        await using var connection =
+            new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var transaction =
+            await connection.BeginTransactionAsync();
+
+        await AssertFixtureOwnershipAsync(
+            connection,
+            transaction,
+            fixture,
+            username);
+        await using (var deleteAudit = new NpgsqlCommand(
+            """
+            DELETE FROM public.pet_operation_audit
+            WHERE user_id_snapshot IN (
+                @ownerCharacterId,
+                @otherCharacterId
+            );
+            """,
+            connection,
+            transaction))
+        {
+            deleteAudit.Parameters.AddWithValue(
+                "ownerCharacterId",
+                fixture.OwnerCharacterId);
+            deleteAudit.Parameters.AddWithValue(
+                "otherCharacterId",
+                fixture.OtherCharacterId);
+            await deleteAudit.ExecuteNonQueryAsync();
+        }
+
+        await using (var deleteAccount = new NpgsqlCommand(
+            """
+            DELETE FROM public.accounts
+            WHERE (id = @accountId AND username = @username)
+               OR (
+                   id = @foreignAccountId
+                   AND username = @foreignUsername
+               );
+            """,
+            connection,
+            transaction))
+        {
+            deleteAccount.Parameters.AddWithValue(
+                "accountId",
+                fixture.AccountId);
+            deleteAccount.Parameters.AddWithValue(
+                "username",
+                username);
+            deleteAccount.Parameters.AddWithValue(
+                "foreignAccountId",
+                fixture.ForeignAccountId);
+            deleteAccount.Parameters.AddWithValue(
+                "foreignUsername",
+                $"{username}_foreign");
+            Check.Equal(
+                2,
+                await deleteAccount.ExecuteNonQueryAsync(),
+                "pet level fixture account cleanup is exact");
+        }
+
+        await transaction.CommitAsync();
+    }
+
+    private static async Task DeletePartialFixtureAsync(
+        string connectionString,
+        int accountId,
+        string username,
+        int? foreignAccountId,
+        string foreignUsername,
+        int? ownerCharacterId,
+        int? otherCharacterId)
+    {
+        await using var connection =
+            new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var transaction =
+            await connection.BeginTransactionAsync();
+
+        await using (var verify = new NpgsqlCommand(
+            """
+            SELECT id
+            FROM public.accounts
+            WHERE id = @accountId
+              AND username = @username
+            FOR UPDATE;
+            """,
+            connection,
+            transaction))
+        {
+            verify.Parameters.AddWithValue("accountId", accountId);
+            verify.Parameters.AddWithValue("username", username);
+            Check.Equal(
+                accountId,
+                (int)(await verify.ExecuteScalarAsync()
+                      ?? throw new InvalidOperationException(
+                          "Partial pet-level fixture account disappeared.")),
+                "partial pet-level fixture account remains exact");
+        }
+
+        if (foreignAccountId.HasValue)
+        {
+            await using var verifyForeign = new NpgsqlCommand(
+                """
+                SELECT id
+                FROM public.accounts
+                WHERE id = @accountId
+                  AND username = @username
+                FOR UPDATE;
+                """,
+                connection,
+                transaction);
+            verifyForeign.Parameters.AddWithValue(
+                "accountId",
+                foreignAccountId.Value);
+            verifyForeign.Parameters.AddWithValue(
+                "username",
+                foreignUsername);
+            Check.Equal(
+                foreignAccountId.Value,
+                (int)(await verifyForeign.ExecuteScalarAsync()
+                      ?? throw new InvalidOperationException(
+                          "Partial foreign fixture account disappeared.")),
+                "partial foreign fixture account remains exact");
+        }
+
+        var knownCharacterIds = new[]
+            {
+                ownerCharacterId,
+                otherCharacterId
+            }
+            .Where(static id => id.HasValue)
+            .Select(static id => id!.Value)
+            .ToArray();
+        if (knownCharacterIds.Length > 0)
+        {
+            await using var verifyCharacters = new NpgsqlCommand(
+                """
+                SELECT count(*)
+                FROM public.character_base
+                WHERE (
+                        account_id = @accountId
+                        AND id = @ownerCharacterId
+                      )
+                   OR (
+                        account_id = @foreignAccountId
+                        AND id = @otherCharacterId
+                      );
+                """,
+                connection,
+                transaction);
+            verifyCharacters.Parameters.AddWithValue(
+                "accountId",
+                accountId);
+            verifyCharacters.Parameters.AddWithValue(
+                "ownerCharacterId",
+                ownerCharacterId ?? -1);
+            verifyCharacters.Parameters.AddWithValue(
+                "foreignAccountId",
+                foreignAccountId ?? -1);
+            verifyCharacters.Parameters.AddWithValue(
+                "otherCharacterId",
+                otherCharacterId ?? -1);
+            Check.Equal(
+                (long)knownCharacterIds.Length,
+                (long)(await verifyCharacters.ExecuteScalarAsync()
+                       ?? throw new InvalidOperationException(
+                           "Partial character ownership returned null.")),
+                "partial fixture owns every created character");
+        }
+
+        await using var delete = new NpgsqlCommand(
+            """
+            DELETE FROM public.accounts
+            WHERE (id = @accountId AND username = @username)
+               OR (
+                   id = @foreignAccountId
+                   AND username = @foreignUsername
+               );
+            """,
+            connection,
+            transaction);
+        delete.Parameters.AddWithValue("accountId", accountId);
+        delete.Parameters.AddWithValue("username", username);
+        delete.Parameters.AddWithValue(
+            "foreignAccountId",
+            foreignAccountId ?? -1);
+        delete.Parameters.AddWithValue(
+            "foreignUsername",
+            foreignUsername);
+        Check.Equal(
+            foreignAccountId.HasValue ? 2 : 1,
+            await delete.ExecuteNonQueryAsync(),
+            "partial pet-level fixture cleanup is exact");
+        await transaction.CommitAsync();
+    }
+
+    private static async Task AssertFixtureOwnershipAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        PetLevelFixture fixture,
+        string username)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT character.id
+            FROM public.accounts account
+            INNER JOIN public.character_base character
+                ON character.account_id = account.id
+            WHERE (
+                    account.id = @accountId
+                    AND account.username = @username
+                    AND character.id = @ownerCharacterId
+                  )
+               OR (
+                    account.id = @foreignAccountId
+                    AND account.username = @foreignUsername
+                    AND character.id = @otherCharacterId
+                  )
+            FOR UPDATE OF account, character;
+            """,
+            connection,
+            transaction);
+        command.Parameters.AddWithValue(
+            "accountId",
+            fixture.AccountId);
+        command.Parameters.AddWithValue("username", username);
+        command.Parameters.AddWithValue(
+            "foreignAccountId",
+            fixture.ForeignAccountId);
+        command.Parameters.AddWithValue(
+            "foreignUsername",
+            $"{username}_foreign");
+        command.Parameters.AddWithValue(
+            "ownerCharacterId",
+            fixture.OwnerCharacterId);
+        command.Parameters.AddWithValue(
+            "otherCharacterId",
+            fixture.OtherCharacterId);
+        var characterIds = new List<int>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            characterIds.Add(reader.GetInt32(0));
+        }
+
+        Check.Equal(
+            2,
+            characterIds.Count,
+            "pet level fixture owns exactly two characters");
+        Check.True(
+            characterIds.Contains(fixture.OwnerCharacterId) &&
+            characterIds.Contains(fixture.OtherCharacterId),
+            "pet level fixture ownership matches both exact characters");
+    }
+
+    private sealed record PetLevelFixture(
+        int AccountId,
+        int ForeignAccountId,
+        int OwnerCharacterId,
+        int OtherCharacterId,
+        long SuccessPetId,
+        long InsufficientPetId,
+        long MaximumPetId,
+        long UnavailablePetId,
+        long RacePetId,
+        long MalformedPetId,
+        long ForeignPetId);
+
+    private sealed record PetLevelState(
+        short Level,
+        long Experience,
+        string ActivityState,
+        long Revision);
+}

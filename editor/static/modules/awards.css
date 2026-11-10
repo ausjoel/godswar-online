@@ -1,0 +1,15 @@
+.gw-mod-awards .gw-aw-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 380px); gap: 16px; align-items: start; }
+.gw-mod-awards .gw-aw-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid #2e5468; cursor: grab; }
+.gw-mod-awards .gw-aw-name { flex: 1; min-width: 160px; }
+.gw-mod-awards .gw-aw-num { width: 64px; }
+.gw-mod-awards .gw-aw-status { margin-top: 8px; }
+.gw-mod-awards .gw-aw-err { white-space: pre-wrap; margin: 0; }
+.gw-mod-awards .gw-aw-preset { border: 1px solid #2e5468; padding: 8px; margin-bottom: 8px; background: #0f1b22; }
+.gw-mod-awards .gw-aw-preset.gen { border-color: #8a6d1e; }
+.gw-mod-awards .gw-aw-preset.live { border-color: #2e8a4e; }
+.gw-mod-awards .gw-aw-preset .gw-chip { margin-left: 6px; }
+.gw-mod-awards .gw-aw-mini { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+.gw-mod-awards .gw-npc-dragging { opacity: .45; }
+.gw-mod-awards .gw-npc-drop-before { box-shadow: inset 0 2px 0 #f5c542; }
+.gw-mod-awards .gw-npc-grip { color: #6f8a99; user-select: none; }
+@media (max-width: 800px) { .gw-mod-awards .gw-aw-body { grid-template-columns: 1fr; } }

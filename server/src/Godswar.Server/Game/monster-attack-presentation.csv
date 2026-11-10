@@ -1,0 +1,109 @@
+# Monster attack presentation (server-skills, 2026-11-03). One row per monster template key.
+# skill_id: the skill id sent in the first 10046 of each hit instead of 2000 (visual only: same damage,
+#   no cooldown or mana). Blank = 2000. Must be a client Magic.ini id 2001-2999.
+# reach: ranged = default rule (9 m for attack_type 2/3 or 'Archer'); melee = 3 m or the collision range.
+# Lines starting with # are comments. Do not put commas in name/maps/note. Rebuild the server after editing.
+template_key,skill_id,reach,name,maps,note
+A_boss_kingofscorpion_001,,melee,[BOSS]Darkmist,Mycenae,creature/melee body: type 3 on a melee body: melee reach; skill stays 2000
+A_elite_Ahrimanm_001,2014,ranged,[Elite]Soul Harvester Maxxi,Mycenae,creature/melee body: light_002 bolt
+A_elite_dryad_005,2011,ranged,Acadian Warrior,Nemea,creature/melee body: 2008 original: Non AOE Spell
+A_elite_GuardCaptainm_001,2036,ranged,[Elite]Theban Sharpshooter,Mycenae,archer: Ranged(Bow) arrow flies
+A_elite_mage_005,2214,ranged,[E]Wind Rider Pangta,Nemea,caster: 2008 original: Non AOE Spell
+A_elite_mage_008,2213,ranged,[E]Envoy Debby,Peloponnese,caster: 2008 original: Non AOE Spell
+A_elite_mage_009,2211,ranged,[E]Corrupt Wizard Lusa,Peloponnese,caster: 2008 original: Non AOE Spell
+A_elite_mage_010,2212,ranged,[E]Dark Spirit Yones / [E]Soul Holder Sameng,Argolis / Megara,caster: 2008 original: Non AOE Spell
+A_elite_magehajs_001,2214,ranged,[Elite]Wilemet the Controller,Athens,caster: light_002 bolt on clip 03 (cast pose on most mage models)
+A_elite_sbdrobber_001,2014,ranged,[Elite]Addiya the Destroyer,Sparta,creature/melee body: light_002 bolt
+A_elite_skeleton_014,2114,ranged,[E]Bloody Lord Wikido,Argolis,creature/melee body: 2008 original: Non AOE Spell
+A_elitecopy_centaur_005,2036,ranged,Centauri Heathen,Cursed Zone,archer: Ranged(Bow) arrow flies
+A_elitecopy_dryad_009,,melee,Dryad Sibyl,Cursed Zone,creature/melee body: type 3 on a melee body: melee reach; skill stays 2000
+A_elitecopy_harpies_002,,melee,Enlil's Understrapper,Cursed Zone,creature/melee body: type 3 on a melee body: melee reach; skill stays 2000
+A_elitecopy_persiawarrior_006,,melee,Ninever Warrior,Cursed Zone,creature/melee body: type 3 on a melee body: melee reach; skill stays 2000
+A_normal_BowSoulm_001,2036,ranged,Soul Longbow,Mycenae,archer: Ranged(Bow) arrow flies
+A_normal_dryad_005,2011,ranged,Forest Wizard,Nemea,caster: 2008 original: Non AOE Spell
+A_normal_dryad_008,2114,ranged,Forest Magician,Isthmus,creature/melee body: 2008 original: Non AOE Spell
+A_normal_element_003,2014,ranged,Elf's Servant,Isthmus,creature/melee body: 2008 original: Non AOE Spell
+A_normal_GuardCaptaindi_001,2014,ranged,Scorpion Lord's Servant,Thebes,creature/melee body: light_002 bolt
+A_normal_GuardCaptainm_001,2014,ranged,Theban Dragon Fighter,Mycenae,creature/melee body: light_002 bolt
+A_normal_harpies_005,2014,ranged,Harpies' Underling,Isthmus,creature/melee body: 2008 original: Non AOE Spell
+A_normal_mage_005,2014,ranged,Wizard,Nemea,caster: 2008 original: Non AOE Spell
+A_normal_mage_008,2013,ranged,Evil Wizard,Peloponnese,caster: 2008 original: Non AOE Spell
+A_normal_mage_009,2011,ranged,Dark Wizard,Parnitha / Peloponnese,caster: 2008 original: Non AOE Spell
+A_normal_mage_010,2012,ranged,Death Servant / Death Mage,Argolis / Megara,caster: 2008 original: Non AOE Spell
+A_normal_mage_016,2013,ranged,Witch,Parnitha,caster: 2008 original: Non AOE Spell
+A_normal_skeleton_013,2114,ranged,Huge Skeleton,Peloponnese,creature/melee body: 2008 original: Non AOE Spell
+A_normal_skeleton_014,2114,ranged,Skeleton Mage,Argolis,caster: 2008 original: Non AOE Spell
+A_normal_Skeletonchopperdi_001,2014,ranged,Undead Raider,Thebes,creature/melee body: light_002 bolt
+A_normal_Skeletongavelockdi_001,2014,ranged,Undead Halberdier,Thebes,creature/melee body: light_002 bolt
+A_normal_Skeletonmagedi_001,2014,ranged,Undead Dark Mage,Thebes,caster: light_002 bolt
+A_normal_Sorceressm_001,2214,ranged,Darkmist's Servant,Mycenae,caster: light_002 bolt on clip 03 (cast pose on most mage models)
+A_normal_Sorceressmagedi_001,2214,ranged,Mycenaean Female Mage,Thebes,caster: light_002 bolt on clip 03 (cast pose on most mage models)
+A_normal_Wraithm_001,2014,ranged,Dark Mage,Mycenae,caster: light_002 bolt
+A_normal_Wraithm_002,2011,ranged,Evil Fire Mage,Mycenae,caster: fire_001 fireball
+A_normal_Wraithm_003,2014,ranged,Evil Nether Mage,Mycenae,caster: light_002 bolt
+B_boss_dragon_001,2016,ranged,Red Dragon Puluo,Isthmus,creature/melee body: 2008 original: Non AOE+Stun
+B_bossB_octopus_001,2214,ranged,Naga Siren Eirsigel,Parnitha Port,caster: light_002 bolt on clip 03 (cast pose on most mage models)
+B_bossB_spriggan_001,2014,ranged,Evil Treant Falio,Nemea Forest,creature/melee body: light_002 bolt
+B_elite_dragon_001,2011,ranged,[E]Young RedDragon,Isthmus,creature/melee body: 2008 original: Non AOE Spell
+B_elite_dragon_007,2011,ranged,[E]Young RedDragon,Isthmus,creature/melee body: 2008 original: Non AOE Spell
+B_elite_mage_011,2012,ranged,[E]Fire Lord Neo,Isthmus,caster: 2008 original: Non AOE Spell
+B_eliteB_froggy_003,2011,ranged,[Elite]Rage Flamefrog,Parnitha Port,creature/melee body: fire_001 fireball
+B_eliteB_harpies_005,2014,ranged,[Elite]Abyss Demon,Nemea Forest,creature/melee body: light_002 bolt
+B_eliteB_mage_015,2214,ranged,[Elite]Vile Necromancer,Parnitha Port,caster: light_002 bolt on clip 03 (cast pose on most mage models)
+B_eliteB_wasp_008,2014,ranged,[Elite]Ginormous Wasp Lord,Nemea Forest,creature/melee body: light_002 bolt
+B_elitecopy_cyclops_005,,melee,Cyclops Bouncer,Cursed Zone,creature/melee body: type 3 on a melee body: melee reach; skill stays 2000
+B_elitecopy_godsguard_002,,melee,Marduk Guard,Cursed Zone,creature/melee body: type 3 on a melee body: melee reach; skill stays 2000
+B_normal_harpies_002,2011,ranged,Harpy,Derveni,creature/melee body: 2008 original: Non AOE Spell
+B_normal_mage_011,2012,ranged,Jaba Astrologist,Isthmus,caster: 2008 original: Non AOE Spell
+B_normalB_centaur_008,2036,ranged,Centaur,Parnitha Port,archer: Ranged(Bow) arrow flies
+B_normalB_elves_001,2014,ranged,Tree Demon,Nemea Forest,creature/melee body: light_002 bolt
+B_normalB_fish_001,2014,ranged,Mudskipper,Parnitha Port,creature/melee body: light_002 bolt
+B_normalB_froggy_004,2014,ranged,Venomous Icy Frog,Parnitha Port,creature/melee body: light_002 bolt
+B_normalB_lion_005,2014,ranged,Forest Lion,Nemea Forest,creature/melee body: light_002 bolt
+B_normalB_mage_016,2214,ranged,Persian Clergy / Frontline Priest,Parnitha Port / Nemea Forest,caster: light_002 bolt on clip 03 (cast pose on most mage models)
+B_normalB_mage_017,2214,ranged,Dark Witch,Parnitha Port,caster: light_002 bolt on clip 03 (cast pose on most mage models)
+B_normalB_satyr_006,2014,ranged,Jungle Minotaur,Nemea Forest,creature/melee body: light_002 bolt
+B_normalB_snake_012,2014,ranged,Flaming Boa,Parnitha Port,creature/melee body: light_002 bolt
+B_normalB_spider_007,2014,ranged,Totem Spider,Nemea Forest,creature/melee body: light_002 bolt
+B_normalB_wasp_006,2014,ranged,Bloodfly Wasp,Nemea Forest,creature/melee body: light_002 bolt
+B_normalxs_centaur_008,2036,ranged,Wanted Centaur,Parnitha Port,archer: Ranged(Bow) arrow flies
+B_normalxs_satyr_006,2014,ranged,Wanted Jungle Minotaur,Nemea Forest,creature/melee body: light_002 bolt
+C_boss_dragon_002,2016,ranged,Ice Dragon,Elasson,creature/melee body: 2008 original: Non AOE+Stun
+C_boss_dragon_013,2014,ranged,Bahamut,Olympus,creature/melee body: light_002 bolt
+C_boss_dragon_014,2016,ranged,Little Demate,Larissa,creature/melee body: 2008 original: Non AOE+Stun
+C_boss_stymphalianbird_001,2014,ranged,Stymphalian Bird,Delphi Forest,creature/melee body: light_002 bolt
+C_elite_dragon_004,2014,ranged,[E]Black Dragon,Olympus,creature/melee body: 2008 original: Non AOE Spell
+C_elite_element_004,2013,ranged,[E]Snow Elf Younna,Elasson,creature/melee body: 2008 original: Non AOE Spell
+C_elite_fairy_001,2013,ranged,[E]Alert Amiley,Elasson,caster: 2008 original: Non AOE Spell
+C_elite_fairy_003,2013,ranged,[E]Fairy Ally / [E]Elegant Dorothy,Larissa / Olympus,caster: 2008 original: Non AOE Spell
+C_elite_mage_001,2211,ranged,Athenian Mage,Parnitha / Marathon,caster: 2008 original: Non AOE Spell
+C_elite_mage_002,2211,ranged,[E]Spartan Wizard / [E]Spartan Priest,Nemea / Olympia / Peloponnese / Argolis,caster: 2008 original: Non AOE Spell
+C_elite_mage_003,2212,ranged,Athenian Mage / [E]Athenian Wizard,Athens' Suburb / Parnitha / Marathon / Megara / Cursed Zone,caster: 2008 original: Non AOE Spell
+C_elite_mage_004,2212,ranged,[E]Wizard Aldo / [E]Wizard Kanu,Nemea / Peloponnese,caster: 2008 original: Non AOE Spell
+C_elite_mage_005,2214,ranged,[E]Magic Awei / [E]Wizard Catherine,Larissa / Delphi Forest,caster: 2008 original: Non AOE Spell
+C_elite_mage_009,2211,ranged,[E]Magic Holder Keris,Olympia,caster: 2008 original: Non AOE Spell
+C_elite_mage_015,2012,ranged,[E]Magic Miya,Elasson,caster: 2008 original: Non AOE Spell
+C_elite_mage_017,2014,ranged,[E]Knowledgeble Kelate,Olympia,caster: 2008 original: Non AOE Spell
+C_elite_satyr_006,2211,ranged,[E]Wizard Stephen,Delphi Forest,caster: 2008 original: Non AOE Spell
+C_elite_satyr_007,2212,ranged,[E]Swift Thomas,Elasson,creature/melee body: 2008 original: Non AOE Spell
+C_elite_satyr_009,2211,ranged,[E]Cautious Qinou,Olympus,creature/melee body: 2008 original: Non AOE Spell
+C_elite_skeleton_014,2114,ranged,[E]Corrupt Kalipuso,Olympia,creature/melee body: 2008 original: Non AOE Spell
+C_elite_wolf_006,2011,ranged,[E]Fire Claw Aderi / [E]Wolf Kaliposo,Olympia / Delphi Forest,creature/melee body: 2008 original: Non AOE Spell
+c_eliteA_AthensTower_001,2015,ranged,Turret,Athens' Suburb,static/object: the admin 2026-11-03 chose Wonderland's tower projectile 2015
+C_normal_centaur_006,2011,ranged,Magic Centaur Shaman,Olympia,caster: 2008 original: Non AOE Spell
+C_normal_dragon_002,2012,ranged,Blue Dragon,Elasson,creature/melee body: 2008 original: Non AOE Spell
+C_normal_dragon_004,2014,ranged,Black Dragon,Olympus,creature/melee body: 2008 original: Non AOE Spell
+C_normal_dragon_009,2014,ranged,Wind Dragon,Larissa,creature/melee body: 2008 original: Non AOE Spell
+C_normal_element_004,2013,ranged,Blizzard Elf,Elasson,creature/melee body: 2008 original: Non AOE Spell
+C_normal_fairy_001,2013,ranged,Nefen's Servant,Elasson,caster: 2008 original: Non AOE Spell
+C_normal_fairy_003,2013,ranged,Charming Wind Fairy / Fairy,Larissa / Olympus,caster: 2008 original: Non AOE Spell
+C_normal_mage_005,2214,ranged,Red Dark Wizard / Aman Wizard,Larissa / Delphi Forest,caster: 2008 original: Non AOE Spell
+C_normal_mage_009,2211,ranged,Ladun Warlock,Olympia,caster: 2008 original: Non AOE Spell
+C_normal_mage_015,2012,ranged,Snowfield Witch,Elasson,caster: 2008 original: Non AOE Spell
+C_normal_mage_017,2014,ranged,Western Witch,Olympia,caster: 2008 original: Non AOE Spell
+C_normal_satyr_006,2211,ranged,Satyr Wizard,Delphi Forest,caster: 2008 original: Non AOE Spell
+C_normal_satyr_007,2212,ranged,Satyr Warrior / Satyr Wind-Rider,Olympus / Elasson,creature/melee body: 2008 original: Non AOE Spell
+C_normal_satyr_009,2211,ranged,Satyr Warrior,Olympus,creature/melee body: 2008 original: Non AOE Spell
+C_normal_skeleton_014,2114,ranged,Corrupt Mage,Olympia,caster: 2008 original: Non AOE Spell
+C_normal_stymphalianbird_003,2012,ranged,Strange Bird,Delphi Forest,creature/melee body: 2008 original: Non AOE Spell
+C_normal_wolf_006,2011,ranged,Red Wolf / Anuby Wolf,Olympia / Delphi Forest,creature/melee body: 2008 original: Non AOE Spell

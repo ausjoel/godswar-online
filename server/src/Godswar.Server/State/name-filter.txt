@@ -1,0 +1,39 @@
+# GENERATED name filter (F-156, the admin 2026-11-09: "Remove the block list and only have swear words/slurs etc on it.
+# Softer toilet talk is okay").
+#
+# One word per line, lower case. A name is refused when it contains any word below, in any letter case
+# (pet names are letters and digits only, so this is a plain substring test). Lines starting with # are comments.
+#
+# This is the ONE editable list:
+# - the server reads it (embedded in the build; rebuild after editing) for pet names (Renaming Stone, C2S 10242);
+# - Development/client-1.4.5/tools/f156_filter_dat.py rewrites the client's Settings/Sys/Filter.dat from it.
+#
+# Deliberately NOT here:
+# - GM / Admin / IGG / GW and the other fake-staff entries of the stock Filter.dat ("Sigma", "Dogma" are fine).
+# - Soft toilet words: poo, poop, fart, butt, bum, pee, wee, crap, piss, turd.
+# - Short stems that sit inside ordinary words: ass (Bass), cock (Peacock), coon (Raccoon), tit (Titan),
+#   cum (Cucumber), rape (Grape), spic (Spice), dick (Dickens), prick (Prickly), homo (Homer), "stard" (Custard).
+
+# Swear words
+fuck
+shit
+cunt
+bitch
+whore
+slut
+bastard
+wanker
+twat
+cocksucker
+dickhead
+
+# Slurs
+nigger
+nigga
+faggot
+retard
+kike
+gook
+wetback
+tranny
+chink
