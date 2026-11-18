@@ -8,7 +8,7 @@
 # GW_AUTO_UPDATE=0 skips it), then execs gwplay. Ad-hoc signed (no hardened runtime: the emulator needs MAP_JIT).
 set -euo pipefail
 cd "$(dirname "$0")"
-VER=0.3; STAMP=$(date +%Y%m%d%H%M)
+VER=0.4; STAMP=$(date +%Y%m%d%H%M)
 SRCAPP=/path/to/GodsWar
 [ -x build/gwplay ] || ./build-app.sh
 rm -rf dist; mkdir -p dist; APP="dist/GodsWar Native.app"; M="$APP/Contents/MacOS"; R="$APP/Contents/Resources"
@@ -29,7 +29,7 @@ if [ ! -f "$GAME/GodsWar.exe" ] || [ "$(cat "$GAME/.app-version" 2>/dev/null)" !
   echo "$VER" > "$GAME.new/.app-version"; rm -rf "$GAME"; mv "$GAME.new" "$GAME"
 fi
 if [ ! -f "$SET" ]; then
-  printf '# GodsWar Native settings (edit with the game closed)\nclient=%s\nserver=YOUR_SERVER_IP\nport=6999\nsound=1\nwidth=1024\nheight=768\n' "$GAME" > "$SET"; chmod 600 "$SET"
+  printf '# GodsWar Native settings (edit with the game closed)\nclient=%s\nserver=YOUR_SERVER_IP\nport=6999\nsound=1\navatar=2\nwidth=1024\nheight=768\n' "$GAME" > "$SET"; chmod 600 "$SET"
 fi
 if [ "${GW_AUTO_UPDATE:-1}" = 1 ]; then
   "$MACOS/gwupdate" --client "$GAME" --work "$SUP/updates" --channel-url "https://YOUR-DOMAIN.example/updates/stable/" \

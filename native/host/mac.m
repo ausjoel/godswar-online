@@ -11,7 +11,7 @@
 //                                 typefile PATH | key NAME | snap PATH | frame N (wait for Present N) | quit)
 //
 // Settings file (key=value; '#' comments): client, server (default YOUR_SERVER_IP = live), port (default 6999),
-// sound (0/1), width, height. Rig test aid: account, password, autologin (0/1) are honoured only when server
+// sound (0/1), avatar (2 = new models, default; 1 = old), width, height. Rig test aid: account, password, autologin (0/1) are honoured only when server
 // is a private address (10.x, 127.x, 192.168.x); the password is never logged; play.command keeps the file 600.
 #import <Cocoa/Cocoa.h>
 #import <QuartzCore/QuartzCore.h>
@@ -220,8 +220,9 @@ int main(int argc, char **argv) {
     if (!client.length || ![[NSFileManager defaultManager] fileExistsAtPath:[client stringByAppendingPathComponent:exe]]) {
       fprintf(stderr, "gwplay: settings 'client' must point at a GodsWar client folder with %s (got '%s')\n", exe.UTF8String, client.UTF8String); return 2; }
     // config.ini for the guest (the run dir overrides the client's own)
-    NSString *cfg = [NSString stringWithFormat:@"[SERVER]\r\nPORT=%@\r\nIP=%@\r\n\r\n[SYSTEM]\r\nLocals=en_us\r\nSCREENWIDTH=%d\r\nSCREENHEIGHT=%d\r\nISWINDOWS=0\r\nSOUND=%@\r\nFULL_WINDOWS=0\r\nRegion=11\r\nISFB=0\r\nAvatar=0\r\n\r\n[DEBUG]\r\nMAP_TERRAIN=1\r\nMAP_WATER=1\r\nSKILL_DISPLAY=1\r\nAVATAR=1\r\n",
-      S(@"port", @"6999"), S(@"server", @"YOUR_SERVER_IP"), CW, CH, S(@"sound", @"1")];
+    NSString *cfg = [NSString stringWithFormat:@"[SERVER]\r\nPORT=%@\r\nIP=%@\r\n\r\n[SYSTEM]\r\nLocals=en_us\r\nSCREENWIDTH=%d\r\nSCREENHEIGHT=%d\r\nISWINDOWS=0\r\nSOUND=%@\r\nFULL_WINDOWS=0\r\nRegion=11\r\nISFB=0\r\nAvatar=%@\r\n\r\n[DEBUG]\r\nMAP_TERRAIN=1\r\nMAP_WATER=1\r\nSKILL_DISPLAY=1\r\nAVATAR=1\r\n",
+      S(@"port", @"6999"), S(@"server", @"YOUR_SERVER_IP"), CW, CH, S(@"sound", @"1"),
+      S(@"avatar", @"2")];   // 2 = new character models (Characters_new, what the Wine app's players use), 1 = old
     [cfg writeToFile:[run stringByAppendingPathComponent:@"config.ini"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
     setenv("GW_SHOT_EVERY", "0", 0); setenv("GW_STAT_EVERY", "250", 0);
     setenv("GW_SPIKE", "80", 0);   // 2026-11-18: slow-frame log + frame-time histogram in gwhost.log (cheap; no sampler, no shim timing)
