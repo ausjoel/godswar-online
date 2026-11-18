@@ -1,0 +1,479 @@
+diff -ruN -x build -x *.o -x .DS_Store unicorn-2.1.4/qemu/include/exec/cpu-defs.h unicorn-2.1.4/qemu/include/exec/cpu-defs.h
+--- unicorn-2.1.4/qemu/include/exec/cpu-defs.h	2025-09-10 02:38:25
++++ unicorn-2.1.4/qemu/include/exec/cpu-defs.h	2026-11-02 21:31:10
+@@ -82,8 +82,11 @@
+ #define CPU_TLB_ENTRY_BITS 6
+ #endif
+ 
+-#define CPU_TLB_DYN_MIN_BITS 6
+-#define CPU_TLB_DYN_DEFAULT_BITS 8
++/* gwhost patch: the softmmu TLB only resizes at a flush and the game almost never flushes, so the default 256
++ * entries (1 MB) stayed fixed against a ~1 GB working set (load_helper + tlb_fill ~9 % of the emulator thread).
++ * 16K entries cover 64 MB; the minimum keeps a rare flush from shrinking it back. */
++#define CPU_TLB_DYN_MIN_BITS 12
++#define CPU_TLB_DYN_DEFAULT_BITS 14
+ 
+ # if HOST_LONG_BITS == 32
+ /* Make sure we do not require a double-word shift for the TLB load */
+diff -ruN -x build -x *.o -x .DS_Store unicorn-2.1.4/qemu/include/exec/gen-icount.h unicorn-2.1.4/qemu/include/exec/gen-icount.h
+--- unicorn-2.1.4/qemu/include/exec/gen-icount.h	2025-09-10 02:38:25
++++ unicorn-2.1.4/qemu/include/exec/gen-icount.h	2026-11-02 16:22:02
+@@ -30,8 +30,23 @@
+     tcg_temp_free_i32(tcg_ctx, tmp);
+ }
+ 
++/* gwhost patch: unicorn replaced QEMU's inline icount_decr test at TB start with a helper CALL per TB
++ * (~9% of the emulator thread in the GodsWar world). gw_tb_exit_inline=1 restores QEMU's inline
++ * load + branch to an exit label at the TB end; the helper is only used when it is 0. */
++extern int gw_tb_exit_inline;
++extern __thread TCGLabel *gw_exitreq_label;
+ static inline void gen_tb_start(TCGContext *tcg_ctx, TranslationBlock *tb)
+ {
++    if (gw_tb_exit_inline && tcg_ctx->delay_slot_flag == NULL) {
++        TCGv_i32 count = tcg_temp_new_i32(tcg_ctx);
++        gw_exitreq_label = gen_new_label(tcg_ctx);
++        tcg_gen_ld_i32(tcg_ctx, count, tcg_ctx->cpu_env,
++                       offsetof(ArchCPU, neg.icount_decr.u32) - offsetof(ArchCPU, env));
++        tcg_gen_brcondi_i32(tcg_ctx, TCG_COND_LT, count, 0, gw_exitreq_label);
++        tcg_temp_free_i32(tcg_ctx, count);
++        return;
++    }
++    gw_exitreq_label = NULL;
+     TCGv_ptr puc = tcg_const_ptr(tcg_ctx, tcg_ctx->uc);
+     TCGv_i32 tmp = tcg_const_i32(tcg_ctx, 0);
+     // Unicorn:
+@@ -57,6 +72,10 @@
+         tcg_set_insn_param(tcg_ctx->icount_start_insn, 1, num_insns);
+     }
+ 
++    if (gw_exitreq_label) {   /* gwhost patch */
++        gen_set_label(tcg_ctx, gw_exitreq_label);
++        gw_exitreq_label = NULL;
++    }
+     tcg_gen_exit_tb(tcg_ctx, tb, TB_EXIT_REQUESTED);
+ }
+ 
+diff -ruN -x build -x *.o -x .DS_Store unicorn-2.1.4/qemu/include/exec/ram_addr.h unicorn-2.1.4/qemu/include/exec/ram_addr.h
+--- unicorn-2.1.4/qemu/include/exec/ram_addr.h	2025-09-10 02:38:25
++++ unicorn-2.1.4/qemu/include/exec/ram_addr.h	2026-11-02 15:28:41
+@@ -67,9 +67,14 @@
+     return false;
+ }
+ 
++/* gwhost patch: no self-modifying-code tracking on stores (every page was
++ * permanently TLB_NOTDIRTY because x86 without paging marks every page exec,
++ * so every guest store took the notdirty_write slow path). The host flushes
++ * translated code explicitly (uc_ctl_remove_cache) when it rewrites code. */
++extern int gw_smc_tracking;
+ static inline bool cpu_physical_memory_is_clean(ram_addr_t addr)
+ {
+-    return true;
++    return gw_smc_tracking;
+ }
+ 
+ static inline void cpu_physical_memory_set_dirty_flag(ram_addr_t addr,
+diff -ruN -x build -x *.o -x .DS_Store unicorn-2.1.4/qemu/include/hw/core/cpu.h unicorn-2.1.4/qemu/include/hw/core/cpu.h
+--- unicorn-2.1.4/qemu/include/hw/core/cpu.h	2025-09-10 02:38:25
++++ unicorn-2.1.4/qemu/include/hw/core/cpu.h	2026-11-02 21:37:09
+@@ -170,7 +170,7 @@
+     QTAILQ_ENTRY(CPUWatchpoint) entry;
+ };
+ 
+-#define TB_JMP_CACHE_BITS 12
++#define TB_JMP_CACHE_BITS 14   /* gwhost patch: was 12; fewer tb_htable_lookup misses from helper_lookup_tb_ptr */
+ #define TB_JMP_CACHE_SIZE (1 << TB_JMP_CACHE_BITS)
+ 
+ /* work queue */
+diff -ruN -x build -x *.o -x .DS_Store unicorn-2.1.4/qemu/target/i386/fpu_helper.c unicorn-2.1.4/qemu/target/i386/fpu_helper.c
+--- unicorn-2.1.4/qemu/target/i386/fpu_helper.c	2025-09-10 02:38:25
++++ unicorn-2.1.4/qemu/target/i386/fpu_helper.c	2026-11-02 16:50:33
+@@ -156,8 +156,58 @@
+     }
+ }
+ 
++
++/* gwhost patch: fast x87 paths. Exact floatx80 <-> float32/float64 conversions for normal numbers and zeros
++ * by bit manipulation, and add/sub/mul/div computed in host double when the guest's precision control is
++ * 53 or 24 bit and rounding is to-nearest (the x87 result is then the same as the double result, rounded to
++ * float for PC=24; only the extended exponent range and double rounding of PC=24 adds differ). Anything
++ * else (denormals, inf/nan, 64-bit precision, other rounding modes, exceptions to raise) falls back to the
++ * softfloat helpers. gw_x87_fast=0 disables it. */
++int gw_x87_fast = 1;
++static inline bool gw_fx_to_d(floatx80 a, double *out)
++{
++    uint32_t e = a.high & 0x7fff; uint64_t m = a.low; uint64_t sign = (uint64_t)(a.high >> 15) << 63, bits;
++    if (e == 0) { if (m) return false; bits = sign; memcpy(out, &bits, 8); return true; }
++    if (e == 0x7fff || !(m >> 63) || (m & 0x7ff)) return false;      /* special, unnormal, or needs rounding */
++    int de = (int)e - 16383 + 1023; if (de <= 0 || de >= 0x7ff) return false;
++    bits = sign | ((uint64_t)de << 52) | ((m >> 11) & 0xfffffffffffffULL); memcpy(out, &bits, 8); return true;
++}
++static inline bool gw_d_to_fx(double d, floatx80 *out)
++{
++    uint64_t bits; memcpy(&bits, &d, 8);
++    uint32_t de = (bits >> 52) & 0x7ff; uint16_t sign = (uint16_t)((bits >> 63) << 15); uint64_t m = bits & 0xfffffffffffffULL;
++    if (de == 0) { if (m) return false; out->high = sign; out->low = 0; return true; }
++    if (de == 0x7ff) return false;
++    out->high = sign | (uint16_t)(de - 1023 + 16383); out->low = (1ULL << 63) | (m << 11); return true;
++}
++static inline bool gw_fast_ok(CPUX86State *env)
++{
++    return gw_x87_fast && env->fp_status.float_rounding_mode == float_round_nearest_even &&
++           env->fp_status.floatx80_rounding_precision != 80;
++}
++/* op: 0 add, 1 sub, 2 mul, 3 div */
++static inline bool gw_fast_arith(CPUX86State *env, int op, floatx80 a, floatx80 b, floatx80 *r)
++{
++    double x, y, z;
++    if (!gw_fast_ok(env) || !gw_fx_to_d(a, &x) || !gw_fx_to_d(b, &y)) return false;
++    switch (op) { case 0: z = x + y; break; case 1: z = x - y; break; case 2: z = x * y; break; default: if (y == 0) return false; z = x / y; }
++    if (env->fp_status.floatx80_rounding_precision == 32) { float f = (float)z; if (f != f || f - f != 0 || (f != 0 && fabsf(f) < 1.17549435e-38f) || (f == 0 && z != 0)) return false; z = f; }
++    return gw_d_to_fx(z, r);
++}
++static inline bool gw_fast_f32_to_fx(uint32_t v, floatx80 *r)
++{
++    uint32_t e = (v >> 23) & 0xff, m = v & 0x7fffff; uint16_t sign = (uint16_t)((v >> 31) << 15);
++    if (e == 0) { if (m) return false; r->high = sign; r->low = 0; return true; }
++    if (e == 0xff) return false;
++    r->high = sign | (uint16_t)(e - 127 + 16383); r->low = (1ULL << 63) | ((uint64_t)m << 40); return true;
++}
++static inline bool gw_fast_f64_to_fx(uint64_t v, floatx80 *r)
++{
++    double d; memcpy(&d, &v, 8); return gw_d_to_fx(d, r);
++}
+ void helper_flds_FT0(CPUX86State *env, uint32_t val)
+ {
++    if (gw_x87_fast && gw_fast_f32_to_fx(val, &FT0)) return;
+     union {
+         float32 f;
+         uint32_t i;
+@@ -169,6 +219,7 @@
+ 
+ void helper_fldl_FT0(CPUX86State *env, uint64_t val)
+ {
++    if (gw_x87_fast && gw_fast_f64_to_fx(val, &FT0)) return;
+     union {
+         float64 f;
+         uint64_t i;
+@@ -193,7 +244,8 @@
+ 
+     new_fpstt = (env->fpstt - 1) & 7;
+     u.i = val;
+-    env->fpregs[new_fpstt].d = float32_to_floatx80(u.f, &env->fp_status);
++    if (!gw_x87_fast || !gw_fast_f32_to_fx(val, &env->fpregs[new_fpstt].d))
++        env->fpregs[new_fpstt].d = float32_to_floatx80(u.f, &env->fp_status);
+     env->fpstt = new_fpstt;
+     env->fptags[new_fpstt] = 0; /* validate stack entry */
+ }
+@@ -208,7 +260,8 @@
+ 
+     new_fpstt = (env->fpstt - 1) & 7;
+     u.i = val;
+-    env->fpregs[new_fpstt].d = float64_to_floatx80(u.f, &env->fp_status);
++    if (!gw_x87_fast || !gw_fast_f64_to_fx(val, &env->fpregs[new_fpstt].d))
++        env->fpregs[new_fpstt].d = float64_to_floatx80(u.f, &env->fp_status);
+     env->fpstt = new_fpstt;
+     env->fptags[new_fpstt] = 0; /* validate stack entry */
+ }
+@@ -240,6 +293,8 @@
+         uint32_t i;
+     } u;
+ 
++    { double d; if (gw_x87_fast && env->fp_status.float_rounding_mode == float_round_nearest_even && gw_fx_to_d(ST0, &d)) {
++        float f = (float)d; if (f == f && f - f == 0 && (f != 0 || d == 0)) { uint32_t b; memcpy(&b, &f, 4); if (((b >> 23) & 0xff) != 0 || !(b & 0x7fffff)) return b; } } }
+     u.f = floatx80_to_float32(ST0, &env->fp_status);
+     return u.i;
+ }
+@@ -251,6 +306,7 @@
+         uint64_t i;
+     } u;
+ 
++    { double d; if (gw_x87_fast && gw_fx_to_d(ST0, &d)) { uint64_t b; memcpy(&b, &d, 8); return b; } }
+     u.f = floatx80_to_float64(ST0, &env->fp_status);
+     return u.i;
+ }
+@@ -440,54 +496,54 @@
+ 
+ void helper_fadd_ST0_FT0(CPUX86State *env)
+ {
+-    ST0 = floatx80_add(ST0, FT0, &env->fp_status);
++    if (!gw_fast_arith(env, 0, ST0, FT0, &ST0)) ST0 = floatx80_add(ST0, FT0, &env->fp_status);
+ }
+ 
+ void helper_fmul_ST0_FT0(CPUX86State *env)
+ {
+-    ST0 = floatx80_mul(ST0, FT0, &env->fp_status);
++    if (!gw_fast_arith(env, 2, ST0, FT0, &ST0)) ST0 = floatx80_mul(ST0, FT0, &env->fp_status);
+ }
+ 
+ void helper_fsub_ST0_FT0(CPUX86State *env)
+ {
+-    ST0 = floatx80_sub(ST0, FT0, &env->fp_status);
++    if (!gw_fast_arith(env, 1, ST0, FT0, &ST0)) ST0 = floatx80_sub(ST0, FT0, &env->fp_status);
+ }
+ 
+ void helper_fsubr_ST0_FT0(CPUX86State *env)
+ {
+-    ST0 = floatx80_sub(FT0, ST0, &env->fp_status);
++    if (!gw_fast_arith(env, 1, FT0, ST0, &ST0)) ST0 = floatx80_sub(FT0, ST0, &env->fp_status);
+ }
+ 
+ void helper_fdiv_ST0_FT0(CPUX86State *env)
+ {
+-    ST0 = helper_fdiv(env, ST0, FT0);
++    if (!gw_fast_arith(env, 3, ST0, FT0, &ST0)) ST0 = helper_fdiv(env, ST0, FT0);
+ }
+ 
+ void helper_fdivr_ST0_FT0(CPUX86State *env)
+ {
+-    ST0 = helper_fdiv(env, FT0, ST0);
++    if (!gw_fast_arith(env, 3, FT0, ST0, &ST0)) ST0 = helper_fdiv(env, FT0, ST0);
+ }
+ 
+ /* fp operations between STN and ST0 */
+ 
+ void helper_fadd_STN_ST0(CPUX86State *env, int st_index)
+ {
+-    ST(st_index) = floatx80_add(ST(st_index), ST0, &env->fp_status);
++    if (!gw_fast_arith(env, 0, ST(st_index), ST0, &ST(st_index))) ST(st_index) = floatx80_add(ST(st_index), ST0, &env->fp_status);
+ }
+ 
+ void helper_fmul_STN_ST0(CPUX86State *env, int st_index)
+ {
+-    ST(st_index) = floatx80_mul(ST(st_index), ST0, &env->fp_status);
++    if (!gw_fast_arith(env, 2, ST(st_index), ST0, &ST(st_index))) ST(st_index) = floatx80_mul(ST(st_index), ST0, &env->fp_status);
+ }
+ 
+ void helper_fsub_STN_ST0(CPUX86State *env, int st_index)
+ {
+-    ST(st_index) = floatx80_sub(ST(st_index), ST0, &env->fp_status);
++    if (!gw_fast_arith(env, 1, ST(st_index), ST0, &ST(st_index))) ST(st_index) = floatx80_sub(ST(st_index), ST0, &env->fp_status);
+ }
+ 
+ void helper_fsubr_STN_ST0(CPUX86State *env, int st_index)
+ {
+-    ST(st_index) = floatx80_sub(ST0, ST(st_index), &env->fp_status);
++    if (!gw_fast_arith(env, 1, ST0, ST(st_index), &ST(st_index))) ST(st_index) = floatx80_sub(ST0, ST(st_index), &env->fp_status);
+ }
+ 
+ void helper_fdiv_STN_ST0(CPUX86State *env, int st_index)
+@@ -495,7 +551,7 @@
+     floatx80 *p;
+ 
+     p = &ST(st_index);
+-    *p = helper_fdiv(env, *p, ST0);
++    if (!gw_fast_arith(env, 3, *p, ST0, p)) *p = helper_fdiv(env, *p, ST0);
+ }
+ 
+ void helper_fdivr_STN_ST0(CPUX86State *env, int st_index)
+@@ -503,7 +559,7 @@
+     floatx80 *p;
+ 
+     p = &ST(st_index);
+-    *p = helper_fdiv(env, ST0, *p);
++    if (!gw_fast_arith(env, 3, ST0, *p, p)) *p = helper_fdiv(env, ST0, *p);
+ }
+ 
+ /* misc FPU operations */
+diff -ruN -x build -x *.o -x .DS_Store unicorn-2.1.4/qemu/target/i386/helper.h unicorn-2.1.4/qemu/target/i386/helper.h
+--- unicorn-2.1.4/qemu/target/i386/helper.h	2025-09-10 02:38:25
++++ unicorn-2.1.4/qemu/target/i386/helper.h	2026-11-02 16:47:04
+@@ -113,83 +113,85 @@
+ DEF_HELPER_2(invlpga, void, env, int)
+ 
+ /* x86 FPU */
++/* gwhost patch: register-only x87 helpers flagged TCG_CALL_NO_RWG (they touch no TCG globals), so the
++ * JIT does not spill/reload the guest registers around every x87 instruction. */
+ 
+-DEF_HELPER_2(flds_FT0, void, env, i32)
+-DEF_HELPER_2(fldl_FT0, void, env, i64)
+-DEF_HELPER_2(fildl_FT0, void, env, s32)
+-DEF_HELPER_2(flds_ST0, void, env, i32)
+-DEF_HELPER_2(fldl_ST0, void, env, i64)
+-DEF_HELPER_2(fildl_ST0, void, env, s32)
+-DEF_HELPER_2(fildll_ST0, void, env, s64)
+-DEF_HELPER_1(fsts_ST0, i32, env)
+-DEF_HELPER_1(fstl_ST0, i64, env)
+-DEF_HELPER_1(fist_ST0, s32, env)
+-DEF_HELPER_1(fistl_ST0, s32, env)
+-DEF_HELPER_1(fistll_ST0, s64, env)
+-DEF_HELPER_1(fistt_ST0, s32, env)
+-DEF_HELPER_1(fisttl_ST0, s32, env)
+-DEF_HELPER_1(fisttll_ST0, s64, env)
++DEF_HELPER_FLAGS_2(flds_FT0, TCG_CALL_NO_RWG, void, env, i32)
++DEF_HELPER_FLAGS_2(fldl_FT0, TCG_CALL_NO_RWG, void, env, i64)
++DEF_HELPER_FLAGS_2(fildl_FT0, TCG_CALL_NO_RWG, void, env, s32)
++DEF_HELPER_FLAGS_2(flds_ST0, TCG_CALL_NO_RWG, void, env, i32)
++DEF_HELPER_FLAGS_2(fldl_ST0, TCG_CALL_NO_RWG, void, env, i64)
++DEF_HELPER_FLAGS_2(fildl_ST0, TCG_CALL_NO_RWG, void, env, s32)
++DEF_HELPER_FLAGS_2(fildll_ST0, TCG_CALL_NO_RWG, void, env, s64)
++DEF_HELPER_FLAGS_1(fsts_ST0, TCG_CALL_NO_RWG, i32, env)
++DEF_HELPER_FLAGS_1(fstl_ST0, TCG_CALL_NO_RWG, i64, env)
++DEF_HELPER_FLAGS_1(fist_ST0, TCG_CALL_NO_RWG, s32, env)
++DEF_HELPER_FLAGS_1(fistl_ST0, TCG_CALL_NO_RWG, s32, env)
++DEF_HELPER_FLAGS_1(fistll_ST0, TCG_CALL_NO_RWG, s64, env)
++DEF_HELPER_FLAGS_1(fistt_ST0, TCG_CALL_NO_RWG, s32, env)
++DEF_HELPER_FLAGS_1(fisttl_ST0, TCG_CALL_NO_RWG, s32, env)
++DEF_HELPER_FLAGS_1(fisttll_ST0, TCG_CALL_NO_RWG, s64, env)
+ DEF_HELPER_2(fldt_ST0, void, env, tl)
+ DEF_HELPER_2(fstt_ST0, void, env, tl)
+-DEF_HELPER_1(fpush, void, env)
+-DEF_HELPER_1(fpop, void, env)
+-DEF_HELPER_1(fdecstp, void, env)
+-DEF_HELPER_1(fincstp, void, env)
+-DEF_HELPER_2(ffree_STN, void, env, int)
+-DEF_HELPER_1(fmov_ST0_FT0, void, env)
+-DEF_HELPER_2(fmov_FT0_STN, void, env, int)
+-DEF_HELPER_2(fmov_ST0_STN, void, env, int)
+-DEF_HELPER_2(fmov_STN_ST0, void, env, int)
+-DEF_HELPER_2(fxchg_ST0_STN, void, env, int)
+-DEF_HELPER_1(fcom_ST0_FT0, void, env)
+-DEF_HELPER_1(fucom_ST0_FT0, void, env)
++DEF_HELPER_FLAGS_1(fpush, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fpop, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fdecstp, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fincstp, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_2(ffree_STN, TCG_CALL_NO_RWG, void, env, int)
++DEF_HELPER_FLAGS_1(fmov_ST0_FT0, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_2(fmov_FT0_STN, TCG_CALL_NO_RWG, void, env, int)
++DEF_HELPER_FLAGS_2(fmov_ST0_STN, TCG_CALL_NO_RWG, void, env, int)
++DEF_HELPER_FLAGS_2(fmov_STN_ST0, TCG_CALL_NO_RWG, void, env, int)
++DEF_HELPER_FLAGS_2(fxchg_ST0_STN, TCG_CALL_NO_RWG, void, env, int)
++DEF_HELPER_FLAGS_1(fcom_ST0_FT0, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fucom_ST0_FT0, TCG_CALL_NO_RWG, void, env)
+ DEF_HELPER_1(fcomi_ST0_FT0, void, env)
+ DEF_HELPER_1(fucomi_ST0_FT0, void, env)
+-DEF_HELPER_1(fadd_ST0_FT0, void, env)
+-DEF_HELPER_1(fmul_ST0_FT0, void, env)
+-DEF_HELPER_1(fsub_ST0_FT0, void, env)
+-DEF_HELPER_1(fsubr_ST0_FT0, void, env)
+-DEF_HELPER_1(fdiv_ST0_FT0, void, env)
+-DEF_HELPER_1(fdivr_ST0_FT0, void, env)
+-DEF_HELPER_2(fadd_STN_ST0, void, env, int)
+-DEF_HELPER_2(fmul_STN_ST0, void, env, int)
+-DEF_HELPER_2(fsub_STN_ST0, void, env, int)
+-DEF_HELPER_2(fsubr_STN_ST0, void, env, int)
+-DEF_HELPER_2(fdiv_STN_ST0, void, env, int)
+-DEF_HELPER_2(fdivr_STN_ST0, void, env, int)
+-DEF_HELPER_1(fchs_ST0, void, env)
+-DEF_HELPER_1(fabs_ST0, void, env)
+-DEF_HELPER_1(fxam_ST0, void, env)
+-DEF_HELPER_1(fld1_ST0, void, env)
+-DEF_HELPER_1(fldl2t_ST0, void, env)
+-DEF_HELPER_1(fldl2e_ST0, void, env)
+-DEF_HELPER_1(fldpi_ST0, void, env)
+-DEF_HELPER_1(fldlg2_ST0, void, env)
+-DEF_HELPER_1(fldln2_ST0, void, env)
+-DEF_HELPER_1(fldz_ST0, void, env)
+-DEF_HELPER_1(fldz_FT0, void, env)
+-DEF_HELPER_1(fnstsw, i32, env)
+-DEF_HELPER_1(fnstcw, i32, env)
+-DEF_HELPER_2(fldcw, void, env, i32)
+-DEF_HELPER_1(fclex, void, env)
++DEF_HELPER_FLAGS_1(fadd_ST0_FT0, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fmul_ST0_FT0, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fsub_ST0_FT0, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fsubr_ST0_FT0, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fdiv_ST0_FT0, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fdivr_ST0_FT0, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_2(fadd_STN_ST0, TCG_CALL_NO_RWG, void, env, int)
++DEF_HELPER_FLAGS_2(fmul_STN_ST0, TCG_CALL_NO_RWG, void, env, int)
++DEF_HELPER_FLAGS_2(fsub_STN_ST0, TCG_CALL_NO_RWG, void, env, int)
++DEF_HELPER_FLAGS_2(fsubr_STN_ST0, TCG_CALL_NO_RWG, void, env, int)
++DEF_HELPER_FLAGS_2(fdiv_STN_ST0, TCG_CALL_NO_RWG, void, env, int)
++DEF_HELPER_FLAGS_2(fdivr_STN_ST0, TCG_CALL_NO_RWG, void, env, int)
++DEF_HELPER_FLAGS_1(fchs_ST0, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fabs_ST0, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fxam_ST0, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fld1_ST0, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fldl2t_ST0, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fldl2e_ST0, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fldpi_ST0, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fldlg2_ST0, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fldln2_ST0, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fldz_ST0, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fldz_FT0, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fnstsw, TCG_CALL_NO_RWG, i32, env)
++DEF_HELPER_FLAGS_1(fnstcw, TCG_CALL_NO_RWG, i32, env)
++DEF_HELPER_FLAGS_2(fldcw, TCG_CALL_NO_RWG, void, env, i32)
++DEF_HELPER_FLAGS_1(fclex, TCG_CALL_NO_RWG, void, env)
+ DEF_HELPER_1(fwait, void, env)
+-DEF_HELPER_1(fninit, void, env)
++DEF_HELPER_FLAGS_1(fninit, TCG_CALL_NO_RWG, void, env)
+ DEF_HELPER_2(fbld_ST0, void, env, tl)
+ DEF_HELPER_2(fbst_ST0, void, env, tl)
+-DEF_HELPER_1(f2xm1, void, env)
+-DEF_HELPER_1(fyl2x, void, env)
+-DEF_HELPER_1(fptan, void, env)
+-DEF_HELPER_1(fpatan, void, env)
+-DEF_HELPER_1(fxtract, void, env)
+-DEF_HELPER_1(fprem1, void, env)
+-DEF_HELPER_1(fprem, void, env)
+-DEF_HELPER_1(fyl2xp1, void, env)
+-DEF_HELPER_1(fsqrt, void, env)
+-DEF_HELPER_1(fsincos, void, env)
+-DEF_HELPER_1(frndint, void, env)
+-DEF_HELPER_1(fscale, void, env)
+-DEF_HELPER_1(fsin, void, env)
+-DEF_HELPER_1(fcos, void, env)
++DEF_HELPER_FLAGS_1(f2xm1, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fyl2x, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fptan, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fpatan, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fxtract, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fprem1, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fprem, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fyl2xp1, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fsqrt, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fsincos, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(frndint, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fscale, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fsin, TCG_CALL_NO_RWG, void, env)
++DEF_HELPER_FLAGS_1(fcos, TCG_CALL_NO_RWG, void, env)
+ DEF_HELPER_3(fstenv, void, env, tl, int)
+ DEF_HELPER_3(fldenv, void, env, tl, int)
+ DEF_HELPER_3(fsave, void, env, tl, int)
+diff -ruN -x build -x *.o -x .DS_Store unicorn-2.1.4/qemu/tcg/tcg-op.c unicorn-2.1.4/qemu/tcg/tcg-op.c
+--- unicorn-2.1.4/qemu/tcg/tcg-op.c	2025-09-10 02:38:25
++++ unicorn-2.1.4/qemu/tcg/tcg-op.c	2026-11-02 16:22:02
+@@ -2850,8 +2850,15 @@
+ // Unicorn engine
+ // check if the last memory access was invalid
+ // if so, we jump to the block epilogue to quit immediately.
++int gw_smc_tracking = 0;      /* gwhost patch, see ram_addr.h */
++int gw_memop_exit_check = 0;
++int gw_tb_exit_inline = 1;          /* gwhost patch, see gen-icount.h */
++__thread TCGLabel *gw_exitreq_label;  /* gwhost patch: 0 = no helper call after every guest load/store */
+ void check_exit_request(TCGContext *tcg_ctx)
+ {
++    if (!gw_memop_exit_check) {
++        return;
++    }
+     // Unicorn:
+     //   For ARM IT block, we couldn't exit in the middle of the
+     //   block and this is the our hack here.
+diff -ruN -x build -x *.o -x .DS_Store unicorn-2.1.4/uc.c unicorn-2.1.4/uc.c
+--- unicorn-2.1.4/uc.c	2025-09-10 02:38:25
++++ unicorn-2.1.4/uc.c	2026-11-02 21:59:24
+@@ -1254,6 +1254,22 @@
+ }
+ 
+ UNICORN_EXPORT
++/* gwhost patch: uc_emu_stop is NOT safe to call from another host thread: UC_INIT/save_jit_state and
++ * restore_jit_state update uc->nested / current_executable (the per-thread MAP_JIT write-protect bookkeeping),
++ * racing with the emulator thread's own uc_* calls; gwhost's preemption watchdog crashed the JIT that way.
++ * gw_uc_async_stop only sets the stop flag and the CPU exit request (what break_translation_loop does). */
++UNICORN_EXPORT
++void gw_uc_async_stop(uc_engine *uc)
++{
++    if (!uc || !uc->init_done || uc->emulation_done) {
++        return;
++    }
++    uc->stop_request = true;
++    if (uc->cpu) {
++        cpu_exit(uc->cpu);
++    }
++}
++
+ uc_err uc_emu_stop(uc_engine *uc)
+ {
+     UC_INIT(uc);
