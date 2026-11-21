@@ -276,3 +276,57 @@ func TestIdleReaderStalls(t *testing.T) {
 		t.Fatalf("stalled read did not end: %v", err)
 	}
 }
+
+func TestNativeEngineInstallAndOffline(t *testing.T) {
+	r := newRig(t, "mac", "5", clientFiles("mac"))
+	nz := makeZip(map[string]string{"GodsWar Native.app/Contents/Info.plist": "n"})
+	r.files["/n.zip"] = nz
+	r.manifest.Native = map[string]File{"mac": {Version: "0.5", URL: r.srv.URL + "/n.zip", Size: int64(len(nz)), SHA256: sum(nz)}}
+	r.cfg.Engine = EngineNative
+	root, err := Update(r.cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, NativeApp)); err != nil {
+		t.Fatalf("native app not installed: %v", err)
+	}
+	st := readState(r.cfg.DataDir)
+	if st.NativeVersion != "0.5" || st.Engine != EngineNative || st.ClientRoot != "" {
+		t.Fatalf("native install must not fetch the Wine client; state %+v", st)
+	}
+	// switching to Wine installs the client beside it and keeps the native copy
+	r.cfg.Engine = EngineWine
+	if root2, err := Update(r.cfg); err != nil || root2 == root {
+		t.Fatalf("wine root %q err %v", root2, err)
+	}
+	st = readState(r.cfg.DataDir)
+	if st.Engine != EngineWine || st.NativeRoot != root || st.ClientVersion != "5" {
+		t.Fatalf("state %+v", st)
+	}
+	r.srv.Close()
+	if st.Root(EngineNative) != root {
+		t.Fatal("offline fallback must find the native root")
+	}
+}
+
+func TestNativeMissingFromManifest(t *testing.T) {
+	r := newRig(t, "mac", "5", clientFiles("mac"))
+	r.cfg.Engine = EngineNative
+	if _, err := Update(r.cfg); err == nil || !strings.Contains(err.Error(), "Native") {
+		t.Fatalf("expected a clear Native error, got %v", err)
+	}
+}
+
+func TestChooseEngineFlagAndWindows(t *testing.T) {
+	c := &Config{DataDir: t.TempDir(), Platform: "mac"}
+	if e := chooseEngine(c, "", EngineNative); e != EngineNative || readState(c.DataDir).Engine != EngineNative {
+		t.Fatalf("flag not remembered: %q", e)
+	}
+	if e := chooseEngine(c, EngineNative, "bogus"); e != EngineNative && !optionHeld() {
+		t.Fatalf("saved choice lost: %q", e)
+	}
+	w := &Config{DataDir: t.TempDir(), Platform: "windows"}
+	if e := chooseEngine(w, EngineNative, EngineNative); e != EngineWine {
+		t.Fatalf("windows must stay wine, got %q", e)
+	}
+}

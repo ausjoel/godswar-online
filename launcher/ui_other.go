@@ -19,3 +19,7 @@ func fail(c *Config, msg string) {
 func info(c *Config, msg string) { fmt.Println(msg) }
 
 func rosettaProblem() string { return "" }
+
+func optionHeld() bool { return false }
+
+func askEngine(current string) string { return current }

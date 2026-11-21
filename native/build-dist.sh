@@ -1,17 +1,17 @@
 #!/bin/bash
 # build-dist.sh : player package of the native client (NOT published by this script).
-#   dist/GodsWar Native.app   Contents/MacOS/{GodsWar Native (launcher), gwplay, gwupdate}, Resources/Client (the published
+#   dist/<ver>/GodsWar Native.app   Contents/MacOS/{GodsWar Native (launcher), gwplay, gwupdate}, Resources/Client (the published
 #                             client of the Wine app's newest release: client-1.5.2 build), Resources/app-version
-#   dist/GodsWar-Native-mac-<ver>.zip (+ SHA256SUMS.txt)
+#   dist/<ver>/GodsWar-Native-mac-<ver>.zip (+ SHA256SUMS.txt)
 # Launcher: first run (or new app version) clones Resources/Client to ~/Library/Application Support/GodsWar Native/Client,
 # writes settings.ini there (LIVE server default), runs gwupdate on that copy (same signed channel as the Wine app,
 # GW_AUTO_UPDATE=0 skips it), then execs gwplay. Ad-hoc signed (no hardened runtime: the emulator needs MAP_JIT).
 set -euo pipefail
 cd "$(dirname "$0")"
-VER=0.4; STAMP=$(date +%Y%m%d%H%M)
+VER=0.6; STAMP=$(date +%Y%m%d%H%M)
 SRCAPP=/path/to/GodsWar
 [ -x build/gwplay ] || ./build-app.sh
-rm -rf dist; mkdir -p dist; APP="dist/GodsWar Native.app"; M="$APP/Contents/MacOS"; R="$APP/Contents/Resources"
+OUT="dist/$VER"; rm -rf "$OUT"; mkdir -p "$OUT"; APP="$OUT/GodsWar Native.app"; M="$APP/Contents/MacOS"; R="$APP/Contents/Resources"
 mkdir -p "$M" "$R"
 cp build/gwplay "$M/gwplay"; cp "$SRCAPP/MacOS/gwupdate" "$M/gwupdate"
 cp -Rc "$SRCAPP/Resources/Client" "$R/Client"; find "$R/Client" -name .DS_Store -delete
@@ -56,5 +56,5 @@ cat > "$APP/Contents/Info.plist" <<PL
 </dict></plist>
 PL
 codesign --force --deep -s - "$APP" >/dev/null 2>&1; codesign --verify --deep --strict "$APP" && echo "signature ok"
-(cd dist && ditto -c -k --sequesterRsrc --keepParent "GodsWar Native.app" "GodsWar-Native-mac-$VER.zip" && shasum -a 256 GodsWar-Native-mac-$VER.zip > SHA256SUMS.txt && cat SHA256SUMS.txt)
-du -sh "$APP" dist/*.zip
+(cd "$OUT" && ditto -c -k --sequesterRsrc --keepParent "GodsWar Native.app" "GodsWar-Native-mac-$VER.zip" && shasum -a 256 GodsWar-Native-mac-$VER.zip > SHA256SUMS.txt && cat SHA256SUMS.txt)
+du -sh "$APP" "$OUT"/*.zip

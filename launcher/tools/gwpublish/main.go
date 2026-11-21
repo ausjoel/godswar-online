@@ -13,8 +13,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -28,6 +30,31 @@ type Manifest struct {
 	Serial   int64           `json:"serial"`
 	Launcher map[string]File `json:"launcher"`
 	Client   map[string]File `json:"client"`
+	Native   map[string]File `json:"native,omitempty"`
+}
+
+// keepNative copies the native entry of the currently published manifest, after checking its signature with the
+// key we sign with, so a client-only publish does not drop the Native engine (launcher 1.0.2+).
+func keepNative(url string, pub ed25519.PublicKey) map[string]File {
+	get := func(u string) []byte {
+		resp, err := http.Get(u)
+		if err != nil || resp.StatusCode != 200 {
+			fmt.Fprintln(os.Stderr, "keep-native: cannot read", u, err)
+			os.Exit(1)
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		return b
+	}
+	raw, sigText := get(url), get(url+".sig")
+	sig, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(sigText)))
+	if err != nil || !ed25519.Verify(pub, raw, sig) {
+		fmt.Fprintln(os.Stderr, "keep-native: the published manifest's signature does not verify; not copying")
+		os.Exit(1)
+	}
+	var old Manifest
+	json.Unmarshal(raw, &old)
+	return old.Native
 }
 
 func entry(base, path, ver string) File {
@@ -52,6 +79,9 @@ func main() {
 	macLauncher := flag.String("mac-launcher", "", "mac launcher binary")
 	winLauncher := flag.String("windows-launcher", "", "windows launcher exe")
 	launcherVer := flag.String("launcher-version", "", "launcher version")
+	macNative := flag.String("mac-native", "", "GodsWar Native app zip (file name inside -dir); empty = keep the published one")
+	nativeVer := flag.String("native-version", "", "native app version")
+	keepFrom := flag.String("keep-native-from", "https://YOUR-DOMAIN.example/downloads/manifest.json", "published manifest to copy the native entry from when -mac-native is empty (\"\" = drop it)")
 	flag.Parse()
 	raw, err := os.ReadFile(*keyPath)
 	if err != nil {
@@ -73,6 +103,12 @@ func main() {
 	add(m.Client, "windows", *winClient, *clientVer)
 	add(m.Launcher, "mac", *macLauncher, *launcherVer)
 	add(m.Launcher, "windows", *winLauncher, *launcherVer)
+	if *macNative != "" {
+		m.Native = map[string]File{}
+		add(m.Native, "mac", *macNative, *nativeVer)
+	} else if *keepFrom != "" {
+		m.Native = keepNative(*keepFrom, priv.Public().(ed25519.PublicKey))
+	}
 	b, _ := json.Marshal(m)
 	sig := ed25519.Sign(priv, b)
 	os.WriteFile(filepath.Join(*dir, "manifest.json"), b, 0o644)

@@ -6,4 +6,4 @@ mkdir -p build
 if [ -z "$GW_BREW_UNICORN" ] && [ -f third_party/lib/libunicorn-gw.a ]; then UC="third_party/lib/libunicorn-gw.a"; DEF=-DGW_PATCHED_UC=1
 else UC="-L/opt/homebrew/lib -lunicorn"; DEF=; fi
 exec nice -n 15 clang -O2 -g -Wall -Wno-unused-function -Wno-unused-variable -Wno-misleading-indentation -Wno-unused-but-set-variable -Wno-deprecated-declarations \
-  $DEF -I/opt/homebrew/include -Ithird_party/unicorn-2.1.4/include host/*.c $UC -lpthread -liconv -lz -framework AudioToolbox -framework CoreAudio -o build/gwhost "$@"
+  $DEF -I/opt/homebrew/include -Ithird_party/unicorn-2.1.4/include host/*.c host/mtl.m -fobjc-arc $UC -lpthread -liconv -lz -framework AudioToolbox -framework CoreAudio -framework Metal -framework Foundation -o build/gwhost "$@"

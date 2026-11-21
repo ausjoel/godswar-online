@@ -24,7 +24,7 @@ import (
 )
 
 // Version is this binary's own version. Bump it for every published launcher.
-const Version = "1.0.1"
+const Version = "1.0.2"
 
 // PublicKey is the raw Ed25519 public key (same trust root as gwupdate).
 // Both are set at build time: go build -ldflags "-X main.PublicKey=... -X main.DefaultManifestURL=..." (see build.sh).
@@ -43,6 +43,8 @@ type Manifest struct {
 	Serial   int64           `json:"serial"`
 	Launcher map[string]File `json:"launcher"`
 	Client   map[string]File `json:"client"`
+	// Native (launcher 1.0.2+): the GodsWar Native app (exe-port, no Wine), Mac only. Older launchers ignore it.
+	Native map[string]File `json:"native,omitempty"`
 }
 
 type State struct {
@@ -52,6 +54,24 @@ type State struct {
 	LauncherVersion string `json:"launcher_version"`
 	LauncherSHA256  string `json:"launcher_sha256"`
 	LauncherPath    string `json:"launcher_path"`
+	// Engine (1.0.2+): "wine" or "native", the player's choice; "" = not asked yet.
+	Engine        string `json:"engine,omitempty"`
+	NativeVersion string `json:"native_version,omitempty"`
+	NativeRoot    string `json:"native_root,omitempty"`
+}
+
+// Engines. Native is the Mac-only exe-port app; Windows always runs GodsWar.exe itself.
+const (
+	EngineWine   = "wine"
+	EngineNative = "native"
+)
+
+// Root returns the installed root for an engine ("" when that engine is not installed).
+func (s State) Root(engine string) string {
+	if engine == EngineNative {
+		return s.NativeRoot
+	}
+	return s.ClientRoot
 }
 
 type Config struct {
@@ -61,6 +81,7 @@ type Config struct {
 	Platform    string // "mac" or "windows"
 	Version     string
 	NoLaunch    bool
+	Engine      string // EngineWine (default) or EngineNative
 	HTTP        *http.Client
 	Logf        func(string, ...any)
 	// OnFirstInstall tells the player what is about to happen before a big first download.
@@ -351,6 +372,13 @@ func findClientRoot(stage, platform string) (string, error) {
 	if platform == "mac" {
 		want = "GodsWar.app"
 	}
+	return findRoot(stage, want)
+}
+
+// NativeApp is the bundle inside the native package zip (GodsWar-Native/exe-port/build-dist.sh).
+const NativeApp = "GodsWar Native.app"
+
+func findRoot(stage, want string) (string, error) {
 	if _, err := os.Stat(filepath.Join(stage, want)); err == nil {
 		return stage, nil
 	}
@@ -391,58 +419,84 @@ func Update(c *Config) (string, error) {
 			removeOldLaunchers(filepath.Dir(dest), dest)
 		}
 	}
-	cf, ok := m.Client[c.Platform]
-	if !ok {
-		return "", fmt.Errorf("no %s client in the manifest", c.Platform)
+	if c.Engine == EngineNative && c.Platform == "mac" {
+		nf, ok := m.Native[c.Platform]
+		if !ok {
+			return "", errors.New("this server does not offer the Native engine yet; hold Option while opening GodsWar and choose Wine")
+		}
+		root, ver, err := c.install(nf, "native", st.NativeRoot, st.NativeVersion, func(d string) (string, error) { return findRoot(d, NativeApp) })
+		if err != nil {
+			return "", err
+		}
+		st.NativeRoot, st.NativeVersion = root, ver
+	} else {
+		cf, ok := m.Client[c.Platform]
+		if !ok {
+			return "", fmt.Errorf("no %s client in the manifest", c.Platform)
+		}
+		root, ver, err := c.install(cf, "client", st.ClientRoot, st.ClientVersion, func(d string) (string, error) { return findClientRoot(d, c.Platform) })
+		if err != nil {
+			return "", err
+		}
+		st.ClientRoot, st.ClientVersion = root, ver
 	}
-	installed := st.ClientRoot != "" && st.ClientVersion != ""
-	if installed {
-		if _, err := os.Stat(st.ClientRoot); err != nil {
-			installed = false
-		}
-	}
-	if !installed || CompareVersions(cf.Version, st.ClientVersion) > 0 {
-		if !installed && c.OnFirstInstall != nil {
-			c.OnFirstInstall(cf.Size >> 20)
-		}
-		c.logf("downloading the client %s (%d MB)", cf.Version, cf.Size>>20)
-		zipPath := filepath.Join(c.DataDir, "downloads", filepath.Base(cf.URL))
-		if err := c.Download(cf, zipPath); err != nil {
-			return "", err
-		}
-		stage := filepath.Join(c.DataDir, "client-new")
-		os.RemoveAll(stage)
-		c.logf("unpacking")
-		if err := extract(zipPath, stage); err != nil {
-			os.RemoveAll(stage)
-			return "", err
-		}
-		if _, err := findClientRoot(stage, c.Platform); err != nil {
-			os.RemoveAll(stage)
-			return "", err
-		}
-		live := filepath.Join(c.DataDir, "client")
-		old := filepath.Join(c.DataDir, "client-old")
-		os.RemoveAll(old)
-		if _, err := os.Stat(live); err == nil {
-			if err := os.Rename(live, old); err != nil {
-				return "", err
-			}
-		}
-		if err := os.Rename(stage, live); err != nil {
-			os.Rename(old, live)
-			return "", err
-		}
-		root, _ := findClientRoot(live, c.Platform)
-		os.RemoveAll(old)
-		os.Remove(zipPath)
-		st.ClientVersion, st.ClientRoot = cf.Version, root
+	if c.Engine != "" {
+		st.Engine = c.Engine
 	}
 	st.Serial = m.Serial
 	if err := writeState(c.DataDir, st); err != nil {
 		return "", err
 	}
-	return st.ClientRoot, nil
+	return st.Root(c.Engine), nil
+}
+
+// install brings one package (Wine client or Native app) to version f.Version in DataDir/<dir> and returns its root.
+// The old copy is kept until the new one is unpacked and checked, so a failed update leaves a playable game.
+func (c *Config) install(f File, dir, haveRoot, haveVer string, find func(string) (string, error)) (string, string, error) {
+	installed := haveRoot != "" && haveVer != ""
+	if installed {
+		if _, err := os.Stat(haveRoot); err != nil {
+			installed = false
+		}
+	}
+	if installed && CompareVersions(f.Version, haveVer) <= 0 {
+		return haveRoot, haveVer, nil
+	}
+	if !installed && c.OnFirstInstall != nil {
+		c.OnFirstInstall(f.Size >> 20)
+	}
+	c.logf("downloading %s %s (%d MB)", dir, f.Version, f.Size>>20)
+	zipPath := filepath.Join(c.DataDir, "downloads", filepath.Base(f.URL))
+	if err := c.Download(f, zipPath); err != nil {
+		return "", "", err
+	}
+	stage := filepath.Join(c.DataDir, dir+"-new")
+	os.RemoveAll(stage)
+	c.logf("unpacking")
+	if err := extract(zipPath, stage); err != nil {
+		os.RemoveAll(stage)
+		return "", "", err
+	}
+	if _, err := find(stage); err != nil {
+		os.RemoveAll(stage)
+		return "", "", err
+	}
+	live := filepath.Join(c.DataDir, dir)
+	old := filepath.Join(c.DataDir, dir+"-old")
+	os.RemoveAll(old)
+	if _, err := os.Stat(live); err == nil {
+		if err := os.Rename(live, old); err != nil {
+			return "", "", err
+		}
+	}
+	if err := os.Rename(stage, live); err != nil {
+		os.Rename(old, live)
+		return "", "", err
+	}
+	root, _ := find(live)
+	os.RemoveAll(old)
+	os.Remove(zipPath)
+	return root, f.Version, nil
 }
 
 // removeOldLaunchers deletes older copies; a copy that is still running cannot be deleted on Windows, so errors are ignored.
@@ -463,9 +517,13 @@ func firstNonEmpty(a, b string) string {
 	return b
 }
 
-func Launch(root, platform string) error {
+func Launch(root, platform, engine string) error {
 	if platform == "mac" {
-		return exec.Command("/usr/bin/open", filepath.Join(root, "GodsWar.app")).Start()
+		app := "GodsWar.app"
+		if engine == EngineNative {
+			app = NativeApp
+		}
+		return exec.Command("/usr/bin/open", filepath.Join(root, app)).Start()
 	}
 	cmd := exec.Command(filepath.Join(root, "GodsWar.exe"))
 	cmd.Dir = root

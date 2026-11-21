@@ -26,6 +26,7 @@ func dataDir() string {
 func main() {
 	noLaunch := flag.Bool("no-launch", false, "download and install only")
 	manifest := flag.String("manifest-url", DefaultManifestURL, "manifest address (testing)")
+	engineFlag := flag.String("engine", "", "wine or native (Mac): choose the engine without the dialog and remember it")
 	flag.Parse()
 	key, _ := base64.StdEncoding.DecodeString(PublicKey)
 	if len(key) != ed25519.PublicKeySize || DefaultManifestURL == "" {
@@ -55,7 +56,8 @@ func main() {
 		notify(cfg, "GodsWar is already running or downloading. Please wait for it to finish.")
 		return
 	}
-	if !cfg.NoLaunch {
+	cfg.Engine = chooseEngine(cfg, readState(cfg.DataDir).Engine, *engineFlag)
+	if !cfg.NoLaunch && cfg.Engine == EngineWine {
 		if msg := rosettaProblem(); msg != "" {
 			fail(cfg, msg)
 		}
@@ -67,21 +69,44 @@ func main() {
 	root, err := Update(cfg)
 	if err != nil {
 		// A client that is already installed can still be played when the VPS is unreachable.
-		st := readState(cfg.DataDir)
-		if st.ClientRoot == "" {
+		root = readState(cfg.DataDir).Root(cfg.Engine)
+		if root == "" {
 			fail(cfg, "Could not download GodsWar: "+err.Error())
 		}
 		cfg.logf("update check failed, starting the installed client: %v", err)
-		root = st.ClientRoot
 	}
 	if cfg.NoLaunch {
 		fmt.Println("installed at", root)
 		return
 	}
-	if err := Launch(root, cfg.Platform); err != nil {
+	if err := Launch(root, cfg.Platform, cfg.Engine); err != nil {
 		fail(cfg, "Could not start GodsWar: "+err.Error())
 	}
 	time.Sleep(500 * time.Millisecond)
+}
+
+// chooseEngine: Windows always runs GodsWar.exe (wine). On a Mac the -engine flag wins; otherwise the saved choice,
+// asked on the first start and again whenever Option is held while GodsWar opens (review console d11 = ask).
+func chooseEngine(cfg *Config, saved, flagValue string) string {
+	if cfg.Platform != "mac" {
+		return EngineWine
+	}
+	e := saved
+	switch {
+	case flagValue == EngineWine || flagValue == EngineNative:
+		e = flagValue
+	case saved == "" || optionHeld():
+		e = askEngine(saved)
+	}
+	if e != EngineNative {
+		e = EngineWine
+	}
+	if e != saved { // remember it now, so a failed first download does not ask again
+		st := readState(cfg.DataDir)
+		st.Engine = e
+		writeState(cfg.DataDir, st)
+	}
+	return e
 }
 
 var lockListener net.Listener

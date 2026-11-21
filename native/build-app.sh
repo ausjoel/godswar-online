@@ -6,8 +6,8 @@ mkdir -p build
 [ -f third_party/lib/libunicorn-gw.a ] || { echo "run third_party/build-unicorn.sh first"; exit 1; }
 nice -n 15 clang -O2 -g -Wall -Wno-unused-function -Wno-unused-variable -Wno-misleading-indentation -Wno-unused-but-set-variable -Wno-deprecated-declarations \
   -DGW_PATCHED_UC=1 -DGW_APP=1 -I/opt/homebrew/include -Ithird_party/unicorn-2.1.4/include -fobjc-arc \
-  host/*.c host/mac.m third_party/lib/libunicorn-gw.a -lpthread -liconv -lz \
-  -framework Cocoa -framework QuartzCore -framework AudioToolbox -framework CoreAudio -o build/gwplay || exit 1
+  host/*.c host/mac.m host/mtl.m third_party/lib/libunicorn-gw.a -lpthread -liconv -lz \
+  -framework Cocoa -framework QuartzCore -framework AudioToolbox -framework CoreAudio -framework Metal -o build/gwplay || exit 1
 APP="build/GodsWar Native.app"
 mkdir -p "$APP/Contents/MacOS"
 cp build/gwplay "$APP/Contents/MacOS/gwplay"

@@ -11,7 +11,10 @@
 //                                 typefile PATH | key NAME | snap PATH | frame N (wait for Present N) | quit)
 //
 // Settings file (key=value; '#' comments): client, server (default YOUR_SERVER_IP = live), port (default 6999),
-// sound (0/1), avatar (2 = new models, default; 1 = old), width, height. Rig test aid: account, password, autologin (0/1) are honoured only when server
+// sound (0/1), avatar (2 = new models, default; 1 = old), width, height (the game's own size: keep 1024x768, the UI is laid
+// out for it), uisize (2026-11-21, review console c06/d12: "auto" = largest 4:3 window that fits the screen, default, or
+// 100-200 = window size in % of 1024x768; changed in game from the View menu, saved back here), renderer (metal = GPU,
+// default since 0.6; cpu = the software rasteriser). Rig test aid: account, password, autologin (0/1) are honoured only when server
 // is a private address (10.x, 127.x, 192.168.x); the password is never logged; play.command keeps the file 600.
 #import <Cocoa/Cocoa.h>
 #import <QuartzCore/QuartzCore.h>
@@ -42,6 +45,24 @@ static void load_settings(NSString *path) {
   }
 }
 static NSString *S(NSString *k, NSString *def) { NSString *v = settings[k]; return v.length ? v : def; }
+static NSString *settings_path;
+// Rewrites one key in the settings file, keeping every other line (comments too) and the file's 600 mode.
+static void save_setting(NSString *key, NSString *value) {
+  settings[key] = value; if (!settings_path.length) return;
+  NSString *txt = [NSString stringWithContentsOfFile:settings_path encoding:NSUTF8StringEncoding error:nil] ?: @"";
+  NSMutableArray *out = [NSMutableArray array]; BOOL done = NO;
+  for (NSString *line in [txt componentsSeparatedByString:@"\n"]) {
+    NSString *l = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]; NSRange r = [l rangeOfString:@"="];
+    if (![l hasPrefix:@"#"] && r.location != NSNotFound && [[[l substringToIndex:r.location] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]] isEqual:key]) {
+      if (!done) [out addObject:[NSString stringWithFormat:@"%@=%@", key, value]]; done = YES; continue; }
+    [out addObject:line];
+  }
+  while (out.count && [out.lastObject length] == 0) [out removeLastObject];
+  if (!done) [out addObject:[NSString stringWithFormat:@"%@=%@", key, value]];
+  NSString *tmp = [settings_path stringByAppendingString:@".tmp"];
+  if ([[[out componentsJoinedByString:@"\n"] stringByAppendingString:@"\n"] writeToFile:tmp atomically:NO encoding:NSUTF8StringEncoding error:nil]) {
+    chmod(tmp.UTF8String, 0600); rename(tmp.UTF8String, settings_path.UTF8String); }
+}
 
 // ---- macOS key code -> Windows virtual key ----
 static unsigned vk_of_keycode(unsigned short kc) {
@@ -91,17 +112,22 @@ static unsigned vk_of_keycode(unsigned short kc) {
 - (void)drawRect:(NSRect)r {
   CGContextRef c = [[NSGraphicsContext currentContext] CGContext];
   CGContextSetRGBFillColor(c, 0, 0, 0, 1); CGContextFillRect(c, NSRectToCGRect(self.bounds));
-  if (img) { CGContextSetInterpolationQuality(c, kCGInterpolationMedium); CGContextDrawImage(c, NSRectToCGRect(self.bounds), img); }
+  if (img) { CGContextSetInterpolationQuality(c, kCGInterpolationMedium); CGContextDrawImage(c, NSRectToCGRect([self gameRect]), img); }
 }
 - (CGImageRef)image { return img; }
+// The game picture keeps 4:3 (CW:CH) inside the view: letterboxed in full screen or a non-4:3 window (layer gravity ResizeAspect).
+- (NSRect)gameRect {
+  NSRect b = self.bounds; double s = MIN(b.size.width / CW, b.size.height / CH); double w = CW * s, h = CH * s;
+  return NSMakeRect(b.origin.x + (b.size.width - w) / 2, b.origin.y + (b.size.height - h) / 2, w, h);
+}
 - (void)updateTrackingAreas {
   if (ta) [self removeTrackingArea:ta];
   ta = [[NSTrackingArea alloc] initWithRect:self.bounds options:NSTrackingMouseMoved | NSTrackingActiveInKeyWindow | NSTrackingInVisibleRect owner:self userInfo:nil];
   [self addTrackingArea:ta]; [super updateTrackingAreas];
 }
 - (void)client:(NSEvent *)e x:(int *)x y:(int *)y {
-  NSPoint p = [self convertPoint:e.locationInWindow fromView:nil]; NSRect b = self.bounds;
-  int cx = (int)(p.x * CW / b.size.width), cy = (int)((b.size.height - p.y) * CH / b.size.height);
+  NSPoint p = [self convertPoint:e.locationInWindow fromView:nil]; NSRect b = [self gameRect];
+  int cx = (int)floor((p.x - b.origin.x) * CW / b.size.width), cy = (int)floor((NSMaxY(b) - p.y) * CH / b.size.height);
   *x = cx < 0 ? 0 : cx >= CW ? CW - 1 : cx; *y = cy < 0 ? 0 : cy >= CH ? CH - 1 : cy;
 }
 #define MOUSE(sel, kind) - (void)sel:(NSEvent *)e { int x, y; [self client:e x:&x y:&y]; gw_in_mouse(kind, x, y); }
@@ -130,12 +156,61 @@ static GWView *g_view; static atomic_int g_wake_pending;
 static void front_ready(void) { if (atomic_exchange(&g_wake_pending, 1)) return;
   dispatch_async(dispatch_get_main_queue(), ^{ atomic_store(&g_wake_pending, 0); [g_view tick]; }); }
 // ---- app ----
-@interface GWApp : NSObject <NSApplicationDelegate, NSWindowDelegate> { @public NSWindow *win; GWView *view; NSArray *script; NSUInteger si; double t0; int waitframe; }
+@interface GWApp : NSObject <NSApplicationDelegate, NSWindowDelegate> { @public NSWindow *win; GWView *view; NSArray *script; NSUInteger si; double t0; int waitframe;
+  NSSlider *slider; NSTextField *sliderLabel; NSMenuItem *autoItem; }
+- (void)applyUISize:(NSString *)v save:(BOOL)save;
 @end
 static int test_mode;
 @implementation GWApp
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)a { return YES; }
 - (void)windowWillClose:(NSNotification *)n { exit(0); }
+// ---- UI size (review console c06 + d12): the game always draws 1024x768 (its UI's own layout, scale 1.0, so world entry
+// keeps the uifix fast path); the window shows it at 100-200 % or the largest 4:3 size that fits the screen ("auto").
+static int auto_percent(NSWindow *w) {
+  NSScreen *sc = w.screen ?: NSScreen.mainScreen; NSRect vf = sc.visibleFrame;
+  NSRect c = [w contentRectForFrameRect:vf];   // room left for the content after the title bar
+  int p = (int)floor(MIN(c.size.width / CW, c.size.height / CH) * 100);
+  return p < 50 ? 50 : p;
+}
+- (int)currentPercent { NSString *v = S(@"uisize", @"auto"); return [v isEqual:@"auto"] ? auto_percent(win) : MAX(100, MIN(200, v.intValue)); }
+- (void)applyUISize:(NSString *)v save:(BOOL)save {
+  if (![v isEqual:@"auto"]) v = [NSString stringWithFormat:@"%d", MAX(100, MIN(200, v.intValue))];
+  if (save) save_setting(@"uisize", v); else settings[@"uisize"] = v;
+  int p = [v isEqual:@"auto"] ? auto_percent(win) : MIN(v.intValue, auto_percent(win) > 100 ? MAX(100, auto_percent(win)) : 100);
+  if (!(win.styleMask & NSWindowStyleMaskFullScreen)) {
+    NSRect vf = (win.screen ?: NSScreen.mainScreen).visibleFrame, f = win.frame;
+    NSRect nf = [win frameRectForContentRect:NSMakeRect(0, 0, CW * p / 100.0, CH * p / 100.0)];
+    nf.origin = NSMakePoint(NSMidX(f) - nf.size.width / 2, NSMaxY(f) - nf.size.height);   // keep the title bar where it was
+    nf.origin.x = MAX(NSMinX(vf), MIN(nf.origin.x, NSMaxX(vf) - nf.size.width)); nf.origin.y = MAX(NSMinY(vf), MIN(nf.origin.y, NSMaxY(vf) - nf.size.height));
+    [win setFrame:nf display:YES animate:NO];
+  }
+  slider.intValue = [v isEqual:@"auto"] ? p : v.intValue; autoItem.state = [v isEqual:@"auto"] ? NSControlStateValueOn : NSControlStateValueOff;
+  sliderLabel.stringValue = [v isEqual:@"auto"] ? [NSString stringWithFormat:@"UI size: Auto (%d%%)", p]
+    : p < v.intValue ? [NSString stringWithFormat:@"UI size: %@%% (this screen fits %d%%)", v, p] : [NSString stringWithFormat:@"UI size: %@%%", v];
+  extern FILE *LOG;   // NULL until the emulator thread opens gwhost.log (the first call comes before that)
+  if (LOG) gw_log("ui size %s -> window %dx%d", v.UTF8String, (int)view.bounds.size.width, (int)view.bounds.size.height);
+  else NSLog(@"gwplay: ui size %@ -> window %.0fx%.0f", v, view.bounds.size.width, view.bounds.size.height);
+}
+- (void)sliderMoved:(NSSlider *)s { int v = (int)(lround(s.doubleValue / 5.0) * 5); [self applyUISize:[NSString stringWithFormat:@"%d", v] save:YES]; }
+- (void)uiAuto:(id)sender { [self applyUISize:@"auto" save:YES]; }
+- (void)uiBigger:(id)sender { [self applyUISize:[NSString stringWithFormat:@"%d", [self currentPercent] / 25 * 25 + 25] save:YES]; }
+- (void)uiSmaller:(id)sender { int p = [self currentPercent]; [self applyUISize:[NSString stringWithFormat:@"%d", (p % 25 ? p / 25 * 25 : p - 25)] save:YES]; }
+- (void)uiActual:(id)sender { [self applyUISize:@"100" save:YES]; }
+- (void)buildViewMenu:(NSMenu *)bar {
+  NSMenuItem *vi = [NSMenuItem new]; [bar addItem:vi]; NSMenu *m = [[NSMenu alloc] initWithTitle:@"View"]; vi.submenu = m;
+  NSView *box = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 240, 52)];
+  sliderLabel = [NSTextField labelWithString:@"UI size"]; sliderLabel.frame = NSMakeRect(20, 30, 210, 18); [box addSubview:sliderLabel];
+  slider = [NSSlider sliderWithValue:100 minValue:100 maxValue:200 target:self action:@selector(sliderMoved:)];
+  slider.frame = NSMakeRect(18, 4, 204, 24); slider.numberOfTickMarks = 5; slider.continuous = YES; [box addSubview:slider];
+  NSMenuItem *sizeItem = [NSMenuItem new]; sizeItem.view = box; [m addItem:sizeItem];
+  autoItem = [m addItemWithTitle:@"Auto (fit the screen)" action:@selector(uiAuto:) keyEquivalent:@""]; autoItem.target = self;
+  NSMenuItem *it;
+  it = [m addItemWithTitle:@"Bigger" action:@selector(uiBigger:) keyEquivalent:@"="]; it.target = self;
+  it = [m addItemWithTitle:@"Smaller" action:@selector(uiSmaller:) keyEquivalent:@"-"]; it.target = self;
+  it = [m addItemWithTitle:@"Actual Size (100%)" action:@selector(uiActual:) keyEquivalent:@"0"]; it.target = self;
+  [m addItem:[NSMenuItem separatorItem]];
+  it = [m addItemWithTitle:@"Enter Full Screen" action:@selector(toggleFullScreen:) keyEquivalent:@"f"]; it.keyEquivalentModifierMask = NSEventModifierFlagCommand | NSEventModifierFlagControl;
+}
 - (void)tick:(NSTimer *)t {
   [view tick]; if (test_mode) [self step];
   // the emulator block-buffers gwhost.log between Presents; flush about once a second from here too, so the
@@ -144,7 +219,7 @@ static int test_mode;
   extern FILE *LOG; if (now - lastflush > 1.0) { lastflush = now; if (LOG) fflush(LOG); }
 }
 - (NSEvent *)mouse:(NSEventType)type x:(int)x y:(int)y {
-  NSRect b = view.bounds; NSPoint p = NSMakePoint((x + 0.5) * b.size.width / CW, b.size.height - (y + 0.5) * b.size.height / CH);
+  NSRect b = [view gameRect]; NSPoint p = NSMakePoint(b.origin.x + (x + 0.5) * b.size.width / CW, NSMaxY(b) - (y + 0.5) * b.size.height / CH);
   p = [view convertPoint:p toView:nil];
   return [NSEvent mouseEventWithType:type location:p modifierFlags:0 timestamp:0 windowNumber:win.windowNumber context:nil eventNumber:0 clickCount:1 pressure:1];
 }
@@ -194,6 +269,8 @@ static unsigned short kc_of_char(unichar c) {
       NSLog(@"gwplay test: layer snapshot %@ (frame %d)", rest, g_present_frames);
     }
     else if ([cmd isEqual:@"frame"]) { waitframe = x; return; }
+    else if ([cmd isEqual:@"uisize"]) { [self applyUISize:rest save:YES]; NSLog(@"gwplay test: uisize %@ -> view %.0fx%.0f", rest, view.bounds.size.width, view.bounds.size.height); }
+    else if ([cmd isEqual:@"winsize"]) { [win setContentSize:NSMakeSize(x, y)]; NSLog(@"gwplay test: window content %dx%d, game rect %@", x, y, NSStringFromRect([view gameRect])); }
     else if ([cmd isEqual:@"quit"]) { NSLog(@"gwplay test: quit"); exit(0); }
   }
 }
@@ -207,7 +284,7 @@ int main(int argc, char **argv) {
     NSString *sp = nil;
     for (int i = 1; i + 1 < argc; i++) if (!strcmp(argv[i], "--settings")) sp = [NSString stringWithUTF8String:argv[i + 1]];
     if (!sp) sp = [[NSBundle mainBundle] pathForResource:@"settings" ofType:@"ini"];
-    load_settings(sp ?: @"");
+    load_settings(sp ?: @""); settings_path = sp;
     NSString *base = sp ? [sp stringByDeletingLastPathComponent] : NSHomeDirectory();
     NSString *client = S(@"client", @"");
     if (client.length && ![client hasPrefix:@"/"]) client = [[base stringByAppendingPathComponent:client] stringByStandardizingPath];
@@ -224,6 +301,8 @@ int main(int argc, char **argv) {
       S(@"port", @"6999"), S(@"server", @"YOUR_SERVER_IP"), CW, CH, S(@"sound", @"1"),
       S(@"avatar", @"2")];   // 2 = new character models (Characters_new, what the Wine app's players use), 1 = old
     [cfg writeToFile:[run stringByAppendingPathComponent:@"config.ini"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    // renderer (2026-11-21, console d13): metal = GPU (host/mtl.m), cpu = the band rasteriser; an env GW_RENDERER wins
+    setenv("GW_RENDERER", [S(@"renderer", @"metal") isEqual:@"cpu"] ? "cpu" : "metal", 0);
     setenv("GW_SHOT_EVERY", "0", 0); setenv("GW_STAT_EVERY", "250", 0);
     setenv("GW_SPIKE", "80", 0);   // 2026-11-18: slow-frame log + frame-time histogram in gwhost.log (cheap; no sampler, no shim timing)
     if (!test_mode && [S(@"sound", @"1") isEqual:@"1"]) setenv("GW_AUDIO", "coreaudio", 0);
@@ -261,9 +340,11 @@ int main(int argc, char **argv) {
     NSRect fr = NSMakeRect(0, 0, CW, CH);
     app->win = [[NSWindow alloc] initWithContentRect:fr styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];
     app->win.title = @"GodsWar"; app->win.delegate = app; app->win.contentAspectRatio = NSMakeSize(CW, CH); app->win.acceptsMouseMovedEvents = YES;
-    app->win.releasedWhenClosed = NO;
+    app->win.releasedWhenClosed = NO; app->win.collectionBehavior = NSWindowCollectionBehaviorFullScreenPrimary;
     app->view = [[GWView alloc] initWithFrame:fr]; app->view.wantsLayer = YES; app->view.layerContentsRedrawPolicy = NSViewLayerContentsRedrawNever;
-    app->view.layer.contentsGravity = kCAGravityResize; app->view.layer.magnificationFilter = kCAFilterLinear; app->view.layer.minificationFilter = kCAFilterLinear; app->view.layer.opaque = YES; app->win.contentView = app->view; [app->win makeFirstResponder:app->view];
+    app->view.layer.contentsGravity = kCAGravityResizeAspect; app->view.layer.magnificationFilter = kCAFilterLinear; app->view.layer.minificationFilter = kCAFilterLinear; app->view.layer.opaque = YES; app->win.contentView = app->view; [app->win makeFirstResponder:app->view];
+    if (NSApp.mainMenu) [app buildViewMenu:NSApp.mainMenu]; else if (test_mode) { NSMenu *bar = [NSMenu new]; [bar addItem:[NSMenuItem new]]; [app buildViewMenu:bar]; }
+    [app applyUISize:S(@"uisize", @"auto") save:NO];
     if (test_mode) {
       NSString *txt = [NSString stringWithContentsOfFile:[NSString stringWithUTF8String:getenv("GW_APP_TEST")] encoding:NSUTF8StringEncoding error:nil];
       app->script = [txt componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]];

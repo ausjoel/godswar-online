@@ -36,3 +36,27 @@ func rosettaProblem() string {
 	}
 	return "GodsWar needs Rosetta on this Mac. Open Terminal, run:  softwareupdate --install-rosetta --agree-to-license  then open GodsWar again."
 }
+
+// optionHeld: the Option key is down while the launcher starts (no permission needed for the modifier state).
+func optionHeld() bool {
+	out, _ := exec.Command("/usr/bin/osascript", "-l", "JavaScript", "-e", `ObjC.import("AppKit"); ($.NSEvent.modifierFlags & 524288) ? "1" : "0"`).Output()
+	return strings.TrimSpace(string(out)) == "1"
+}
+
+// askEngine shows the engine choice; a closed or timed-out dialog keeps the current choice (Wine when none).
+func askEngine(current string) string {
+	def := "Wine (recommended)"
+	if current == EngineNative {
+		def = "Native (Beta)"
+	}
+	msg := "How should GodsWar run on this Mac?\n\nWine (recommended): the tested way to play.\nNative (Beta): runs the game without Wine; still being tested.\n\nTo change this later, hold the Option key while opening GodsWar."
+	out, err := exec.Command("/usr/bin/osascript", "-e", fmt.Sprintf(`button returned of (display dialog "%s" with title "GodsWar" buttons {"Native (Beta)", "Wine (recommended)"} default button "%s" giving up after 300)`, esc(msg), def)).Output()
+	switch strings.TrimSpace(string(out)) {
+	case "Native (Beta)":
+		return EngineNative
+	case "Wine (recommended)":
+		return EngineWine
+	}
+	_ = err
+	return current
+}

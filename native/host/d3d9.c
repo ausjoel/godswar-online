@@ -7,6 +7,8 @@
 #include <time.h>
 
 int png_write_argb(const char *path, const u32 *src, int w, int h, int pitch, int force_opaque);
+#include "mtl.h"
+static int g_metal;   // 1 = GW_RENDERER=metal: jobs are encoded for the GPU (host/mtl.m) instead of the band rasteriser
 extern void *vs_compile(u32 code, u32 nbytes); extern int vs_ok(void *p); extern int vs_input_reg(void *p, int usage, int idx);
 extern void vs_begin(void *p, float (*vsc)[4]); extern void vs_run(void *p, float in[16][4], float pos[4], float d0[4], float d1[4], float t[8][4]);
 
@@ -44,6 +46,7 @@ typedef struct Obj {
   int kind; u32 g; int ref; u32 usage, pool, fmt;
   // surfaces
   int w, h, pitch, size; u32 mem; struct Obj *container; int level, face; u32 *cache; int dirty; float *z; unsigned long rser, wser;  // raster-queue serials of the last queued read / write
+  void *mt; int mcpu, mgpu;   // Metal (GW_RENDERER=metal): GPU texture; CPU wrote guest memory since the last upload; GPU wrote since the last read-back
   // textures
   int levels; struct Obj *lv[16 * 6];
   // buffers
@@ -300,14 +303,14 @@ static void copy_rect(Obj *src, int sx, int sy, Obj *dst, int dx, int dy, int w,
     for (int y = 0; y < h; y++) { if (sy + y >= src->h || dy + y >= dst->h) break;
       int n = w; if (sx + n > src->w) n = src->w - sx; if (dx + n > dst->w) n = dst->w - dx; if (n <= 0) break;
       memcpy(P(dst->mem + (dy + y) * dst->pitch + dx * bpp), P(src->mem + (sy + y) * src->pitch + sx * bpp), n * bpp); }
-    dst->dirty = 1; return;
+    dst->dirty = 1; dst->mcpu = 1; return;
   }
-  if (is_dxt(src->fmt) && src->fmt == dst->fmt && !sx && !sy && !dx && !dy) { memcpy(P(dst->mem), P(src->mem), src->size < dst->size ? src->size : dst->size); dst->dirty = 1; return; }
+  if (is_dxt(src->fmt) && src->fmt == dst->fmt && !sx && !sy && !dx && !dy) { memcpy(P(dst->mem), P(src->mem), src->size < dst->size ? src->size : dst->size); dst->dirty = 1; dst->mcpu = 1; return; }
   if (dst->fmt == F_A8R8G8B8 || dst->fmt == F_X8R8G8B8) {
     u32 *s = surf_argb(src);
     for (int y = 0; y < h && sy + y < src->h && dy + y < dst->h; y++) for (int x = 0; x < w && sx + x < src->w && dx + x < dst->w; x++)
       w32(dst->mem + (dy + y) * dst->pitch + 4 * (dx + x), s[(sy + y) * src->w + sx + x]);
-    dst->dirty = 1; return;
+    dst->dirty = 1; dst->mcpu = 1; return;
   }
   gw_log("copy_rect: unsupported %u -> %u", src->fmt, dst->fmt);
 }
@@ -332,12 +335,12 @@ static u32 Dev_StretchRect(void) { rq_sync();
   for (int y = dy0; y < dy1 && y < d->h; y++) for (int x = dx0; x < dx1 && x < d->w; x++) {
     int u = sx0 + (x - dx0) * (sx1 - sx0) / (dx1 - dx0), v = sy0 + (y - dy0) * (sy1 - sy0) / (dy1 - dy0);
     if (u >= 0 && v >= 0 && u < s->w && v < s->h) w32(d->mem + y * d->pitch + 4 * x, src[v * s->w + u]); }
-  d->dirty = 1; return 0;
+  d->dirty = 1; d->mcpu = 1; return 0;
 }
 static u32 Dev_ColorFill(void) { rq_sync();
   Obj *s = O(ARG(1)); u32 r = ARG(2), c = ARG(3); int x0 = 0, y0 = 0, x1 = s->w, y1 = s->h;
   if (r) { x0 = r32(r); y0 = r32(r + 4); x1 = r32(r + 8); y1 = r32(r + 12); }
-  for (int y = y0; y < y1; y++) for (int x = x0; x < x1; x++) w32(s->mem + y * s->pitch + 4 * x, c); s->dirty = 1; return 0;
+  for (int y = y0; y < y1; y++) for (int x = x0; x < x1; x++) w32(s->mem + y * s->pitch + 4 * x, c); s->dirty = 1; s->mcpu = 1; return 0;
 }
 static u32 Dev_CreateOffscreenPlainSurface(void) { Obj *s = new_surface(ARG(1), ARG(2), ARG(3), NULL, 0); w32(ARG(6), s->g); return 0; }
 static u32 Dev_SetRenderTarget(void) { Obj *d = THIS; if (ARG(1) == 0) { d->rt = ARG(2) ? O(ARG(2)) : d->bb; State *s = &d->cur; s->vp[0] = s->vp[1] = 0; s->vp[2] = d->rt->w; s->vp[3] = d->rt->h; } return 0; }
@@ -682,7 +685,7 @@ static void pipe_setup(void) {
   int nt = 0; for (int st = 0; st < 8; st++) { if (s->tss[st][1] == 1) break; nt = st + 1; }
   p->ntc = 1; for (int st = 0; st < nt; st++) { int ci = (s->tss[st][11] & 7) + 1; if (ci > p->ntc) p->ntc = ci; }
   p->usespec = s->rs[29];
-  for (int st = 0; st < nt; st++) if (s->tex[st]) { Obj *t = s->tex[st]; Obj *l = t->kind == K_SURF ? t : t->lv[0]; if (l) surf_argb(l); }  // decode once per draw, not per texel
+  if (!g_metal) for (int st = 0; st < nt; st++) if (s->tex[st]) { Obj *t = s->tex[st]; Obj *l = t->kind == K_SURF ? t : t->lv[0]; if (l) surf_argb(l); }  // decode once per draw, not per texel
   if (g_slowrast || nt > 4 || s->rs[29] || s->rs[28] || (RT->fmt != F_A8R8G8B8 && RT->fmt != F_X8R8G8B8)) return;   // fog: float path
   p->nst = nt; memset(p->uvslot, 0xFF, sizeof p->uvslot);
   for (int st = 0; st < nt; st++) {
@@ -908,6 +911,63 @@ static uint64_t g_rq_wait_ns;  // emulator thread time spent waiting for the wor
 static uint64_t tcpu_ns(void) { struct timespec t; clock_gettime(CLOCK_THREAD_CPUTIME_ID, &t); return (uint64_t)t.tv_sec * 1000000000ull + t.tv_nsec; }
 uint64_t mono_ns(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return (uint64_t)t.tv_sec * 1000000000ull + t.tv_nsec; }
 void (*gw_front_ready)(void);
+// ---- Metal backend (GW_RENDERER=metal, METAL-PLAN.md) ----
+static Obj **mgpu_list; static int mgpu_n, mgpu_cap;
+static void mgpu_mark(Obj *s) { if (s->mgpu) return; s->mgpu = 1; if (mgpu_n == mgpu_cap) { mgpu_cap = mgpu_cap ? 2 * mgpu_cap : 16; mgpu_list = realloc(mgpu_list, sizeof(Obj *) * mgpu_cap); } mgpu_list[mgpu_n++] = s; }
+static void *gpu_surface(Obj *s) {   // GPU copy of a colour surface, uploaded when the guest CPU wrote it
+  if (!s) return NULL;
+  if (!s->mt || s->mcpu) { s->mt = mtl_texture(s->mt, s->w, s->h, 0);
+    if (!s->mgpu) { if (s->fmt == F_X8R8G8B8 && s->pitch == s->w * 4) s->dirty = 1; mtl_upload(s->mt, surf_argb(s), s->w, s->h); }
+    s->mcpu = 0; }
+  return s->mt;
+}
+static void *gpu_depth(Obj *s) { if (!s || !s->z) return NULL; if (!s->mt) s->mt = mtl_texture(NULL, s->w, s->h, 1); return s->mt; }
+static void mtl_front_done(void) { extern volatile unsigned g_front_seq; __atomic_add_fetch(&g_front_seq, 1, __ATOMIC_RELEASE); if (gw_front_ready) gw_front_ready(); }
+static void mtl_sync_all(void) {   // the guest CPU is about to look at surfaces: finish the GPU and copy what it wrote back
+  mtl_pool((void (*)(void *))mtl_finish, NULL);
+  for (int i = 0; i < mgpu_n; i++) { Obj *s = mgpu_list[i]; s->mgpu = 0;
+    if ((s->fmt == F_A8R8G8B8 || s->fmt == F_X8R8G8B8) && s->mt) { mtl_readback(s->mt, P(s->mem), s->pitch, s->w, s->h); s->dirty = 1; }
+    else { static int warned; if (!warned++) gw_log("metal: read-back of format %u not supported", s->fmt); } }
+  mgpu_n = 0;
+}
+extern u32 *g_front;
+static MtlV *mvb; static int mvcap;
+static void mtl_run_batch_(Batch *b);
+static void mtl_run_batch(Batch *b) { mtl_pool((void (*)(void *))mtl_run_batch_, b); }
+static void mtl_run_batch_(Batch *b) {
+  for (int j = 0; j < b->nj; j++) {
+    Job *jb = &b->jobs[j]; RState *s = &jb->st;
+    if (jb->kind == 2) { void *bb = gpu_surface(jb->rt); mtl_present(bb, jb->rt->w, jb->rt->h, g_front, mtl_front_done); continue; }
+    if (jb->kind == 1) { void *rt = gpu_surface(jb->rt); if (!rt) { static int w; if (!w++) gw_log("metal: depth-only clear without a target skipped"); continue; }
+      mtl_clear(rt, gpu_depth(jb->ds), jb->cx0, jb->cy0, jb->cx1, jb->cy1, jb->fl, jb->col, jb->z); if (jb->fl & 1) mgpu_mark(jb->rt); continue; }
+    if (!jb->nt) continue;
+    MtlUni u; memset(&u, 0, sizeof u); MtlFixed f; memset(&f, 0, sizeof f);
+    int nt = 0; for (int st = 0; st < 8; st++) { if (s->tss[st][1] == 1) break; nt = st + 1; }
+    if (nt > 4) { static int w; if (!w++) gw_log("metal: draw with %d texture stages, only 4 used", nt); nt = 4; }
+    void *tex[8] = {0};
+    for (int st = 0; st < nt; st++) { const u32 *t = s->tss[st]; u32 *o = u.st[st];
+      o[0] = t[1]; o[1] = t[2]; o[2] = t[3]; o[3] = t[4]; o[4] = t[5]; o[5] = t[6]; o[6] = t[11] & 7; o[7] = t[26]; o[8] = t[27]; o[9] = t[28];
+      Obj *to = s->tex[st]; Obj *l = to ? (to->kind == K_SURF ? to : to->lv[0]) : NULL;
+      if (l) { tex[st] = gpu_surface(l); o[10] = 1; }
+      const u32 *ss = s->ss[st]; f.samp[st] = (ss[5] >= 2 || ss[6] >= 2 ? 1 : 0) | (ss[1] & 3) << 4 | (ss[2] & 3) << 8; }
+    u.nst = nt; u.tfactor = s->rs[60]; u.specen = s->rs[29]; u.fogon = s->rs[28]; u.fogtab = s->rs[35]; u.fogw = s->fogw; u.fogcol = s->rs[34];
+    u.atest = s->rs[15]; u.afunc = s->rs[25]; u.aref = s->rs[24]; memcpy(&u.fogstart, &s->rs[36], 4); memcpy(&u.fogend, &s->rs[37], 4); memcpy(&u.fogdens, &s->rs[38], 4);
+    u.rtw = (float)jb->rt->w; u.rth = (float)jb->rt->h;
+    f.blend = s->rs[27] != 0; f.sbf = s->rs[19]; f.dbf = s->rs[20]; f.bop = s->rs[171] ? s->rs[171] : 1; f.sepa = s->rs[206] != 0; f.sba = s->rs[207]; f.dba = s->rs[208];
+    f.wmask = s->rs[168] & 15; f.bfactor = s->rs[193]; f.zen = jb->ds && jb->ds->z && s->rs[7]; f.zfunc = s->rs[23]; f.zwrite = s->rs[14];
+    if (mvcap < jb->nt * 3) { mvcap = jb->nt * 3 + 1024; mvb = realloc(mvb, sizeof(MtlV) * mvcap); }
+    int nv = 0; u32 cull = s->rs[22];
+    for (int i = jb->t0; i < jb->t0 + jb->nt; i++) { const SV *a = &b->tris[i].v[0], *bv = &b->tris[i].v[1], *c = &b->tris[i].v[2];
+      float area = (bv->x - a->x) * (c->y - a->y) - (c->x - a->x) * (bv->y - a->y);
+      if (area == 0 || !(area == area) || (cull == 3 && area < 0) || (cull == 2 && area > 0)) continue;
+      const SV *V3[3] = {a, bv, c};
+      for (int k = 0; k < 3; k++) { const SV *p = V3[k]; MtlV *o = &mvb[nv++];
+        o->pos[0] = p->x; o->pos[1] = p->y; o->pos[2] = p->z; o->pos[3] = p->iw; memcpy(o->c, p->c, 16); memcpy(o->sp, p->sp, 16);
+        for (int t = 0; t < 4; t++) { o->t[t][0] = p->t[t][0]; o->t[t][1] = p->t[t][1]; } o->fog = p->fog; } }
+    mtl_draw(gpu_surface(jb->rt), gpu_depth(jb->ds), &u, &f, tex, jb->cx0, jb->cy0, jb->cx1, jb->cy1, mvb, nv);
+    mgpu_mark(jb->rt);
+  }
+}
 static void run_batch(Batch *b, int band, int nb) {
   uint64_t t0 = tcpu_ns(); long n = 0;
   for (int j = 0; j < b->nj; j++) {
@@ -947,6 +1007,7 @@ static void *rworker(void *arg) {
 static void rq_init(void) {
   if (nrth >= 0) return;
   nrth = getenv("GW_RTHREADS") ? atoi(getenv("GW_RTHREADS")) : 6; if (nrth < 1) nrth = 1; if (nrth > 32) nrth = 32;
+  { const char *r = getenv("GW_RENDERER"); if (r && !strcmp(r, "metal")) { if (mtl_init()) { g_metal = 1; nrth = 1; } else gw_log("metal unavailable: CPU rasteriser"); } }
   if (getenv("GW_RQN")) { RQ_N = atoi(getenv("GW_RQN")); if (RQ_N < 2) RQ_N = 2; if (RQ_N > RQ_MAX) RQ_N = RQ_MAX; }
   if (nrth > 1) for (int i = 0; i < nrth; i++) pthread_create(&rth[i], NULL, rworker, (void *)(intptr_t)i);
   gw_log("rasteriser: %d worker thread(s)%s", nrth > 1 ? nrth : 0, nrth > 1 ? ", deferred ring queue" : " (synchronous on the emulator thread)");
@@ -965,19 +1026,19 @@ static void rq_wait_upto(unsigned long need) {   // wait until every band finish
 static void rq_submit(void) {
   rq_init(); Batch *b = &bq[bbuild]; if (!b->nj) return;
   if (next_barrier) { b->barrier = 1; next_barrier = 0; }
-  if (nrth <= 1) { run_batch(b, 0, 1); batch_reset(b); rq_sub++; ser_built = rq_sub + 1; ser_done = rq_sub; g_pix = rpix[0]; return; }
+  if (nrth <= 1) { if (g_metal) mtl_run_batch(b); else run_batch(b, 0, 1); batch_reset(b); rq_sub++; ser_built = rq_sub + 1; ser_done = rq_sub; g_pix = rpix[0]; return; }
   pthread_mutex_lock(&rmu); rq_sub++; ser_built = rq_sub + 1; pthread_cond_broadcast(&rcv_go); pthread_mutex_unlock(&rmu);
   // the next building slot must be free: all bands done with the batch that used it RQ_N submissions ago
   if (rq_sub >= RQ_N) rq_wait_upto(rq_sub - RQ_N + 1);
   batch_reset(&bq[bbuild]);
 }
 static void rq_wait(void) { rq_wait_upto(rq_sub); }
-static void rq_sync(void) { rq_submit(); rq_wait(); }
+static void rq_sync(void) { rq_submit(); rq_wait(); if (g_metal) mtl_sync_all(); }
 // write-after-read across bands: a surface that a possibly unfinished batch samples as a texture must not be
 // overwritten by a later batch before every band is done reading it (e.g. the next frame's scene render into the
 // render target that the previous frame's composite is still reading in another band)
 static void rq_order_write(Obj *s) { if (s && s->rser > ser_done) { if (s->rser == ser_built) rq_submit(); next_barrier = 1; } }
-static void obj_sync(Obj *s) { if (s && (s->rser > ser_done || s->wser > ser_done)) rq_sync(); }   // before the guest CPU touches s
+static void obj_sync(Obj *s) { if (s && ((s->rser > ser_done || s->wser > ser_done) || (g_metal && s->mgpu))) rq_sync(); }   // before the guest CPU touches s
 static Job *job_new(int kind) {
   Batch *b = &bq[bbuild];
   if (b->nj == b->cj) { b->cj = b->cj ? b->cj * 2 : 256; b->jobs = realloc(b->jobs, sizeof(Job) * b->cj); }
@@ -1002,7 +1063,7 @@ static u32 Dev_Clear(void) {   // queued as a raster job (rows split over the ba
     if (s->rs[174]) { int sx0 = s->scissor[0], sy0 = s->scissor[1], sx1 = s->scissor[2], sy1 = s->scissor[3];
       if (x0 < sx0) x0 = sx0; if (y0 < sy0) y0 = sy0; if (x1 > sx1) x1 = sx1; if (y1 > sy1) y1 = sy1; }
     if (x0 < 0) x0 = 0; if (y0 < 0) y0 = 0; if (x0 >= x1 || y0 >= y1) continue;
-    Job *j = job_new(1); j->rt = (fl & 1) ? d->rt : NULL; j->ds = (fl & 2) ? d->ds : NULL; j->fl = fl; j->col = col; j->z = z;
+    Job *j = job_new(1); j->rt = d->rt;   // colour is gated on fl & 1 (Metal needs the target for depth-only clears too) j->ds = (fl & 2) ? d->ds : NULL; j->fl = fl; j->col = col; j->z = z;
     j->cx0 = x0; j->cy0 = y0; j->cx1 = x1; j->cy1 = y1; RS = &j->st; j->st.rs[22] = 1;
     if (fl & 1) { d->rt->wser = ser_built; d->rt->dirty = 1; } if ((fl & 2) && d->ds) d->ds->wser = ser_built;
   }
@@ -1230,7 +1291,7 @@ static u32 lock_surface(Obj *s, u32 lr, u32 rect) {
   obj_sync(s); if (s->container && s->container->lv[0]) obj_sync(s->container->lv[0]);
   u32 off = 0;
   if (rect) { int x = r32(rect), y = r32(rect + 4); if (is_dxt(s->fmt)) off = (y / 4) * s->pitch + (x / 4) * (s->fmt == F_DXT1 ? 8 : 16); else off = y * s->pitch + x * (fmt_bpp(s->fmt) / 8); }
-  w32(lr, s->pitch); w32(lr + 4, s->mem + off); s->dirty = 1; return 0;
+  w32(lr, s->pitch); w32(lr + 4, s->mem + off); s->dirty = 1; s->mcpu = 1; return 0;
 }
 static u32 Tex_LockRect(void) { Obj *t = THIS; u32 l = ARG(1); if (l >= (u32)t->levels) return D3DERR_INVALIDCALL; return lock_surface(t->lv[l], ARG(2), ARG(3)); }
 static u32 Tex_UnlockRect(void) { Obj *t = THIS; u32 l = ARG(1); if (l < (u32)t->levels) t->lv[l]->dirty = 1; return 0; }
