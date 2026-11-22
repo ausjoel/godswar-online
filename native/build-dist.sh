@@ -8,7 +8,7 @@
 # GW_AUTO_UPDATE=0 skips it), then execs gwplay. Ad-hoc signed (no hardened runtime: the emulator needs MAP_JIT).
 set -euo pipefail
 cd "$(dirname "$0")"
-VER=0.6; STAMP=$(date +%Y%m%d%H%M)
+VER=0.6.1; STAMP=$(date +%Y%m%d%H%M)
 SRCAPP=/path/to/GodsWar
 [ -x build/gwplay ] || ./build-app.sh
 OUT="dist/$VER"; rm -rf "$OUT"; mkdir -p "$OUT"; APP="$OUT/GodsWar Native.app"; M="$APP/Contents/MacOS"; R="$APP/Contents/Resources"

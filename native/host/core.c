@@ -449,6 +449,10 @@ char *map_path(const char *gp, int forwrite) {
   snprintf(out, 4200, "%s/%s", g_run_dir, clean);
   if (forwrite) { mkdirs_for(out); return out; }
   if (exists(out)) return out;
+  // GW_UI_OVERLAY (2026-11-21, console n01 "Compact layout"): a layout set such as Client/UIScale/1280x960 whose
+  // files replace the client's same-named files for reading, so the client folder (and gwupdate's hashes) stay stock
+  { static const char *ov = (const char *)-1; if (ov == (const char *)-1) ov = getenv("GW_UI_OVERLAY");
+    if (ov && *ov) { snprintf(out, 4200, "%s/%s", ov, clean); if (exists(out)) return out; } }
   snprintf(out, 4200, "%s/%s", g_client_dir, clean);
   return out;
 }
@@ -775,6 +779,28 @@ static void uifix_apply(void) {
   for (int i = 0; i < 4; i++) { u32 va = sites[i].va, tgt = sites[i].reg == 0xd2 ? caveE : caveA; i32 rel = (i32)(tgt - (va + 5));
     M[va] = 0xe8; memcpy(M + va + 1, &rel, 4); }
   gw_flush_code(0x697f00, 0x900); gw_flush_code(caveE, 0x40); gw_log("uifix: UI rescale skip applied in memory (GW_UIFIX=0 to disable)"); }
+// ---- GW_UI_OVERLAY's exe-bytes.txt ("<file offset> <stock hex> <new hex>" per line, the same file the Wine app's
+// set_ui writes to disk): applied in guest memory, all or nothing (every site must hold its stock bytes first).
+static void uiset_apply(void) {
+  const char *ov = getenv("GW_UI_OVERLAY"); if (!ov || !*ov) return;
+  char path[1200]; snprintf(path, sizeof path, "%s/exe-bytes.txt", ov); FILE *f = fopen(path, "r");
+  if (!f) { gw_log("uiset: no %s", path); return; }
+  u32 b = 0x400000, pe = b + r32(b + 0x3c); int ns = r16(pe + 6); u32 sec = pe + 24 + r16(pe + 20);
+  struct { u32 va; u8 stock[32], neu[32]; int n; } site[256]; int nsite = 0; char line[256];
+  while (fgets(line, sizeof line, f) && nsite < 256) {
+    unsigned long off; char hs[80], hn[80]; if (sscanf(line, "%lu %79s %79s", &off, hs, hn) != 3) continue;
+    int n = (int)strlen(hs) / 2; if (n > 32 || (int)strlen(hn) != 2 * n) continue;
+    u32 va = 0; for (int i = 0; i < ns; i++) { u32 h = sec + 40 * i, rva = r32(h + 12), rsz = r32(h + 16), roff = r32(h + 20);
+      if (off >= roff && off < roff + rsz) { va = b + rva + (u32)(off - roff); break; } }
+    if (!va) { gw_log("uiset: offset %lu outside the sections, nothing applied", off); fclose(f); return; }
+    site[nsite].va = va; site[nsite].n = n;
+    for (int i = 0; i < n; i++) { unsigned x, y; sscanf(hs + 2 * i, "%2x", &x); sscanf(hn + 2 * i, "%2x", &y); site[nsite].stock[i] = x; site[nsite].neu[i] = y; }
+    nsite++; }
+  fclose(f);
+  for (int i = 0; i < nsite; i++) if (memcmp(M + site[i].va, site[i].stock, site[i].n)) { gw_log("uiset: %08x not stock, layout left stock", site[i].va); return; }
+  for (int i = 0; i < nsite; i++) { memcpy(M + site[i].va, site[i].neu, site[i].n); gw_flush_code(site[i].va & ~15u, 64); }
+  gw_log("uiset: %d exe sites patched in memory for %s", nsite, ov);
+}
 // ---- in-memory SSE culling, ON by default (GW_CULLFIX=0 = off): 0x7760d0 -> patches/cull_sse.bin, exact (GW_SELFTEST=cull)
 #include "cull_sse_bin.h"
 static void cullfix_apply(void) {
@@ -824,7 +850,7 @@ static void scalediff_start(void) { if (!getenv("GW_SCALEDIFF")) return;
     uc_hook_add(uc, &h, UC_HOOK_CODE, (void *)sd_after_hook, NULL, sites[i] + 2, sites[i] + 2); }
   atexit(sd_report); gw_log("scalediff on"); }
 static uc_err run_guest(u32 start) {
-  u32 eip = start; uc_err e; static int prof_init; if (!prof_init) { prof_init = 1; prof_start(); uifix_apply(); cullfix_apply(); cc_start(); skipscale_start(); scalediff_start(); }
+  u32 eip = start; uc_err e; static int prof_init; if (!prof_init) { prof_init = 1; prof_start(); uifix_apply(); cullfix_apply(); uiset_apply(); cc_start(); skipscale_start(); scalediff_start(); }
   for (;;) {
     in_emu = 1; e = uc_emu_start(uc, eip, MAGIC_EXIT, 0, 0); in_emu = 0;
     eip = rd(UC_X86_REG_EIP);

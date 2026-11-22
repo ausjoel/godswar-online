@@ -1063,7 +1063,8 @@ static u32 Dev_Clear(void) {   // queued as a raster job (rows split over the ba
     if (s->rs[174]) { int sx0 = s->scissor[0], sy0 = s->scissor[1], sx1 = s->scissor[2], sy1 = s->scissor[3];
       if (x0 < sx0) x0 = sx0; if (y0 < sy0) y0 = sy0; if (x1 > sx1) x1 = sx1; if (y1 > sy1) y1 = sy1; }
     if (x0 < 0) x0 = 0; if (y0 < 0) y0 = 0; if (x0 >= x1 || y0 >= y1) continue;
-    Job *j = job_new(1); j->rt = d->rt;   // colour is gated on fl & 1 (Metal needs the target for depth-only clears too) j->ds = (fl & 2) ? d->ds : NULL; j->fl = fl; j->col = col; j->z = z;
+    // the target is kept for depth-only clears too (Metal needs it); colour writes stay gated on fl & 1
+    Job *j = job_new(1); j->rt = d->rt; j->ds = (fl & 2) ? d->ds : NULL; j->fl = fl; j->col = col; j->z = z;
     j->cx0 = x0; j->cy0 = y0; j->cx1 = x1; j->cy1 = y1; RS = &j->st; j->st.rs[22] = 1;
     if (fl & 1) { d->rt->wser = ser_built; d->rt->dirty = 1; } if ((fl & 2) && d->ds) d->ds->wser = ser_built;
   }

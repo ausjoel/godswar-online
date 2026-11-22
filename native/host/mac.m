@@ -14,7 +14,8 @@
 // sound (0/1), avatar (2 = new models, default; 1 = old), width, height (the game's own size: keep 1024x768, the UI is laid
 // out for it), uisize (2026-11-21, review console c06/d12: "auto" = largest 4:3 window that fits the screen, default, or
 // 100-200 = window size in % of 1024x768; changed in game from the View menu, saved back here), renderer (metal = GPU,
-// default since 0.6; cpu = the software rasteriser). Rig test aid: account, password, autologin (0/1) are honoured only when server
+// default since 0.6; cpu = the software rasteriser), layout (stock = 1024x768 interface; compact = the client's
+// UIScale/1280x960 layout set, game drawn at 1280x960 so the UI is ~80 % size in the same window; console n01). Rig test aid: account, password, autologin (0/1) are honoured only when server
 // is a private address (10.x, 127.x, 192.168.x); the password is never logged; play.command keeps the file 600.
 #import <Cocoa/Cocoa.h>
 #import <QuartzCore/QuartzCore.h>
@@ -30,6 +31,7 @@ extern void (*gw_front_ready)(void);
 extern void gw_in_key(unsigned vk, int down); extern void gw_in_char(unsigned ch);
 
 static int CW = 1024, CH = 768;   // client (game) resolution
+static const int BW = 1024, BH = 768;   // UI size % is relative to this window size whatever the layout
 
 // ---- settings ----
 static NSMutableDictionary *settings;
@@ -169,7 +171,7 @@ static int test_mode;
 static int auto_percent(NSWindow *w) {
   NSScreen *sc = w.screen ?: NSScreen.mainScreen; NSRect vf = sc.visibleFrame;
   NSRect c = [w contentRectForFrameRect:vf];   // room left for the content after the title bar
-  int p = (int)floor(MIN(c.size.width / CW, c.size.height / CH) * 100);
+  int p = (int)floor(MIN(c.size.width / BW, c.size.height / BH) * 100);
   return p < 50 ? 50 : p;
 }
 - (int)currentPercent { NSString *v = S(@"uisize", @"auto"); return [v isEqual:@"auto"] ? auto_percent(win) : MAX(100, MIN(200, v.intValue)); }
@@ -179,7 +181,7 @@ static int auto_percent(NSWindow *w) {
   int p = [v isEqual:@"auto"] ? auto_percent(win) : MIN(v.intValue, auto_percent(win) > 100 ? MAX(100, auto_percent(win)) : 100);
   if (!(win.styleMask & NSWindowStyleMaskFullScreen)) {
     NSRect vf = (win.screen ?: NSScreen.mainScreen).visibleFrame, f = win.frame;
-    NSRect nf = [win frameRectForContentRect:NSMakeRect(0, 0, CW * p / 100.0, CH * p / 100.0)];
+    NSRect nf = [win frameRectForContentRect:NSMakeRect(0, 0, BW * p / 100.0, BH * p / 100.0)];
     nf.origin = NSMakePoint(NSMidX(f) - nf.size.width / 2, NSMaxY(f) - nf.size.height);   // keep the title bar where it was
     nf.origin.x = MAX(NSMinX(vf), MIN(nf.origin.x, NSMaxX(vf) - nf.size.width)); nf.origin.y = MAX(NSMinY(vf), MIN(nf.origin.y, NSMaxY(vf) - nf.size.height));
     [win setFrame:nf display:YES animate:NO];
@@ -196,6 +198,9 @@ static int auto_percent(NSWindow *w) {
 - (void)uiBigger:(id)sender { [self applyUISize:[NSString stringWithFormat:@"%d", [self currentPercent] / 25 * 25 + 25] save:YES]; }
 - (void)uiSmaller:(id)sender { int p = [self currentPercent]; [self applyUISize:[NSString stringWithFormat:@"%d", (p % 25 ? p / 25 * 25 : p - 25)] save:YES]; }
 - (void)uiActual:(id)sender { [self applyUISize:@"100" save:YES]; }
+// the layout set is read when the game starts (layout files + exe bytes), so the switch is saved for the next start
+- (void)toggleLayout:(NSMenuItem *)it { BOOL on = it.state != NSControlStateValueOn; save_setting(@"layout", on ? @"compact" : @"stock");
+  it.state = on ? NSControlStateValueOn : NSControlStateValueOff; it.title = on ? @"Compact Layout (on from next start)" : @"Compact Layout (off from next start)"; }
 - (void)buildViewMenu:(NSMenu *)bar {
   NSMenuItem *vi = [NSMenuItem new]; [bar addItem:vi]; NSMenu *m = [[NSMenu alloc] initWithTitle:@"View"]; vi.submenu = m;
   NSView *box = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 240, 52)];
@@ -208,6 +213,9 @@ static int auto_percent(NSWindow *w) {
   it = [m addItemWithTitle:@"Bigger" action:@selector(uiBigger:) keyEquivalent:@"="]; it.target = self;
   it = [m addItemWithTitle:@"Smaller" action:@selector(uiSmaller:) keyEquivalent:@"-"]; it.target = self;
   it = [m addItemWithTitle:@"Actual Size (100%)" action:@selector(uiActual:) keyEquivalent:@"0"]; it.target = self;
+  [m addItem:[NSMenuItem separatorItem]];
+  it = [m addItemWithTitle:@"Compact Layout (smaller interface, from next start)" action:@selector(toggleLayout:) keyEquivalent:@""]; it.target = self;
+  it.state = [S(@"layout", @"stock") isEqual:@"compact"] ? NSControlStateValueOn : NSControlStateValueOff;
   [m addItem:[NSMenuItem separatorItem]];
   it = [m addItemWithTitle:@"Enter Full Screen" action:@selector(toggleFullScreen:) keyEquivalent:@"f"]; it.keyEquivalentModifierMask = NSEventModifierFlagCommand | NSEventModifierFlagControl;
 }
@@ -292,6 +300,9 @@ int main(int argc, char **argv) {
     if (settings[@"rundir"]) { run = settings[@"rundir"]; if (![run hasPrefix:@"/"]) run = [[base stringByAppendingPathComponent:run] stringByStandardizingPath]; }
     [[NSFileManager defaultManager] createDirectoryAtPath:run withIntermediateDirectories:YES attributes:nil error:nil];
     CW = [S(@"width", @"1024") intValue]; CH = [S(@"height", @"768") intValue];
+    { NSString *set = [client stringByAppendingPathComponent:@"UIScale/1280x960"];
+      if ([S(@"layout", @"stock") isEqual:@"compact"] && [[NSFileManager defaultManager] fileExistsAtPath:[set stringByAppendingPathComponent:@"exe-bytes.txt"]]) {
+        CW = 1280; CH = 960; setenv("GW_UI_OVERLAY", set.UTF8String, 1); } }
     test_mode = getenv("GW_APP_TEST") != NULL;
     NSString *exe = S(@"exe", @"GodsWar.exe");   // 2026-11-16: Origin.exe was removed from client 1.5.0; GodsWar.exe is the same exe
     if (!client.length || ![[NSFileManager defaultManager] fileExistsAtPath:[client stringByAppendingPathComponent:exe]]) {
