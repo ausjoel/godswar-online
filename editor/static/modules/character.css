@@ -105,3 +105,17 @@
 .gw-mod-character .gw-ch-nf .gw-nf-chip { display: none; }
 .gw-mod-character .gw-ch-nf { row-gap: 2px; }
 .gw-mod-character .gw-ch-applies { margin: 2px 0 6px; font-size: 10px; }
+
+/* W4A: hair / face pickers, legal-limit hints, deleted accounts, held names */
+.gw-mod-character .gw-ch-look { display: inline-block; border: 1px solid #5a4a2a; border-radius: 3px; background-color: #1b1c22; vertical-align: middle; margin-right: 6px; }
+.gw-mod-character .gw-ch-lookgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 6px; max-height: 60vh; overflow: auto; padding: 4px; }
+.gw-mod-character .gw-ch-looktile { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px; background: #23242c; border: 1px solid #3c3a33; border-radius: 4px; color: inherit; cursor: pointer; }
+.gw-mod-character .gw-ch-looktile > span:first-child { display: block; background-color: #1b1c22; border-radius: 3px; }
+.gw-mod-character .gw-ch-looktile.on { border-color: #e8c25a; box-shadow: 0 0 0 1px #e8c25a inset; }
+.gw-mod-character .gw-ch-looktile.off { opacity: .35; cursor: not-allowed; }
+.gw-mod-character .gw-ch-looktile:focus-visible { outline: 2px solid #e8c25a; outline-offset: 1px; }
+.gw-mod-character .gw-ch-lookno { font-size: 12px; }
+.gw-mod-character .gw-ch-limit { font-size: 11px; margin-left: 6px; }
+.gw-mod-character .gw-ch-deleted { border: 1px solid #8a3a32; border-radius: 4px; padding: 6px 8px; margin: 6px 0; background: rgba(138, 58, 50, .15); }
+.gw-mod-character .gw-ch-holds { margin-top: 8px; }
+.gw-mod-character .gw-ch-holds summary { cursor: pointer; }

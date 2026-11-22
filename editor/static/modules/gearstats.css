@@ -7,3 +7,7 @@
 .gw-mod-gearstats .gw-gs-levels .gw-btnx.on { outline: 2px solid #f5c542; }
 .gw-mod-gearstats .gw-gs-preview ul { margin: 4px 0; padding-left: 18px; }
 @media (max-width: 760px) { .gw-mod-gearstats .gw-gs-body { grid-template-columns: 1fr; } }
+/* B21 item 26: in-game slots */
+.gw-mod-gearstats .gw-gs-slots { margin: 6px 0 12px; }
+.gw-mod-gearstats .gw-gs-listbox summary { cursor: pointer; margin-bottom: 6px; }
+.gw-mod-gearstats .gw-gs-beforeafter { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 6px 0; }

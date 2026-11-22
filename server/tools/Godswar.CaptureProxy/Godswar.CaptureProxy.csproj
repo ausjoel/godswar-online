@@ -9,6 +9,6 @@
     <Compile Include="..\..\src\Godswar.Server\Packets\ReferencePackets.Generated.cs" Link="ReferencePackets.Generated.cs" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Npgsql" Version="10.0.2" />
+    <PackageReference Include="Npgsql" Version="10.0.3" />
   </ItemGroup>
 </Project>

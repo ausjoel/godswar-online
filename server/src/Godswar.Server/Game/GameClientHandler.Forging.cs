@@ -164,6 +164,11 @@ internal sealed partial class GameClientHandler
             .ToArray();
         return error switch
         {
+            // B22 G2: rare gems and tier gear (RareGemForgeRules).
+            EquipmentForgeValidationError.RareGemNeedsTierGear =>
+                "Rare gems forge only Titan, Primordial and Aether gear (Grade 21-25).",
+            EquipmentForgeValidationError.TierGearNeedsRareGem =>
+                $"{what} {step} on tier gear needs a rare gem: Radiant (to G21-22), Primal (G23-24) or Olympian (G25).",
             EquipmentForgeValidationError.MaterialRoundNotAllowed when gems.Length > 0 =>
                 $"This {gem} cannot forge {what} {step}. Use a {string.Join(" or ", gems)} {gem} and add crystals.",
             EquipmentForgeValidationError.MaterialRoundNotAllowed =>

@@ -37,6 +37,7 @@ import re
 from decimal import Decimal as D
 
 from . import common
+from . import _pet_sim as PS
 from .common import Bad, Refused, NotFound, Conflict, OnlineRefused, lit
 
 try:
@@ -132,11 +133,23 @@ def skill_library(rb):
                        "is_head": hid == int(k), "family": fam[t]["name"], "only": fam[t]["only"],
                        "species": fam[t]["species"], "sprite": s.get("sprite"),
                        "trait": [round(x / 100.0, 2) for x in trait] if len(trait) == 6 else None,
-                       "add": s.get("add"), "published": (not published) or int(k) in published}
+                       "add": s.get("add"), "published": (not published) or int(k) in published,
+                       # the effect curve: the highest Restrict (pet rank) not above the pet's rank picks Values (absolute)
+                       "restrict": _nums(s.get("restrict")), "values": _nums(s.get("values"))}
     v = {"skills": out, "families": {t: {"type": t, "name": f["name"], "only": f["only"], "species": f["species"],
                                          "tiers": {str(p): h for p, h in sorted(f["tiers"].items())}} for t, f in fam.items()}}
     _SK.update(cat=cat, v=v)
     return v
+
+
+def _nums(v):
+    out = []
+    for x in str(v or "").replace("，", ",").split(","):
+        try:
+            out.append(float(x))
+        except ValueError:
+            pass
+    return out
 
 
 def item_sprites():
@@ -227,7 +240,7 @@ def _pet_rows(rb, d, lib, species, apts, steps):
             sk.append(dict(s, name=e.get("name") or "pet skill %s" % s["skill_id"], sprite=e.get("sprite"), type=e.get("type"),
                            tier=e.get("tier"), family=e.get("family"), head=e.get("head"), only=e.get("only"),
                            species_ok=(not e.get("species")) or int(p["species_id"]) in e["species"], known=bool(e),
-                           published=e.get("published", False)))
+                           published=e.get("published", False), trait=e.get("trait")))
         problems = skill_problems(p, sk)
         req = (steps.get("exp") or {}).get(str(p["level"]))
         gb = apts.get(int(p["aptitude"]) if p["growth_revealed"] else 1) or {}
@@ -349,12 +362,339 @@ def skills(ctx):
     """Every pet skill (1,655 ids) with family, tier, canonical id, species restriction and Trait need."""
     rb = ctx.need_rb()
     lib = skill_library(rb)
-    return {"skills": list(lib["skills"].values()), "families": list(lib["families"].values()),
-            "species": [{"id": k, "name": v["name"]} for k, v in sorted(species_info(rb).items())]}
+    books = sim_content(rb).get("books") or {}
+    fams = []
+    for f in lib["families"].values():      # which tiers a skill book teaches (ItemBaseAttribute.xml PetSkill)
+        fams.append(dict(f, books={t: books.get(int(hid), []) for t, hid in f["tiers"].items()}))
+    return {"skills": list(lib["skills"].values()), "families": fams,
+            "species": [{"id": k, "name": v["name"], "starter": v.get("starter")} for k, v in sorted(species_info(rb).items())]}
+
+
+# ------------------------------------------------------------------------------------------------ Pet Manager simulator
+_SIM = {}
+
+
+def sim_content(rb):
+    """The merge / rebirth tables of the server's PUBLISHED pet content (pet_content_merge_* at the pets revision, the
+    rebirth gates, the skill books of item_templates), cached per catalogue; the bundled client snapshot
+    (catalog-origin/pet-alter.json, = Pet_Alter.xml) when the database has no such tables."""
+    cat = rb.cat()
+    if _SIM.get("cat") is cat:
+        return _SIM["v"]
+    snap = PS.load_snapshot()
+    rev = "(SELECT revision FROM pet_content_publication WHERE family = 'pets')"
+    try:
+        v = rb.pg.json(
+            "json_build_object("
+            "'savvy', (SELECT json_agg(json_build_array(minimum_savvy_difference, base_increase) ORDER BY minimum_savvy_difference) "
+            "FROM pet_content_merge_savvy_lookup WHERE revision = %(r)s), "
+            "'rank', (SELECT json_agg(json_build_array(minimum_rank_difference, base_increase) ORDER BY minimum_rank_difference) "
+            "FROM pet_content_merge_rank_lookup WHERE revision = %(r)s), "
+            "'factors', (SELECT json_object_agg(species_id, factor) FROM pet_content_merge_rank_species_factors WHERE revision = %(r)s), "
+            "'spirits', (SELECT json_object_agg(spirit_count, json_build_array(minimum_percent, maximum_percent)) "
+            "FROM pet_content_merge_rank_spirit_steps WHERE revision = %(r)s), "
+            "'revision', %(r)s)" % {"r": rev})
+        if not (v.get("savvy") and v.get("rank") and v.get("factors")):
+            raise ValueError("no published merge lookups")
+        v["source"] = "the server's published pet content (revision %s)" % str(v.get("revision") or "?")[:12]
+        sp = v.get("spirits") or {}
+        sp.setdefault("0", [0, 100])
+        v["spirits"] = sp
+    except Exception as e:      # noqa: BLE001 - an older database or a test without one: the client snapshot
+        v = dict(snap, source=snap.get("source", "client snapshot") + " - the database has no merge tables (%s)" % str(e)[:80])
+    try:
+        books = rb.pg.json("(SELECT json_object_agg(s, ids) FROM (SELECT (stats->>'PetSkill')::int AS s, json_agg(id ORDER BY id) AS ids "
+                           "FROM item_templates WHERE stats->>'PetSkill' ~ '^[0-9]+$' GROUP BY 1) b)")
+        v["books"] = books or snap.get("books") or {}
+    except Exception:           # noqa: BLE001
+        v["books"] = snap.get("books") or {}
+    steps = content_steps(rb).get("rebirth") or []
+    v["rebirth_levels"] = {int(s["n"]): int(s["level"]) for s in steps} or snap.get("rebirth_levels") or {}
+    st = cat.get("pet_settings") or {}
+    v["max_level"] = int(st.get("maximum_level") or 120)
+    v["max_rebirths"] = int(st.get("maximum_rebirth_count") or PS.MAX_REBIRTHS)
+    v["max_rank_h"] = PS.h(st.get("maximum_rank") or "655.35")
+    # skill books are keyed by the tier's canonical (first) id, like the server stores learned skills
+    lib = skill_library(rb)["skills"]
+    heads = {}
+    for sid, items in (v["books"] or {}).items():
+        e = lib.get(int(sid))
+        heads.setdefault(int(e["head"]) if e else int(sid), set()).update(int(x) for x in items)
+    v["books"] = {k: sorted(x) for k, x in heads.items()}
+    out = PS.normalise(v)
+    out["source"] = v.get("source")
+    _SIM.update(cat=cat, v=out)
+    return out
+
+
+def _hatch_ranks(rb, aptitude):
+    return [str(r["rank"]) for r in (rb.cat().get("hatch_steps") or []) if int(r.get("aptitude") or 0) == int(aptitude)]
+
+
+def _sim(fn, *a, **kw):
+    try:
+        return fn(*a, **kw)
+    except PS.SimError as e:
+        raise Bad(str(e))
+
+
+@M.get("sim/content")
+def sim_content_route(ctx):
+    """The tables the simulator uses (for the page: species factors, spirits, gates, per-merge ceilings, source)."""
+    rb = ctx.need_rb()
+    c = sim_content(rb)
+    sp = species_info(rb)
+    return {"source": c.get("source"), "factors": {str(k): PS.un(v) for k, v in c["factors"].items()},
+            "species": [{"id": k, "name": v["name"], "factor": PS.un(c["factors"].get(k, 0))} for k, v in sorted(sp.items())],
+            "spirits": {str(k): list(v) for k, v in c["spirits"].items()}, "rebirth_spirits": {str(k): [v, PS.REBIRTH_MAX_H] for k, v in PS.REBIRTH_MIN_H.items()},
+            "rebirth_levels": {str(k): v for k, v in c["rebirth_levels"].items()}, "waters": [list(w) for w in PS.REBIRTH_WATERS],
+            "max_level": c["max_level"], "max_rebirths": c["max_rebirths"], "max_rank": PS.un(c["max_rank_h"]),
+            "ceiling": {k: PS.un(v) for k, v in PS.max_merge_gain(c).items()}, "merge_min_level": PS.MERGE_MIN_LEVEL,
+            "model_changes": list(PS.MODEL_CHANGES),
+            "items": {"merge_spirit": PS.MERGE_SPIRIT, "merge_spirit_bound": PS.MERGE_SPIRIT_BOUND,
+                      "rebirth_spirit": PS.REBIRTH_SPIRIT, "rebirth_spirit_bound": PS.REBIRTH_SPIRIT_BOUND}}
+
+
+def _fmt_merge(r):
+    u = PS.un
+    return {"basic": [u(x) for x in r["basic"]], "rank": u(r["rank"]), "start_basic": [u(x) for x in r["start_basic"]],
+            "start_rank": u(r["start_rank"]), "partner_added": [u(x) for x in r["partner_added"]], "notes": r["notes"],
+            "stalled_at": r["stalled_at"], "ceiling": {k: u(v) for k, v in r["per_merge_ceiling"].items()},
+            "gain": [u(b - a) for a, b in zip(r["start_basic"], r["basic"])], "rank_gain": u(r["rank"] - r["start_rank"]),
+            "steps": [{"n": s["n"], "bounds": [[u(lo), u(hi)] for lo, hi in s["bounds"]], "gains": [u(x) for x in s["gains"]],
+                       "need": [u(x) for x in s["need"]], "rank_bounds": [u(x) for x in s["rank_bounds"]],
+                       "rank_gain": u(s["rank_gain"]), "basic": [u(x) for x in s["basic"]], "rank": u(s["rank"])} for s in r["steps"]]}
+
+
+def _fmt_rebirth(r):
+    u = PS.un
+    return {"accel": [u(x) for x in r["accel"]], "range": [u(x) for x in r["range"]], "completed": r["completed"], "level": r["level"],
+            "added_level1": [u(x) for x in r["added_level1"]], "added_at_level": [u(x) for x in r["added_at_level"]],
+            "phoenix": [u(x) for x in r["phoenix"]], "notes": r["notes"],
+            "steps": [{"n": s["n"], "level_needed": s["level_needed"], "water": s["water"], "increase": [u(x) for x in s["increase"]],
+                       "accel": [u(x) for x in s["accel"]], "model_change": s["model_change"]} for s in r["steps"]]}
+
+
+@M.post("sim/merge")
+def sim_merge(ctx):
+    """{primary: {basic: [6], rank, level}, partner: {species, basic: [6], rank, level, growth: [6], accel: [6]},
+    merges, spirits, savvy_pos: min|avg|max|0..1000|[6], rank_pos} -> every merge's ranges and the result. Read-only."""
+    rb = ctx.need_rb()
+    b = ctx.body or {}
+    r = _sim(PS.simulate_merges, sim_content(rb), b.get("primary") or {}, b.get("partner") or {}, common.to_int(b.get("merges", 1), 0, 1000, "merges"),
+             common.to_int(b.get("spirits", 0), 0, 5, "spirits"), b.get("savvy_pos", "avg"), b.get("rank_pos", "avg"))
+    return _fmt_merge(r)
+
+
+@M.post("sim/rebirth")
+def sim_rebirth(ctx):
+    """{pet: {completed, growth: [6], accel: [6], soul_contract_stage, rebirths_remaining}, rebirths, spirits, pos, level}
+    -> each rebirth's gate, water, acceleration roll, and Added at level 1 / at <level>. Read-only."""
+    rb = ctx.need_rb()
+    b = ctx.body or {}
+    r = _sim(PS.simulate_rebirths, sim_content(rb), b.get("pet") or {}, common.to_int(b.get("rebirths", 1), 0, 100, "rebirths"),
+             common.to_int(b.get("spirits", 0), 0, 5, "spirits"), b.get("pos", "avg"), b.get("level"))
+    return _fmt_rebirth(r)
+
+
+# ---- B21 item 23: merge-count planner (modules/_pet_plan.py; read-only)
+@M.post("sim/fictitious")
+def sim_fictitious(ctx):
+    """{species, aptitude, level, quality: min|mid|max, rebirths, rebirth_spirits} -> a made-up pet hatched the server's
+    way (Basic and growth inside the nature's brackets, a published hatch rank). Read-only."""
+    from . import _pet_plan as PP
+    rb = ctx.need_rb()
+    b = ctx.body or {}
+    apt_id = common.to_int(b.get("aptitude", 1), 1, 99, "aptitude")
+    apt = aptitude_info(rb).get(apt_id)
+    if not apt:
+        raise Bad("aptitude %s is not published" % apt_id)
+    sp = common.to_int(b.get("species", 1), 1, 9999, "species")
+    if sp not in species_info(rb):
+        raise Bad("species %s is not published" % sp)
+    c = sim_content(rb)
+    out = _sim(PP.fictitious_pet, apt, _hatch_ranks(rb, apt_id), sp, common.to_int(b.get("level", 120), 1, c["max_level"], "level"),
+               b.get("quality", "mid") if b.get("quality", "mid") in PP.QUALITY else "mid",
+               common.to_int(b.get("rebirths", 0), 0, c["max_rebirths"], "rebirths"), common.to_int(b.get("rebirth_spirits", 0), 0, 5, "rebirth spirits"))
+    out["aptitude"] = {"id": apt_id, "name": apt["name"], "savvy": apt["savvy"], "growth": apt["growth"]}
+    return out
+
+
+@M.post("sim/plan")
+def sim_plan(ctx):
+    """{primary: {basic, rank, level, growth, accel, completed}, partner: {...}, merges, spirits, rebirths, rebirth_spirits,
+    level, rebirth_pos} -> per merge count the exact reachable range and the low / average / high roll paths, per
+    rebirth count the Added and its gain, and the end state. Read-only."""
+    from . import _pet_plan as PP
+    rb = ctx.need_rb()
+    b = ctx.body or {}
+    c = sim_content(rb)
+    r = _sim(PP.plan, c, b.get("primary") or {}, b.get("partner") or {}, common.to_int(b.get("merges", 10), 0, 300, "merges"),
+             common.to_int(b.get("spirits", 0), 0, 5, "spirits"), common.to_int(b.get("rebirths", 0), 0, 100, "rebirths"),
+             common.to_int(b.get("rebirth_spirits", 0), 0, 5, "rebirth spirits"), common.to_int(b.get("level", c["max_level"]), 1, c["max_level"], "level"),
+             common.to_int(b.get("rebirth_pos", 500), 0, 1000, "rebirth roll"))
+    return PP.fmt_plan(r)
+
+
+def _overlay(p, fields):
+    """The pet row with the page's pending edits on top (fields, savvy {code: v}, growth {code: v})."""
+    q = dict(p)
+    for k, v in (fields or {}).items():
+        if k not in ("savvy", "growth", "presence", "aptitude"):
+            q[k] = v
+    st = [dict(s) for s in p["stats"]]
+    for s in st:
+        c = str(s["stat_code"])
+        if c in ((fields or {}).get("savvy") or {}):
+            s["initial_savvy"] = fields["savvy"][c]
+        if c in ((fields or {}).get("growth") or {}):
+            s["base_growth_rate"] = fields["growth"][c]
+        lv = D(str(q.get("level") or 1))
+        added = (D(str(s["base_growth_rate"])) + D(str(s["growth_acceleration"]))) * lv
+        s["added_savvy"] = str(added)
+        s["total"] = str(D(str(s["initial_savvy"])) + added + D(str(q.get("soul_bonus") or 0)))
+    q["stats"] = st
+    if (fields or {}).get("aptitude") is not None:
+        q["aptitude"] = int(fields["aptitude"])
+    return q
+
+
+def legal_report(rb, pet, fields=None):
+    apts = aptitude_info(rb)
+    fields = dict(fields or {})
+    stg = int(fields.get("soul_contract_stage", pet.get("soul_contract_stage")) or 0)
+    q = _overlay(pet, dict(fields, soul_bonus=SOUL_BONUS[stg] if 0 <= stg <= 6 else 0))
+    apt = apts.get(int(q["aptitude"])) or {}
+    gb = apts.get(int(q["aptitude"]) if q.get("growth_revealed") else 1) or {}
+    if (fields or {}).get("aptitude") is not None:
+        q["initial_savvy_baseline_total"] = None        # the new nature rewrites the baseline (aptitude_statements)
+    c = sim_content(rb)
+    sp = species_info(rb).get(int(q["species_id"])) or {}
+    checks = PS.legal_checks(c, q, {"savvy": apt.get("savvy") or [0, 0], "growth": gb.get("growth") or ["0", "1000"]},
+                             _hatch_ranks(rb, q["aptitude"]), {"max_lifetime": max(sp.get("lifetime_values") or [0]) or None,
+                                                              "starter": sp.get("starter")},
+                             skills=pet.get("skills") or [], lib=skill_library(rb))
+    reb = int(q.get("completed_rebirths") or 0)
+    merges = int(q.get("completed_pet_merges") or 0)
+    ceil = PS.max_merge_gain(c)
+    hr = sorted(PS.h(x) for x in _hatch_ranks(rb, q["aptitude"])) or [0]
+    base = PS.h(q.get("initial_savvy_baseline_total")) if q.get("initial_savvy_baseline_total") not in (None, "") else PS.h((apt.get("savvy") or [0, 0])[1])
+    return {"checks": checks, "source": c.get("source"),
+            "limits": {"basic_total_max": PS.un(base + merges * 6 * ceil["savvy"]), "basic_hatch": PS.un(base),
+                       "rank_max": PS.un(min(c["max_rank_h"], hr[-1] + merges * ceil["rank"])), "hatch_ranks": [PS.un(x) for x in hr],
+                       "accel": [PS.un(PS.REBIRTH_MIN_H[0] * reb), PS.un(PS.REBIRTH_MAX_H * reb)],
+                       "phoenix": [PS.un(x) for x in PS.phoenix_range(reb)], "level_max": c["max_level"], "energy": 100,
+                       "per_merge": {k: PS.un(v) for k, v in ceil.items()}}}
+
+
+@M.post(r"legal/(\d+)")
+def legal(ctx, cid):
+    """{pet, fields (the page's pending edits)} -> "legal pet" checks: what real merges, rebirths and items could not
+    have produced (warn) and what the server refuses (error), with the reachable limits. Read-only."""
+    rb = ctx.need_rb()
+    cid = int(cid)
+    body = ctx.body or {}
+    pid = common.to_int(body.get("pet"), 1, 2 ** 62, "pet")
+    d = _need_char(rb, cid)
+    pets = _pet_rows(rb, d, skill_library(rb), species_info(rb), aptitude_info(rb), content_steps(rb))
+    p = next((x for x in pets if int(x["id"]) == pid), None)
+    if not p:
+        raise NotFound("pet #%s does not belong to this character" % pid)
+    f = body.get("fields") or {}
+    if not isinstance(f, dict):
+        raise Bad("fields must be an object")
+    try:
+        return legal_report(rb, p, f)
+    except PS.SimError as e:
+        raise Bad(str(e))
+
+
+@M.post(r"pet/(\d+)/apply-sim")
+def apply_sim(ctx, cid):
+    """{pet, revision, merge: {partner, merges, spirits, savvy_pos, rank_pos} | null, rebirth: {rebirths, spirits, pos,
+    level} | null} -> write what the simulation gives, re-run HERE from the pet's stored values (never the page's
+    numbers): Basic savvy + merge gains, rank, merge count; growth acceleration + rebirth rolls, rebirth count, attempts
+    left, level, Added = (growth + acceleration) x level. One transaction with the start-up checks; Undo restores it."""
+    rb = ctx.need_rb()
+    cid = int(cid)
+    body = ctx.body or {}
+    pid = common.to_int(body.get("pet"), 1, 2 ** 62, "pet")
+    mg, rbt = body.get("merge"), body.get("rebirth")
+    if not mg and not rbt:
+        raise Bad("nothing to apply: give merge and / or rebirth")
+    c = sim_content(rb)
+    force = _force(ctx, body)
+    label = {}
+    if mg and not force:
+        par = mg.get("partner") or {}
+        if par.get("added") is None and common.to_int(par.get("level") or 0, 0, 1000, "partner level") < PS.MERGE_MIN_LEVEL:
+            raise Bad("the partner must be level %d or more to merge (Pet_Alter Minor_PetLv); tick force to apply anyway" % PS.MERGE_MIN_LEVEL)
+
+    def b(d):
+        pet = _pet_of(d, pid)
+        stats = sorted([s for s in d["character_pet_stat_values"] if s["pet_id"] == pid], key=lambda s: s["stat_code"])
+        if len(stats) != 6:
+            raise Refused("pet #%s does not have its six savvy rows" % pid)
+        basic = [str(s["initial_savvy"]) for s in stats]
+        rank = str(pet["rank"])
+        merges, done, left, level = int(pet["completed_pet_merges"]), int(pet["completed_rebirths"]), int(pet["rebirths_remaining"]), int(pet["level"])
+        accel = [D(str(s["growth_acceleration"])) for s in stats]
+        parts = []
+        if mg:
+            n = common.to_int(mg.get("merges", 1), 1, 1000, "merges")
+            r = _sim(PS.simulate_merges, c, {"basic": basic, "rank": rank, "level": level}, mg.get("partner") or {}, n,
+                     common.to_int(mg.get("spirits", 0), 0, 5, "spirits"), mg.get("savvy_pos", "avg"), mg.get("rank_pos", "avg"))
+            basic = [PS.un(x) for x in r["basic"]]
+            rank = PS.un(r["rank"])
+            if merges + n > 65535:
+                raise Bad("merges would pass 65,535 (the client field is 16 bits)")
+            merges += n
+            parts.append("%d merge(s): Basic +%s, rank +%s" % (n, PS.un(sum(r["basic"]) - sum(r["start_basic"])), PS.un(r["rank"] - r["start_rank"])))
+        if rbt:
+            n = common.to_int(rbt.get("rebirths", 1), 1, 100, "rebirths")
+            if int(pet["soul_contract_stage"] or 0) < 1:
+                raise Refused("rebirth needs a Soul Contract: set the contract stage (1-6) and save it first")
+            r = _sim(PS.simulate_rebirths, c, {"completed": done, "growth": [str(s["base_growth_rate"]) for s in stats],
+                                               "accel": [str(x) for x in accel], "soul_contract_stage": pet["soul_contract_stage"],
+                                               "rebirths_remaining": left}, n, common.to_int(rbt.get("spirits", 0), 0, 5, "spirits"),
+                     rbt.get("pos", "avg"), rbt.get("level") or 1)
+            accel = [(D(x) / 100).quantize(D("0.01")) for x in r["accel"]]
+            done += n
+            if left < n:
+                parts.append("%d extra rebirth attempt(s) assumed (waters used; attempts left 0)" % (n - left))
+            left = max(0, left - n)
+            level = r["level"]
+            before = sum(PS.h(s["growth_acceleration"]) for s in stats)
+            parts.append("%d rebirth(s): growth acceleration +%s in all, level %d" % (n, PS.un(sum(r["accel"]) - before), level))
+        label["t"] = "; ".join(parts)
+        stm = []
+        for s, bv, av in zip(stats, basic, accel):
+            added = (D(str(s["base_growth_rate"])) + av) * level
+            stm.append("UPDATE character_pet_stat_values SET initial_savvy = %s, growth_acceleration = %s, added_savvy = %s, "
+                       "revision = revision + 1 WHERE pet_id = %d AND stat_code = %d" % (lit(D(bv)), lit(av), lit(added), pid, int(s["stat_code"])))
+        stm.append("UPDATE character_pets SET rank = %s, completed_pet_merges = %d, completed_rebirths = %d, rebirths_remaining = %d, "
+                   "level = %d, revision = revision + 1, updated_at = now() WHERE id = %d AND user_id = %d"
+                   % (lit(D(rank)), merges, done, left, level, pid, cid))
+        return stm
+
+    def lab(d):
+        b(copy.deepcopy(d))
+        return "pet %s: simulated %s" % (_pname(_pet_of(d, pid)), label.get("t", ""))
+    r = _write_pet(ctx, cid, lab, b, body.get("revision"), pid)
+    # EXP is kept (the rebirth carries the pool; docs/pet-rebirth-balance.md). Re-check the written pet in legal mode.
+    try:
+        d = rb.dump(cid)
+        p = next((x for x in _pet_rows(rb, d, skill_library(rb), species_info(rb), aptitude_info(rb), content_steps(rb)) if int(x["id"]) == pid), None)
+        warn = [x["msg"] for x in legal_report(rb, p)["checks"] if x["level"] != "ok"] if p else []
+        if warn and isinstance(r, dict):
+            r["note"] = "Saved. Legal pet checks on the result:\n- " + "\n- ".join(warn)
+    except Exception:          # noqa: BLE001 - the write is done; the check is advice only
+        pass
+    return r
 
 
 # ------------------------------------------------------------------------------------------------ writes: helpers
-PET_FIELDS = ["character_pets.*", "character_pet_stat_values.*", "character_pet_skills.*"]
+PET_FIELDS =["character_pets.*", "character_pet_stat_values.*", "character_pet_skills.*"]
 
 
 def _rev_expect(cid, pid, rev):

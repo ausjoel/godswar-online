@@ -217,6 +217,7 @@ internal sealed partial class GameClientHandler
         }
 
         _postEnterBootstrapSent = true;
+        Journey.Mark("bootstrap"); // W6A
         var bootstrap = _characterLoadSnapshot;
 
         var enterBootstrap =
@@ -260,11 +261,23 @@ internal sealed partial class GameClientHandler
                 _character.OwnedTitleIds),
             cancellationToken,
             "DesignationInfo");
+        // RANK-DISPLAY: the client builds its own avatar's rank effects; tell it this character's chosen caps.
+        await _session.SendAsync(
+            PacketBuilder.PlayerTitleInfo(_character, CurrentPlayerObjectId),
+            cancellationToken,
+            "RankDisplaySelf");
 
         // Opcode 10357 is the final enter/UI-ready boundary. Publish exactly one
         // complete 10167 snapshot here, after both the local object and UI exist.
         await SendExperienceBoostStatusAsync("post-enter", cancellationToken);
         _characterSnapshotBootstrapPending = false;
+        // ENTRY-TIMING (w6c): one line per world entry. Stage times are milliseconds since the game
+        // connection opened (same marks as session_health); the gap entered -> client_ready is the
+        // client loading the map on the player's machine, not server or network time.
+        Journey.Mark("bootstrap_sent");
+        Console.WriteLine(
+            $"[entry-timing] character={_character.Id} map={_character.CurrentMap} stages={Journey.StagesJson()} " +
+            $"sentPackets={_session.PacketsSent} sentBytes={_session.BytesSent} receivedPackets={_session.PacketsReceived}");
     }
 
     internal static bool CanSendPostEnterBootstrap(

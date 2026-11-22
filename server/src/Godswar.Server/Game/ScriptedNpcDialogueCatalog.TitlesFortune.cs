@@ -80,8 +80,8 @@ internal sealed partial class GameClientHandler
             if (pageOne == TitleExpertPolicy.AttributeButton &&
                 TitleExpertPolicy.AttributeButtons.Contains(newestClick))
             {
-                var claim = TitleExpertPolicy.ResolveAttributeClaim(
-                    newestClick, CurrentTitleStats(), _character.OwnedTitleIds);
+                var claim = TitleExpertPolicy.ResolveAttributeClaim( // B22: per-class ladder
+                    _character.Profession, newestClick, CurrentTitleStats(), _character.OwnedTitleIds);
                 await FinishTitleClaimAsync(npc, dialogue, dialogIndex, newestClick, claim, "attribute", cancellationToken);
                 return true;
             }
@@ -142,6 +142,10 @@ internal sealed partial class GameClientHandler
         string kind,
         CancellationToken cancellationToken)
     {
+        // B22: never grant past the owned-title limit (128): a GM who owns the whole catalogue could otherwise reach
+        // 132+ titles, and the login snapshot refuses a character over the limit.
+        claim = TitleExpertPolicy.FitToTitleLimit(
+            claim, _character!.OwnedTitleIds.Count(), CharacterSnapshotLimits.OwnedTitleCount);
         var reply = claim.Reply;
         if (claim.Grant.Count > 0)
         {

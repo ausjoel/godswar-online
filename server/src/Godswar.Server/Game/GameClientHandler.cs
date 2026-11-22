@@ -85,6 +85,14 @@ internal sealed partial class GameClientHandler : IClientHandler
     /// been answered, and never kept across sessions.
     /// </summary>
     private bool _wishingPoolPaidWishPending;
+
+    /// <summary>
+    /// Set after a common-book result that offered the client's "Draw again"
+    /// button. That button re-sends the last class click with no entry click
+    /// before it, so the next class click is the 230 Gold wish the result text
+    /// offered. Any entry click or a fresh window clears it.
+    /// </summary>
+    private bool _wishingPoolDrawAgainOffered;
     private readonly Guid _commandConnectionId = Guid.NewGuid();
     private Guid? _loginPetCallOutOperationId;
     private readonly LegacyAuthenticationAccess?
@@ -120,9 +128,15 @@ internal sealed partial class GameClientHandler : IClientHandler
     private readonly Dictionary<uint, NpcSpawnDefinition> _mapNpcsByInteractionId = new();
     private WorldSectorVisibilityTracker<NpcSpawnDefinition>? _npcVisibility;
 
+    // W6A: what this connection did, for public.session_health. Written once, in RunAsync's finally.
+    private Godswar.Server.Operations.Health.SessionJourney? _journey;
+    private Godswar.Server.Operations.Health.SessionJourney Journey =>
+        _journey ??= new("game", _processRealmId.Value, _session.RemoteEndPoint);
+
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         var sessionStarted = System.Diagnostics.Stopwatch.GetTimestamp();
+        _ = Journey;
         ushort lastReceivedOpcode = 0;
         var endReason = "cancelled";
         var failureType = "none";
@@ -182,6 +196,7 @@ internal sealed partial class GameClientHandler : IClientHandler
                             $"len={packet.Length} " +
                             $"character={_character?.Name ?? "(none)"} " +
                             $"{ex.GetType().Name}: {ex.Message}");
+                        Journey.SetFault(packet.Opcode, ex); // W6A
                         // FINALISE2 (F-39): with GODSWAR_PACKET_FAULT_RECOVERY=1 the fault is caught, the character
                         // is reloaded from the database and the session goes on (at most 5 times per session).
                         if (!await TryRecoverFromPacketFaultAsync(packet.Opcode, ex, cancellationToken))
@@ -218,13 +233,39 @@ internal sealed partial class GameClientHandler : IClientHandler
                 $"last-opcode={lastReceivedOpcode} last-send-opcode={_session.LastCompletedSendOpcode} " +
                 $"last-send-bytes={_session.LastCompletedSendLength} character-loaded={_characterSnapshotLoaded} " +
                 $"client-ready={_clientReadyReceived} ui-ready={_enterUiReadyReceived} bootstrap={_postEnterBootstrapSent}");
+            // W6A: the same facts as a row of public.session_health. Never waits, never throws.
+            var journey = Journey;
+            if (journey.Outcome != "refused")
+            {
+                journey.Outcome = _session.EndHint ?? endReason;
+            }
+            if (failureType != "none")
+            {
+                journey.ErrorType ??= failureType;
+            }
+            journey.AccountId ??= _account?.Id;
+            journey.CharacterId = _character?.Id ?? journey.CharacterId;
+            journey.TransportError = _session.TerminalErrorType;
+            journey.LastOpcode = lastReceivedOpcode;
+            journey.LastSendOpcode = _session.LastCompletedSendOpcode;
+            Godswar.Server.Operations.Health.SessionHealthRecorder.Record(journey);
             // LOGINFIX: allow the client's own reconnect (same account, same address) for a while.
             if (_legacyHandoffAdmitted && _account is not null)
             {
-                LegacyGameLoginHandoff.Issue(
-                    _account.Id,
-                    _session.RemoteEndPoint,
-                    lifetime: LegacyGameLoginHandoff.ReconnectGrace);
+                // ROUND-SHAREDHANDOFF: for this worker's realm; a store failure must not break teardown.
+                try
+                {
+                    await LegacyGameLoginHandoff.IssueAsync(
+                        _account.Id,
+                        _processRealmId.Value,
+                        _session.RemoteEndPoint,
+                        LegacyGameLoginHandoff.ReconnectGrace,
+                        CancellationToken.None);
+                }
+                catch (Exception error) when (error is Npgsql.NpgsqlException or TimeoutException)
+                {
+                    Console.Error.WriteLine("[security] reconnect handoff not recorded: " + error.GetType().Name);
+                }
             }
             // Both background loops wait on _characterStateGate, so they must be
             // joined before the gate is disposed at the end of this method.
@@ -239,6 +280,7 @@ internal sealed partial class GameClientHandler : IClientHandler
             await StopAfkRevivalAsync(); // ARENA
             await StopFarmRewardClaimsAsync();
             await StopPartyKillSharesAsync(); // PARTY (r02)
+            await StopHermesHoodExpiryAsync(); // W14: the hood timer waits on the state gate too
             UnregisterSkillCastInterruption();
             _registry.UnregisterOperatorSink(_session); // ROUND2
             if (_developerCommands.UseCharacterGmFlags && _character is { } departing)

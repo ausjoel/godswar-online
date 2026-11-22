@@ -23,6 +23,7 @@ internal static class CorpseLootLimitChecks
             CheckBossTableWithExtras();
             CheckRatesAndGuards();
             CheckMermaidDewWithheldBeforeCap();
+            CheckMermaidKillExpStone();
             CheckMedusaKeepsBest();
         }
         finally
@@ -155,6 +156,37 @@ internal static class CorpseLootLimitChecks
         var elsewhere = CorpseLootLimit.KeepBestDroppable(rolled, 1, mermaid, 8, out withheld, out dropped);
         Check.True(withheld == 0 && dropped == 1 && elsewhere.Any(static d => d.ItemId == 10_130),
             "outside Atlantis nothing is withheld and the rare roll is kept");
+    }
+
+    // the admin 2026-11-11: the Atlantis Mermaid's kill always adds one EXP Stone 4 (4173) at a free loot index; switch off
+    // (atlantis.mermaid_kill_exp_stone 0) or any other map/template adds nothing. It is never a Morning Dew.
+    private static void CheckMermaidKillExpStone()
+    {
+        const int Atlantis = 205;
+        var mermaid = AtlantisPetSpawnPolicy.MermaidTemplateKey;
+        Check.True(AtlantisPetSpawnPolicy.DropsMermaidKillStone(Atlantis, mermaid), "default on: the Mermaid kill drops the stone");
+        Check.True(!AtlantisPetSpawnPolicy.DropsMermaidKillStone(1, mermaid), "not outside Atlantis");
+        Check.True(!AtlantisPetSpawnPolicy.DropsMermaidKillStone(Atlantis, AtlantisPetSpawnPolicy.SirenTemplateKey), "not the Siren");
+        Check.True(!AtlantisPetSpawnPolicy.IsMermaidDewItem(AtlantisPetSpawnPolicy.MermaidKillStoneItemId), "the stone is not a dew");
+
+        var empty = CorpseLootLimit.AddFixed([], AtlantisPetSpawnPolicy.MermaidKillStoneItemId, 1);
+        Check.True(empty.Count == 1 && empty[0].ItemId == 4_173 && empty[0].Quantity == 1 &&
+                   empty[0].LootIndex == CorpseLootLimit.LootIndexCount - 1, "an empty corpse gets exactly 1 x 4173");
+        var full = Enumerable.Range(0, CorpseLootLimit.LootIndexCount)
+            .Select(static i => new RolledMonsterLoot(i, (uint)(5000 + i), 1)).ToArray();
+        Check.Equal(full.Length, CorpseLootLimit.AddFixed(full, 4_173, 1).Count, "no free loot index => unchanged");
+        var kept = CorpseLootLimit.KeepBestDroppable(empty, Atlantis, mermaid, 8, out var withheld, out var dropped);
+        Check.True(kept.Count == 1 && withheld == 0 && dropped == 0, "the stone survives the dew filter and the cap");
+
+        Install(("atlantis.mermaid_kill_exp_stone", 0m));
+        try
+        {
+            Check.True(!AtlantisPetSpawnPolicy.DropsMermaidKillStone(Atlantis, mermaid), "switch 0: no stone");
+        }
+        finally
+        {
+            ServerRates.ResetToDefaults();
+        }
     }
 
     // F-166 follow-up: a Medusa corpse ranks like the others. Its rolls carry the rule's chance; quality is not part of

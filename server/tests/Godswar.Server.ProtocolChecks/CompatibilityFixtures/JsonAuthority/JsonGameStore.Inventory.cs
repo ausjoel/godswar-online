@@ -358,7 +358,7 @@ internal sealed partial class JsonGameStore
                     itemId,
                     quantity: 1,
                     stackCap: 1,
-                    bound: 1,
+                    bound: (short)(goldCost > 0 ? 0 : 1), // B21: unbound when paid with Gold
                     out var updatedKitBag))
             {
                 return new KitBagItemGrantResult(

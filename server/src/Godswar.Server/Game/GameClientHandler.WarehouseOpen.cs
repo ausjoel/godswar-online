@@ -88,6 +88,26 @@ internal sealed partial class GameClientHandler
         CancellationToken cancellationToken,
         string reason)
     {
+        // B21: the client's 40 cells keep whatever box they showed last (a snapshot only fills the cells it
+        // names). When the box on screen changes, empty the cells only the old box used; a locked box is shown
+        // empty. A 1.5.3 client always stays on box 1, so this never fires for it.
+        var locked = _warehouseSelectedPage >= WarehouseCapacityPolicy.BoxNumber(snapshot.Capacity); // B21
+        if (_warehouseSelectedPage != _warehouseShownPage) // B21
+        {
+            // Cells the old box filled that the new box leaves empty (a filled cell is simply replaced).
+            var stale = WarehouseCellsOfBox(snapshot, _warehouseShownPage);
+            if (!locked)
+            {
+                stale.ExceptWith(WarehouseCellsOfBox(snapshot, _warehouseSelectedPage));
+            }
+            await SendWarehouseCellClearsAsync(stale, cancellationToken, reason + "Clear");
+        }
+        _warehouseShownPage = _warehouseSelectedPage; // B21
+        if (locked)
+        {
+            return;
+        }
+
         foreach (var packet in PacketBuilder.WarehousePageSnapshotPackets(
                      snapshot,
                      _warehouseSelectedPage))

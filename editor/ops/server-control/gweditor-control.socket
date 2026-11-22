@@ -1,0 +1,10 @@
+[Unit]
+Description=GodsWar editor fixed-service control socket
+[Socket]
+ListenStream=/run/gweditor-control.sock
+SocketUser=root
+SocketGroup=gweditor
+SocketMode=0660
+Accept=yes
+[Install]
+WantedBy=sockets.target

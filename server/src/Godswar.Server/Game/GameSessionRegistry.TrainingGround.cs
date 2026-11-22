@@ -37,6 +37,11 @@ internal sealed partial class GameSessionRegistry
     private readonly ConcurrentDictionary<WorldInstanceId, TrainingGroundRunProgress>
         _trainingProgress = [];
     private int _trainingWorldInFlight;
+    // B21: per Training Ground instance, the respawn policy its monsters were first loaded with and the
+    // points one full clear of them gives. Pinned on the first load so a later toggle flip can never ask
+    // the map for a different policy (MapInstance rejects that) or change a running target.
+    private readonly ConcurrentDictionary<WorldInstanceId, TrainingGroundClearPlan>
+        _trainingClearPlans = [];
     private ITrainingGroundStore? _trainingStore;
 
     internal void ConfigureTrainingGround(ITrainingGroundStore? store)
@@ -48,6 +53,51 @@ internal sealed partial class GameSessionRegistry
     }
 
     internal ITrainingGroundStore? TrainingGroundStore => Volatile.Read(ref _trainingStore);
+
+    /// <summary>
+    /// B21: the respawn policy a world instance's monsters are loaded with. A Training Ground instance pins
+    /// its first answer (and its full-clear points) for its whole life; every other map is unchanged.
+    /// </summary>
+    private MonsterRespawnPolicy ResolveInstanceRespawnPolicy(
+        WorldInstanceRuntime runtime,
+        IReadOnlyList<CapturedMonsterSpawn> definitions)
+    {
+        if (!TrainingGroundPolicy.TryGetGround(runtime.MapId, out var ground))
+        {
+            return MonsterRespawnPolicyForMap(runtime.MapId);
+        }
+        return _trainingClearPlans.GetOrAdd(runtime.InstanceId, _ => new(
+            MonsterRespawnPolicyForMap(runtime.MapId),
+            definitions.Sum(definition => ground.Score(definition.TemplateKey)))).Policy;
+    }
+
+    /// <summary>B21: the ground a run is scored and paid on: its own ground, or with one clear on, the same
+    /// ground whose target is the full-clear points of the monsters this instance loaded.</summary>
+    private TrainingGroundDefinition RunGround(TrainingGroundAdmission admission)
+    {
+        if (admission.RunGround is { } resolved)
+        {
+            return resolved;
+        }
+        if (!_trainingClearPlans.TryGetValue(admission.InstanceId, out var plan))
+        {
+            return admission.Ground; // no monsters loaded yet: nothing can have scored
+        }
+        var ground = plan.Policy == MonsterRespawnPolicy.Never
+            ? admission.Ground.WithFullClearTarget(plan.FullClearPoints)
+            : admission.Ground;
+        admission.RunGround = ground;
+        if (ground.TargetScore != admission.Ground.TargetScore)
+        {
+            Console.WriteLine(
+                $"[training] one clear instance={admission.InstanceId} ground={ground.Key} " +
+                $"target={ground.TargetScore} (was {admission.Ground.TargetScore})");
+        }
+        return ground;
+    }
+
+    internal int TrainingGroundTarget(WorldInstanceId instanceId) => // B21
+        _trainingAdmissions.TryGetValue(instanceId, out var admission) ? RunGround(admission).TargetScore : 0;
 
     internal bool TryStartTrainingGroundEncounter(
         WorldInstanceId instanceId,
@@ -255,7 +305,7 @@ internal sealed partial class GameSessionRegistry
         }
 
         CompleteWarriorScrollTasks(instanceId, admission.Ground.MapId, templateKey); // WARRIOR scrolls (F-146 b)
-        var progress = _trainingProgress.GetOrAdd(instanceId, _ => new(admission.Ground)); // WARRIOR (F-51)
+        var progress = _trainingProgress.GetOrAdd(instanceId, _ => new(RunGround(admission))); // WARRIOR (F-51), B21
         TrainingGroundKillOutcome outcome;
         int score;
         lock (progress)
@@ -271,7 +321,7 @@ internal sealed partial class GameSessionRegistry
             $"[training] kill instance={instanceId} object={objectId} " +
             $"template={templateKey} score={score}" +
             (outcome == TrainingGroundKillOutcome.Completed
-                ? $" cleared={admission.Ground.TargetScore}" : string.Empty) +
+                ? $" cleared={RunGround(admission).TargetScore}" : string.Empty) + // B21
             (WarriorTrainingGroundPolicy.IsMagmaScorpion(templateKey) ? " magma-scorpion" : string.Empty));
     }
 
@@ -449,7 +499,7 @@ internal sealed partial class GameSessionRegistry
         }
 
         var score = TrainingGroundScore(admission.InstanceId);
-        var reward = admission.Ground.Reward(score, clearedAfter); // WARRIOR (F-51): this ground's table
+        var reward = RunGround(admission).Reward(score, clearedAfter); // WARRIOR (F-51): this ground's table; B21 target
         // Heracles keeps its "reason:tier" outcome; the Warriors' grounds add the ground key.
         var tier = admission.Ground.MapId == TrainingGroundPolicy.MapId
             ? reward.Tier
@@ -719,6 +769,7 @@ internal sealed partial class GameSessionRegistry
         _trainingRetirements.TryRemove(instanceId, out _);
         _trainingLastError.TryRemove(instanceId, out _);
         _trainingProgress.TryRemove(instanceId, out _);
+        _trainingClearPlans.TryRemove(instanceId, out _); // B21
         ForgetInstanceRunMembership(instanceId);
         foreach (var cached in _trainingUi
                      .Where(pair => pair.Value.InstanceId == instanceId))
@@ -765,9 +816,14 @@ internal sealed partial class GameSessionRegistry
         public DateTimeOffset StartedAt { get; } = startedAt;
         public HashSet<int> Entrants { get; } = [];
         public bool RewardsWritten { get; set; }
+        /// <summary>B21: the ground with this run's resolved target, once its monsters are loaded.</summary>
+        public TrainingGroundDefinition? RunGround { get; set; }
 
         public DateTimeOffset Deadline => StartedAt + Ground.TimeLimit;
     }
+
+    /// <summary>B21: the pinned respawn policy and full-clear points of one Training Ground instance.</summary>
+    private sealed record TrainingGroundClearPlan(MonsterRespawnPolicy Policy, int FullClearPoints);
 
     private sealed record TrainingGroundUiStamp(
         WorldInstanceId InstanceId,

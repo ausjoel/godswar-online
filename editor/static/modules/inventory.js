@@ -177,6 +177,22 @@
     }
     openEditor(loc, slot, id);
   }
+  async function openBoxes() {
+    let w;
+    try { w = await P.ctx.api("warehouse/" + P.cid); } catch (e) { await fail(e); return; }
+    const have = Math.floor(w.capacity / 40), max = w.max_boxes;
+    if (have >= max) { await GW.alert(P.st.character.name + " has " + have + " boxes: the most the published key policy opens (" + max + "). SB-" + (max + 1) + "..SB-9 need the nine-box policy update on the server.", "Warehouse"); return; }
+    const sel = h("select", { class: "gw-ch-input", "aria-label": "Boxes" }, Array.from({ length: max - have }, (_, i) => have + 1 + i).map(n => h("option", { value: String(n) }, n + " boxes (SB-1..SB-" + n + ")")));
+    const info = h("p", { class: "gw-dim" });
+    const show = async () => { try { const p = (await P.ctx.api("warehouse/" + P.cid + "?boxes=" + sel.value)).plan; info.textContent = p.steps.map(s => "SB-" + s.box + ": " + s.keys + " key" + (s.keys === 1 ? "" : "s")).join(", ") + " = " + p.total + " keys; " + w.held + " in the bag, " + p.give + " to add."; } catch (e) { info.textContent = e.message; } };
+    sel.addEventListener("change", show); await show();
+    const ok = await GW.confirm({ title: "Open warehouse boxes", ok: "Give the keys", el: h("div", null,
+      h("p", null, P.st.character.name + " has " + have + " box" + (have === 1 ? "" : "es") + " (" + w.capacity + " cells). Open up to:"), sel, info,
+      h("p", { class: "gw-dim" }, "The warehouse size can only grow through the game's own Warehouse Manager (it records each step). The keys go to the bag; the player then talks to the Warehouse Manager once per box.")) });
+    if (!ok) return;
+    try { const r = await P.ctx.api("warehouse-keys/" + P.cid, { boxes: Number(sel.value), expected_capacity: w.capacity }); if (r.change) await done(r, "warehouse keys"); GW.alert(r.note || "done", "Warehouse"); }
+    catch (e) { await fail(e); }
+  }
   async function addAnywhere(id) {
     const s = firstFree(LOC.BAG);
     if (s === null) { GW.alert("The bag is full (96 cells). Free a cell first.", "Bag full"); return; }
@@ -206,7 +222,8 @@
     const g = number("Grade", 1, 1, c.grade, "Applies to the gear and mounts in this batch. Up to the client's limit; use the single-item editor to go above it.");
     const all = number("Set all counts", 1, 1, 999, "Sets every row's count, held to what that item can stack to.");
     const bound = h("input", { type: "checkbox", "aria-label": "Bound" });
-    const dest = h("select", { "aria-label": "Destination", disabled: online.online ? true : null }, h("option", { value: LOC.BAG }, "Bags"), h("option", { value: LOC.WH }, "Warehouse"));
+    // W4-B: the Prize Chest by the warehouse works online and offline (the player collects it there).
+    const dest = h("select", { "aria-label": "Destination" }, h("option", { value: LOC.BAG }, "Bags"), h("option", { value: LOC.WH, disabled: online.online ? true : null }, "Warehouse"), h("option", { value: "chest" }, "Prize Chest (player collects)"));
     const list = h("div", { class: "gw-inv-batch-list" }), review = h("div", { class: "gw-inv-batch-review" });
     const go = h("button", { class: "gw-btnx", type: "button" }, online.online ? "Give items" : "Review");
     function draw() {
@@ -232,6 +249,15 @@
     go.addEventListener("click", async () => {
       go.disabled = true;
       try {
+        if (dest.value === "chest") {
+          if (!await GW.confirm({ title: "Send " + rows.length + " item row(s) to the Prize Chest?", message: "They wait in the Prize Chest next to the warehouse keeper until the player collects them. Quantities above 99 become several stacks." })) return;
+          if (!current()) return;
+          const r = await GW.api("/api/m/favourites/give-chest", { target: cid, items: items() });
+          if (!current()) return;
+          m.close();
+          await done(r, "Sent " + r.sent + " row(s) to the Prize Chest" + (r.online && r.online.note ? " \u00b7 " + r.online.note : ""));
+          return;
+        }
         if (online.online) {
           if (!await GW.confirm({ title: "Give " + rows.length + " items now?", message: online.name + " is online, so the game server gives them one at a time. Live gives have no automatic Undo, and if one is refused the rest are not given." , ok: "Give items" })) return;
           if (!current()) return;
@@ -291,9 +317,10 @@
         if (id !== null && id !== "") addAnywhere(id);
       } }, "+ Holy Box"),
       h("a", { class: "gw-btnx", href: "#/favourites/" + P.cid }, "Favourites / copy items"),
-      h("span", { class: "gw-inv-keys", "data-help": "Storage Box Keys (item 4102) in the bag. The Warehouse Manager uses 1 / 2 / 3 keys to open SB-2 / SB-3 / SB-4 (docs/warehouse.md). The editor cannot raise the warehouse capacity itself (it needs the game's settlement record), but it can give keys." },
+      h("span", { class: "gw-inv-keys", "data-help": "Storage Box Keys (item 4102) in the bag. The Warehouse Manager uses 1 / 2 / 3 keys to open storage boxes 2, 3 and 4. The editor cannot raise the warehouse capacity itself, but it can give keys." },
         GW.icon((irow(P.meta.storage_key) || {}).sprite), " Storage Box Keys: ", h("b", { class: "gw-value" }, GW.fmt(P.st.storage_keys))),
-      h("button", { class: "gw-btnx small", type: "button", "data-help": "Put Storage Box Keys in the bag (you choose how many in the next window).", onclick: () => addAnywhere(P.meta.storage_key) }, "+ keys"),
+      // W4A: the warehouse opener - pick how many boxes; the editor gives exactly the keys the game's policy asks for
+      h("button", { class: "gw-btnx small", type: "button", "data-help": "Open more warehouse boxes: choose how many boxes the character should have; the editor puts exactly the Storage Box Keys needed in the bag, and the player talks to the Warehouse Manager once per box.", onclick: () => openBoxes() }, "Open boxes..."),
       h("span", { class: "gw-inv-limits", "data-help": "What the Godswar Origin client can draw: quality 1-20, grade 1-25, attribute level 25 and 4 holy sockets. The database also allows 6 sockets; going above the client's limits needs the 'Allow above the client limits' tick in the gear editor (the item then looks wrong or plain in game)." },
         "client limits: Q", P.meta.client.quality, " · G", P.meta.client.grade, " · L", P.meta.client.attribute_level, " · ", P.meta.client.sockets, " sockets"),
       P.modeChip = h("span", { class: "gw-inv-mode" }));
@@ -347,7 +374,7 @@
     for (let p = 0; p < 4; p++) {
       const g = h("div", { class: "gw-inv-grid six", role: "grid", "aria-label": "bag " + BAG_NAMES[p] });
       for (let i = 0; i < 24; i++) g.append(makeCell(LOC.BAG, p * 24 + i));
-      wrap.append(h("div", { class: "gw-inv-bag" }, h("div", { class: "gw-inv-bagname", "data-help": "Bag " + BAG_NAMES[p] + " = kit-bag slots " + (p * 24) + "-" + (p * 24 + 23) + " (item_location 1)." }, "Bag " + BAG_NAMES[p]), g));
+      wrap.append(h("div", { class: "gw-inv-bag" }, h("div", { class: "gw-inv-bagname", "data-help": "Bag " + BAG_NAMES[p] + " = bag slots " + (p * 24) + "-" + (p * 24 + 23) + "." }, "Bag " + BAG_NAMES[p]), g));
     }
     const used = P.st.items.filter(r => r.item_location === LOC.BAG).length;
     w.append(wrap, h("div", { class: "gw-dim gw-inv-small" }, used + " of 96 cells used. Drag to move (dropping on a full cell swaps); Delete key removes the focused item."));
@@ -400,9 +427,9 @@
     const anyBag = liveBag("character.give_item") || liveBag("character.item_move") || liveBag("character.item_delete");
     GW.clear(P.modeChip).append(off ? GW.appliesChip("next_login", "offline: changes apply at the next login")
       : anyBag ? GW.appliesChip("live", "online: bag items change live, the rest needs a logout")
-        : h("span", { class: "gw-chip restart", "data-help": "Live edits arrive with the round-2 server update; this character must be logged out to edit its items." }, "online: log out to edit"));
+        : h("span", { class: "gw-chip restart", "data-help": "This game server cannot change items while the player is online; this character must be logged out to edit its items." }, "online: log out to edit"));
     const why = o.online ? (anyBag ? "The player is logged in: the game server can add, move (to an empty bag cell) and remove BAG items live. Equipment and bag item details need the character logged out (or use 'Kick to edit everything'). Tip: have the player put the item in the warehouse; warehouse items can be edited while they are online (they see it the next time they open storage)."
-      : "The player is logged in. Live edits arrive with the round-2 server update; this character must be logged out to edit its items.") : "";
+      : "The player is logged in. This game server cannot change items while the player is online; this character must be logged out to edit its items.") : "";
     for (const w of [P.equipWin]) { w.classList.toggle("gw-inv-off", !off); if (!off) w.dataset.help = why; else delete w.dataset.help; }
     // the admin F-87: the warehouse stays editable while the player is online (written to the database, seen on next open).
     P.whWin.classList.remove("gw-inv-off");
@@ -440,6 +467,7 @@
     const minlv = Number(e.minlv || e.playlv || srv.minlv || 0);
     const allowed = new Set((e.append_attributes || []).map(Number));
     const suitItem = P.meta.class_suit_items.includes(Number(pid));
+    const classItem = suitItem || (gear && !!P.meta.class_stat_any_item);   // B22 d55: the class stone on any gear
     const o = onlineState();
     const isNew = !old || !!newPid;
     let mode = "offline";
@@ -526,16 +554,17 @@
     const suitBox = h("div", { class: "gw-inv-line" });
     const sockList = h("div", { class: "gw-inv-socklist" });
     mid.append(h("h3", { "data-help": "Green attribute amounts use the selected gear grade. Quartz enhancement rank is a separate strength family. Click a line to replace it with the maximum supported family." }, "Append attributes"), attrBox);
-    if (suitItem) mid.append(h("h3", { "data-help": "Class-suit pieces (tier III / IV) may carry one class attribute and up to two elemental attributes of different elements (database CHECK). Elemental values grow with the grade: +0.40% per grade (+0.20% for 'chance' attributes)." }, "Class and elemental attributes"), classBox);
+    if (suitItem) mid.append(h("h3", { "data-help": "Class-suit pieces (tier III / IV) may carry one class attribute and up to two elemental attributes of different elements (the database refuses anything else). Elemental values grow with the grade: +0.40% per grade (+0.20% for 'chance' attributes)." }, "Class and elemental attributes"), classBox);
+    else if (classItem) mid.append(h("h3", { "data-help": "Any gear may carry one class stone (the 5th stat), as players can reach in game. Elemental attributes stay on class-suit pieces only." }, "Class stone (5th stat)"), classBox);
     if (gear) mid.append(h("h3", { "data-help": "Holy suit tier and level of this gear (tier x 100 + level, e.g. 403 = Level 3 Platinum). Equipped gear in slots 0-11 adds holy-suit points; the server recomputes them when the equipment changes." }, "Holy suit (Vestment)"), suitBox,
       h("h3", { "data-help": "Holy stones in the sockets. Click a socket on the item picture (or a line here) to add, change or remove a stone. The client shows 4 sockets." }, "Holy sockets"), sockList);
-    mid.append(h("div", { class: "gw-inv-line gw-dim gw-inv-small", "data-help": "The reborn server stores no durability and no time limit for items (character_items has no such columns): items never wear out or expire, so there is nothing to edit." }, "Durability / time limit: not stored by this server (items never wear out or expire)."));
+    mid.append(h("div", { class: "gw-inv-line gw-dim gw-inv-small", "data-help": "This server keeps no durability and no time limit for items: items never wear out or expire, so there is nothing to edit." }, "Durability / time limit: not stored by this server (items never wear out or expire)."));
 
     function drawAttrs() {
       GW.clear(attrBox);
       for (let i = 1; i <= 5; i++) {
         const id = D["attribute" + i], lv = D["attribute_level" + i];
-        const b = h("button", { class: "gw-inv-attr" + (id === null || id === undefined ? " empty" : ""), type: "button", "data-help": "Append attribute row " + i + " (attribute" + i + " / attribute_level" + i + "). Click to " + (id ? "change or remove it." : "add one.") });
+        const b = h("button", { class: "gw-inv-attr" + (id === null || id === undefined ? " empty" : ""), type: "button", "data-help": "Bonus attribute " + i + ". Click to " + (id ? "change or remove it." : "add one.") });
         if (id !== null && id !== undefined) {
           b.append(h("span", { class: "tt-green" }, ((((P.meta.attributes[String(id)] || {}).family_policy || {}).rank) ? "(Lv." + P.meta.attributes[String(id)].family_policy.rank + ") " : "") + attrLabel(id) + " " + attrValue(id, D.item_grade) + " at G" + D.item_grade));
           if (allowed.size && !GW.attributeFamilies.canRoll(P.meta.attributes[String(id)],allowed)) b.append(h("span", { class: "gw-inv-warnmark", "data-help": "This item cannot roll this attribute in game." }, " !"));
@@ -544,13 +573,13 @@
         attrBox.append(b);
       }
       GW.clear(classBox);
-      if (suitItem) {
+      if (classItem) {
         const cs = h("select", { class: "gw-inv-sel", "aria-label": "Class attribute", "data-field": "character_items.class_attribute1" }, h("option", { value: "" }, "(no class attribute)"),
           P.meta.class_attributes.filter(a => a.professions.includes(P.st.character.profession) || Number(D.class_attribute1) === a.id).map(a => h("option", { value: a.id, disabled: !a.professions.includes(P.st.character.profession) || null }, attrLabel(a.id) + " #" + a.id + " · G" + D.item_grade + " " + attrValue(a.id, D.item_grade) + " · " + P.meta.attributes[String(a.id)].family_policy.stone_name)));
         cs.value = D.class_attribute1 === null || D.class_attribute1 === undefined ? "" : String(D.class_attribute1);
         cs.addEventListener("change", () => { D.class_attribute1 = cs.value === "" ? null : Number(cs.value); changed(); });
         classBox.append(cs);
-        for (const n of [1, 2]) {
+        for (const n of (suitItem ? [1, 2] : [])) {
           const es = h("select", { class: "gw-inv-sel", "aria-label": "Elemental attribute " + n, "data-field": "character_items.elemental_attribute" + n }, h("option", { value: "" }, "(no elemental attribute " + n + ")"));
           let grp = null, cur = "";
           for (const x of P.meta.elementals) {
@@ -657,6 +686,12 @@
       const cq = Math.max(P.meta.client.quality, Number(e.max_quality) || 0), cg = Math.max(P.meta.client.grade, Number(e.max_grade) || 0);
       if (gear && D.item_quality > cq) over.push("Quality Q" + D.item_quality + " is above what your client shows (Q" + cq + "): the tooltip shows the Q" + cq + " stats" + ([14, 15, 17, 19, 20].includes(Number(D.item_quality)) ? " and the name has no quality colour" : "") + ".");
       if (gear && D.item_grade > cg) over.push("Grade " + D.item_grade + " is above the client's G" + cg + ".");
+      // W4F: legal-default checks (warn only; saving is still allowed).
+      const dq = (P.meta.default_quality || {})[String(pid)];
+      if (dq && dq.quality != null && Number(D.item_quality) !== Number(dq.quality)) w.push("This item normally comes at Q" + dq.quality + " " + (GW.QUALITY_NAMES[dq.quality] || "") + "; Q" + D.item_quality + " may not be a legal item (saved anyway). " + dq.source);
+      if (dq && dq.grade != null && Number(D.item_grade) !== Number(dq.grade)) w.push("This item normally comes at G" + dq.grade + "; G" + D.item_grade + " may not be a legal item (saved anyway).");
+      const own = Number(e.max_quality) || 0;
+      if (gear && !dq && own && own < P.meta.client.quality && D.item_quality > own) w.push("This item's own data has qualities Q1-Q" + own + " only (BaseFraction); Q" + D.item_quality + " cannot drop or be forged in game (saved anyway).");
       for (let i = 1; i <= 5; i++) { const lv = Number(D["attribute_level" + i]); if (D["attribute" + i] !== null && D["attribute" + i] !== undefined && lv > P.meta.client.attribute_level) over.push(attrLabel(D["attribute" + i]) + " level " + lv + " is above the client's L" + P.meta.client.attribute_level + "."); }
       if (D.holy_socket_count > 4) over.push(D.holy_socket_count + " sockets: the client shows 4; sockets 5-6 are invisible in game.");
       if (D.stack > 255) over.push("Count " + D.stack + ": the client shows stack counts only up to 255.");
@@ -862,6 +897,7 @@
     async mount(el, ctx) {
       P = { ctx, cid: ctx.cid, root: el, tab: "equip", wbox: 0, online: null };
       el.append(GW.onlineBanner(ctx.cid, { onState: st => { if (!P) return; const was = P.online && P.online.online; P.online = st; applyOnline(); if (was !== undefined && was !== null && was !== st.online) reload(0); } }));
+      el.append(GW.loginCheckBanner(ctx.cid));
       P.toolbar = h("div", { class: "gw-inv-toolbar" });
       P.equipWin = h("section", { class: "gw-frame-normalwindow gw-text gw-inv-win gw-inv-equipwin" });
       P.bagWin = h("section", { class: "gw-frame-normalwindow gw-text gw-inv-win gw-inv-bagwin" });

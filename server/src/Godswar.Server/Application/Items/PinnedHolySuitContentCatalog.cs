@@ -24,9 +24,59 @@ internal sealed class PinnedHolySuitContentCatalog :
         OperationPolicy = operationPolicy;
         _consumablesByItemId = consumables.ToFrozenDictionary(
             static value => value.ItemId);
-        _upgradesByCurrentState = upgrades.ToFrozenDictionary(
-            static value => (value.CurrentSuitType, value.CurrentLevel));
+        // W4F: runtime lookups use the reviewed EquipEffect corrections; the
+        // sealed Upgrades list (hashed into the revision) stays unchanged.
+        _upgradesByCurrentState = upgrades.Select(ApplyReviewedCorrection)
+            .ToFrozenDictionary(
+                static value => (value.CurrentSuitType, value.CurrentLevel));
     }
+
+    // W4F (the admin 2026-11-12, wave 4 answer 1): EquipEffect.xml row 410
+    // (Platinum 10 -> Mithril 1) shipped as the placeholder 999,999,999.
+    // Corrected to follow the Platinum trend: 866,697,995 x the geometric mean
+    // step ratio of rows 401-409 ((866697995/155886267)^(1/8) = 1.23917).
+    // Applied only when the published row still holds the exact placeholder,
+    // so a later republished revision with a reviewed value wins.
+    internal const long PlaceholderPlatinumToMithrilExperience = 999_999_999;
+    internal const long CorrectedPlatinumToMithrilExperience = 1_073_990_114;
+
+    // W4H (the admin 2026-11-12, wave 4 question F1 "smooth them"): two more rows
+    // broke their tier's trend and are smoothed the same way as row 410
+    // (previous row x the geometric mean step ratio of the tier's run):
+    // - row 110 (Bronze 10 -> Silver 1) shipped as 3,875,101, LOWER than row
+    //   109 (7,427,277). 7,427,277 x (7427277/4198026)^(1/4) [rows 105-109,
+    //   ratio 1.15331; rows 101-104 are a separate low band] = 8,565,954.
+    // - row 309 (Gold 9 -> 10) shipped as the round figure 100,000,000.
+    //   96,102,508 x (96102508/61505605)^(1/7) [rows 301-308, ratio 1.06583]
+    //   = 102,429,086 (row 310 is 133,833,876).
+    // Each applies only while the published row holds the exact old value.
+    internal const long OriginalBronzeToSilverExperience = 3_875_101;
+    internal const long CorrectedBronzeToSilverExperience = 8_565_954;
+    internal const long OriginalGoldNineToTenExperience = 100_000_000;
+    internal const long CorrectedGoldNineToTenExperience = 102_429_086;
+
+    internal static HolySuitUpgradeDefinition ApplyReviewedCorrection(
+        HolySuitUpgradeDefinition value) =>
+        value switch
+        {
+            { CurrentSuitType: 4, CurrentLevel: 10,
+                TargetSuitType: 5, TargetLevel: 1,
+                RequiredItemExperience:
+                    PlaceholderPlatinumToMithrilExperience } =>
+                value with { RequiredItemExperience =
+                    CorrectedPlatinumToMithrilExperience },
+            { CurrentSuitType: 1, CurrentLevel: 10,
+                TargetSuitType: 2, TargetLevel: 1,
+                RequiredItemExperience: OriginalBronzeToSilverExperience } =>
+                value with { RequiredItemExperience =
+                    CorrectedBronzeToSilverExperience },
+            { CurrentSuitType: 3, CurrentLevel: 9,
+                TargetSuitType: 3, TargetLevel: 10,
+                RequiredItemExperience: OriginalGoldNineToTenExperience } =>
+                value with { RequiredItemExperience =
+                    CorrectedGoldNineToTenExperience },
+            _ => value
+        };
 
     public static PinnedHolySuitContentCatalog Empty { get; } = new(
         [], [], [], [], null);

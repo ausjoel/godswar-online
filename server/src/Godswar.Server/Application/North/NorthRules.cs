@@ -17,15 +17,13 @@ internal static class NorthRateDefinitions
 
     public static IReadOnlyList<ServerRateDefinition> All { get; } =
     [
-        new(NorthRateKeys.NpcSafeRadius, NorthCategory, "PvP safe radius round north camp npcs", "units",
+        new(NorthRateKeys.NpcSafeRadius, NorthCategory, "PvP safe zone around north camp NPCs", "units",
             ServerRateKind.Absolute, 0m, 0m, 40m, 1m, 10,
             "Game/PvpWorldAuthorityCatalog.cs (every player-vs-player admission)",
-            "GENERATED rule (the admin 2026-11-05). On the north maps (Mycenae 6, Olympia 7, Larissa 10, " +
-            "Delphi Forest 20, Olympus 21, Elasson 22) a player standing within this many units of an " +
-            "operator-placed npc (gm_npc_spawns) cannot attack, or be attacked by, another player: " +
-            "basic attacks, skills, area skills and periodic damage are all refused as a safe zone. " +
-            "0 = off (as before). Suggested 12. Read on every PvP admission, so a change applies after " +
-            "the next rates reload."),
+            "Makes a PvP safe zone around the NPCs added to the north maps (Mycenae, Olympia, " +
+            "Larissa, Delphi Forest, Olympus, Elasson). A player within this many units of such " +
+            "an NPC cannot attack or be attacked by another player. 0 = off; 12 is a good start. " +
+            "This is our own rule, not from the original game."),
     ];
 }
 

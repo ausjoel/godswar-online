@@ -26,62 +26,79 @@ internal enum ChatAudience : byte
 /// sent on, and the text half of it.
 /// </summary>
 /// <remarks>
-/// The layout is read off the client's own frames, captured 2026-10-01 on the local
-/// server while the operator sent one message per channel (character <c>test</c>,
-/// character id 2):
+/// The layout is the 2008 server's <c>MSG_TALK</c> (Common/MsgDefine.h) and was
+/// re-read from the client's own receive routine (GodsWar.exe 0x5351bf, the same
+/// exe in clients 1.4.9 and 1.5.0) on 2026-11-12:
 /// <code>
-/// +0  u32  speaker's object id   0x1448 on every captured frame
+/// +0  u32  speaker's object id
 /// +4  u32  text byte count, including the two-byte terminator
-/// +8  u32  channel word
-/// +12      UTF-16LE text
+/// +8  u8   channel type          (ucType)
+/// +9  u8   speaker name length   (ucResPlayerNameSize, UTF-16 units)
+/// +10 u8   target name length    (ucAimPlayerNameSize, UTF-16 units; 0 off the private channel)
+/// +11 u8   chat bubble style     (ucChatBubbleSytle)
+/// +12      UTF-16LE text: [target name][speaker name][message]
 /// </code>
-/// (Both offsets are inside the frame's payload, i.e. after its 4-byte
-/// length/opcode header.) The channel word is a bit field. Bits 1..4 are the chat
-/// window's channel selector, exactly one at a time; bit 7 is the realm-wide flag
-/// the client adds when the message is sent on the world channel; and a private
-/// message carries <see cref="PrivateFlag"/> with <see cref="PrivateSelector"/> in
-/// its low bits, with the recipient's name opening the text. Every value below is a
-/// captured frame, not an inference:
+/// (Offsets are inside the frame's payload, i.e. after its 4-byte length/opcode
+/// header.) The client cuts the text by the two length bytes and by nothing else:
+/// <c>target = text[0..aim]</c>, <c>speaker = text[aim..aim+res]</c>,
+/// <c>message = text[aim+res..]</c>. The colon the client writes after its own name
+/// is simply the first character of the message. What it then draws depends on the
+/// type byte:
 /// <code>
-/// 0x402 party    test:damson
-/// 0x404 guild    test:n2
-/// 0x408 faction  test:cherry
-/// 0x410 nearby   test:appl
-/// 0x482 world    test:appl and test:banana (same word, two different sends)
-/// 0x40401 private to 12e1   "12e1test:nihao"
-/// 0x60401 private to 12v312 "12v312test:haha"
+/// 0x01 private, received   speaker + Message.dat "SaytoU" + message   ("the admin Say to you: oi")
+/// 0x83 private, own copy   Message.dat "SentTo" + target + message    (" Sent to-> a player: oi")
+/// 0x02 team, 0x04 guild, 0x08 camp, 0x10 local, 0x82 world: channel tag + speaker + message
 /// </code>
-/// The two private frames differ by <c>0x20000</c>, whose meaning is NOT
-/// established: nothing here depends on it, and only the flag bit plus the
-/// selector, plus the presence of a recipient name in the text, decide that a frame
-/// is private.
+/// The client never draws a line for a private message it sent; it waits for the
+/// server's 0x83 copy. Frames the operator captured on 2026-10-01 (character
+/// <c>test</c>): <c>0x402</c> party, <c>0x404</c> guild, <c>0x408</c> faction,
+/// <c>0x410</c> nearby, <c>0x482</c> world (all "test:..." with a 4 in the speaker
+/// length byte), <c>0x40401</c> private to 12e1 (<c>12e1test:nihao</c>) and
+/// <c>0x60401</c> private to 12v312 (<c>12v312test:haha</c>). The last two differ in
+/// the target length byte, 4 and 6.
 /// </remarks>
 internal static class ChatChannelProtocol
 {
     /// <summary>Length of the payload every chat frame carries before its text.</summary>
     public const int PayloadHeaderBytes = 12;
 
-    /// <summary>The realm-wide flag the client sets for the world channel.</summary>
-    public const uint WorldFlag = 0x0000_0080;
+    /// <summary>Type byte of a private message as its recipient receives it.</summary>
+    public const byte PrivateType = 0x01;
+
+    /// <summary>Type byte of the party (team) channel.</summary>
+    public const byte PartyType = 0x02;
+
+    /// <summary>Type byte of the guild channel.</summary>
+    public const byte GuildType = 0x04;
+
+    /// <summary>Type byte of the faction (camp) channel.</summary>
+    public const byte FactionType = 0x08;
+
+    /// <summary>Type byte of the nearby (local) channel.</summary>
+    public const byte NearbyType = 0x10;
+
+    /// <summary>Type byte of the world channel.</summary>
+    public const byte WorldType = 0x82;
 
     /// <summary>
-    /// The flag a private message carries. Its low bits are
-    /// <see cref="PrivateSelector"/> as well, so a private message is recognised by
-    /// both: a word with only this bit set is not one this build knows.
+    /// Type byte of the copy of a private message its sender gets back: the client
+    /// draws it as "Sent to-&gt; target message". Only the server writes it.
     /// </summary>
-    public const uint PrivateFlag = 0x0004_0000;
+    public const byte PrivateSentType = 0x83;
 
-    /// <summary>
-    /// The selector bits a private message carries beside its flag: both captured
-    /// private frames end in <c>0x401</c>.
-    /// </summary>
-    public const uint PrivateSelector = 0x0000_0401;
+    /// <summary>The longest name a length byte can describe.</summary>
+    public const int MaximumNameLength = byte.MaxValue;
 
-    private const uint ChannelMask = 0x0000_001E;
-    private const uint NearbyBit = 0x0000_0010;
-    private const uint PartyBit = 0x0000_0002;
-    private const uint GuildBit = 0x0000_0004;
-    private const uint FactionBit = 0x0000_0008;
+    /// <summary>The channel type byte of a channel word.</summary>
+    public static byte ReadType(uint channelWord) => (byte)channelWord;
+
+    /// <summary>The speaker name length a channel word declares, in UTF-16 units.</summary>
+    public static int ReadSpeakerNameLength(uint channelWord) =>
+        (int)((channelWord >> 8) & 0xFF);
+
+    /// <summary>The target name length a channel word declares, in UTF-16 units.</summary>
+    public static int ReadTargetNameLength(uint channelWord) =>
+        (int)((channelWord >> 16) & 0xFF);
 
     /// <summary>
     /// Reads the channel word and the text out of a chat frame's payload.
@@ -127,103 +144,149 @@ internal static class ChatChannelProtocol
     }
 
     /// <summary>
-    /// Which audience a captured channel word addresses.
+    /// Which audience a channel word addresses, by its type byte alone.
     /// </summary>
     /// <remarks>
+    /// The two name length bytes play no part. Until 2026-11-12 a private message
+    /// was recognised by bits 0x40000 and 0x400, which are bit 2 of the target's and
+    /// of the speaker's name length: a whisper to or from a name of 1-3, 8-11 or
+    /// 16-19 characters was taken for a nearby line and shown to the whole map.
+    /// <para>
     /// A word this build does not recognise falls back to
     /// <see cref="ChatAudience.Nearby"/>, which is the behaviour that shipped
     /// before channels existed: an unknown channel can never swallow a message or
     /// send it further than the sender's own map.
+    /// </para>
     /// </remarks>
     public static ChatAudience ResolveAudience(uint channelWord) =>
-        (channelWord & PrivateFlag) != 0 &&
-        (channelWord & PrivateSelector) == PrivateSelector
-            ? ChatAudience.Private
-            : (channelWord & WorldFlag) != 0
-                ? ChatAudience.World
-                : (channelWord & ChannelMask) switch
-                {
-                    PartyBit => ChatAudience.Party,
-                    GuildBit => ChatAudience.Guild,
-                    FactionBit => ChatAudience.Faction,
-                    NearbyBit => ChatAudience.Nearby,
-                    _ => ChatAudience.Nearby
-                };
+        ReadType(channelWord) switch
+        {
+            PrivateType => ChatAudience.Private,
+            WorldType => ChatAudience.World,
+            PartyType => ChatAudience.Party,
+            GuildType => ChatAudience.Guild,
+            FactionType => ChatAudience.Faction,
+            _ => ChatAudience.Nearby
+        };
 
     /// <summary>
-    /// The number of UTF-16 characters the recipient's client reads as the private
-    /// line's second name - the one it renders as "对&lt;name&gt;说:".
+    /// The text of a private message as the server relays it, the same for both
+    /// sides: <c>[target][speaker]: message</c>.
     /// </summary>
     /// <remarks>
-    /// Measured across the operator's live tests on 2026-10-01. The client's line is
-    /// <c>[text 0..4] + "对" + [text 4..8] + "说:" + [text 10..]</c>, which every
-    /// observation fits:
-    /// <list type="bullet">
-    /// <item><c>12e1test:nihao</c> (the captured frame) rendered as
-    /// <c>test对你说:nihao</c> - so the visible name is <c>[4..8]</c>, and the
-    /// digits after character ten are the message;</item>
-    /// <item><c>test:nihao</c> rendered as <c>test对你说:</c> with no message:
-    /// the message starts at character ten and that text ends there;</item>
-    /// <item>the sentence sent to test this formula - <c>12e1对test说:hello</c> -
-    /// rendered as <c>对tes对你说t说:hello</c>, i.e. <c>[0..4]="对tes"</c>,
-    /// <c>[4..8]="t"</c> as the name, and <c>[10..]="t说:hello"</c> as the
-    /// message.</item>
-    /// </list>
-    /// </remarks>
-    public const int PrivateVisibleNameLength = 4;
-
-    /// <summary>
-    /// The number of UTF-16 characters of a private message's text that precede its
-    /// message.
-    /// </summary>
-    public const int PrivateBodyPrefixLength = 10;
-
-    /// <summary>
-    /// Builds the text of one side of a private conversation.
-    /// </summary>
-    /// <param name="leadName">
-    /// The name whose four characters occupy the text's first slot. The client does
-    /// not render them; they only hold the layout.
-    /// </param>
-    /// <param name="visibleName">
-    /// The name the client renders in the line, i.e. the other party: the speaker on
-    /// the recipient's copy, the recipient on the speaker's copy.
-    /// </param>
-    /// <param name="message">What was typed.</param>
-    /// <remarks>
-    /// Two live measurements pin the layout, and both come from the operator reading
-    /// the line his own client drew:
-    /// <list type="bullet">
-    /// <item>a body of <c>test:nihao</c> drew nothing after the colon, so the message
-    /// starts at character nine;</item>
-    /// <item>a body of <c>test12e1说:hello</c> drew
-    /// <c>test对12e1说:说:hello</c>, i.e. the client wrote its own <c>说:</c> and then
-    /// repeated what it found from character nine. So the client's line is
-    /// <c>[0..4] + 对 + [4..8] + 说: + [9..]</c> and the colon at character eight is
-    /// the one its <c>说:</c> replaces.</item>
-    /// </list>
-    /// The body is therefore <c>&lt;lead&gt;&lt;visible&gt;:&lt;message&gt;</c> with
-    /// both names padded or truncated to four characters, never the word
-    /// <c>说</c>.
+    /// This is the shape the client itself sends (<c>12e1test:nihao</c>) with one
+    /// space added after the colon, so the two lines read
+    /// "the admin Say to you: oi" and " Sent to-&gt; a player: oi". The names are written
+    /// whole; <see cref="BuildPrivateWord"/> tells the client where each one ends.
+    /// Measured in the real client on 2026-11-12 with name pairs of 3 to 16
+    /// characters (screens: Development/w5/g-whisper/screens).
     /// </remarks>
     public static string BuildPrivateBody(
-        string leadName,
-        string visibleName,
+        string targetName,
+        string speakerName,
         string message)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(leadName);
-        ArgumentException.ThrowIfNullOrWhiteSpace(visibleName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(targetName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(speakerName);
         ArgumentNullException.ThrowIfNull(message);
-        return Slot(leadName) + Slot(visibleName) + ":" + message;
+        if (targetName.Length > MaximumNameLength ||
+            speakerName.Length > MaximumNameLength)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(targetName),
+                "A chat frame describes each name's length in one byte.");
+        }
+
+        return targetName + speakerName + ": " + message.TrimStart();
     }
 
-    private static string Slot(string name) =>
-        name.Length > PrivateVisibleNameLength
-            ? name[..PrivateVisibleNameLength]
-            : name.PadRight(PrivateVisibleNameLength);
+    /// <summary>
+    /// The channel word that goes with <see cref="BuildPrivateBody"/>: the given
+    /// type, the two names' real lengths, and the bubble style byte of the word the
+    /// speaker's frame carried.
+    /// </summary>
+    /// <param name="type">
+    /// <see cref="PrivateType"/> for the recipient's copy,
+    /// <see cref="PrivateSentType"/> for the speaker's.
+    /// </param>
+    public static uint BuildPrivateWord(
+        byte type,
+        string targetName,
+        string speakerName,
+        uint sourceWord)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(targetName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(speakerName);
+        if (targetName.Length > MaximumNameLength ||
+            speakerName.Length > MaximumNameLength)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(targetName),
+                "A chat frame describes each name's length in one byte.");
+        }
+
+        return (sourceWord & 0xFF00_0000u) |
+            ((uint)targetName.Length << 16) |
+            ((uint)speakerName.Length << 8) |
+            type;
+    }
 
     /// <summary>
-    /// Splits a private message's text into its recipient and its message.
+    /// Splits a private message's text into its recipient and its message, by the
+    /// name lengths the client wrote in the channel word.
+    /// </summary>
+    /// <remarks>
+    /// This is exact for every name pair: a recipient whose name starts or ends
+    /// with the speaker's, or a name or message with a colon in it, cannot move the
+    /// cut. The speaker segment must be the session's own character name, and the
+    /// message must open with the colon the client writes. A frame whose length
+    /// bytes do not describe its text that way is read by the older rule (the
+    /// first colon), so nothing that was delivered before is refused now.
+    /// </remarks>
+    public static bool TryReadPrivateRecipient(
+        uint channelWord,
+        string text,
+        string speakerName,
+        out string recipientName,
+        out string message)
+    {
+        recipientName = string.Empty;
+        message = string.Empty;
+        if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(speakerName))
+        {
+            return false;
+        }
+
+        var targetLength = ReadTargetNameLength(channelWord);
+        var speakerLength = ReadSpeakerNameLength(channelWord);
+        var namesLength = targetLength + speakerLength;
+        if (targetLength > 0 &&
+            speakerLength == speakerName.Length &&
+            text.Length > namesLength &&
+            text[namesLength] == ':' &&
+            string.Compare(
+                text,
+                targetLength,
+                speakerName,
+                0,
+                speakerLength,
+                StringComparison.OrdinalIgnoreCase) == 0)
+        {
+            recipientName = text[..targetLength].Trim();
+            message = text[(namesLength + 1)..];
+            return recipientName.Length > 0;
+        }
+
+        return TryReadPrivateRecipient(
+            text,
+            speakerName,
+            out recipientName,
+            out message);
+    }
+
+    /// <summary>
+    /// Splits a private message's text into its recipient and its message without
+    /// the channel word: the fallback of the overload that has it.
     /// </summary>
     /// <remarks>
     /// The captured text is <c>&lt;recipient&gt;&lt;speaker&gt;:&lt;message&gt;</c>

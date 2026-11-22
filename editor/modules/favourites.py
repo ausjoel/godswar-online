@@ -173,3 +173,31 @@ def give(ctx):
    return dict(mode='live',given=given,failed=dict(name=name,error=str(e)),not_attempted=[rb.item_meta(i['prop_id'])['name'] for i in items[n+1:]],warnings=sorted(set(warnings)))
   given.append(name)
  return dict(mode='live',given=given,failed=None,not_attempted=[],warnings=sorted(set(warnings)))
+
+@M.post('give-chest')
+def give_chest(ctx):
+ """W4-B: send picked items (or a saved favourite) to the character's Prize Chest by the warehouse instead of a bag.
+ Works online or offline (the player collects at the chest) and needs no free cells. Only item, quantity, quality, grade
+ and binding travel: attributes, sockets and other instance data of a favourite are not copied. Stacks above 99 are
+ split into rows of at most 99 (the admin's rule)."""
+ from . import login_awards
+ cid=common.to_int(ctx.body.get('target'),1,None,'target character')
+ if ctx.body.get('favourite'):items=store(ctx).get(str(ctx.body['favourite']))['items']
+ else:items=plain_items(ctx.body.get('items'))
+ rows=[]
+ for item in items:
+  qty=common.to_int(item.get('stack',1) or 1,1,9999,'quantity')
+  while qty>0:
+   n=min(qty,login_awards.MAX_STACK);qty-=n
+   rows.append({'item_id':item['prop_id'],'quantity':n,'quality':item.get('item_quality',1),'grade':item.get('item_grade',1),'bound':item.get('bound',1)})
+ if len(rows)>login_awards.MAX_ITEMS*6:raise Bad('Too many rows for one send (%d); send fewer items'%len(rows))
+ ctx.body=dict(targets=[cid],items=[],note=ctx.body.get('note') or '')
+ # clean_items caps a request at 16 rows; send in chunks of 16 inside one change each.
+ out=None
+ for start in range(0,len(rows),login_awards.MAX_ITEMS):
+  ctx.body['items']=rows[start:start+login_awards.MAX_ITEMS]
+  ctx.chest_quiet=start+login_awards.MAX_ITEMS<len(rows) # W5-F: one chat line for the player, after the last chunk
+  out=login_awards.chest_send(ctx)
+ out=dict(out or {},mode='prize_chest',sent=len(rows))
+ return out
+

@@ -151,6 +151,29 @@ internal static class NpcContentRuntime
                 GRANT SELECT, INSERT, UPDATE, DELETE ON public.seasonal_events TO gweditor;
             END IF;
         END $$;
+        -- B22 (the admin d32): editor teleporter menus. Rows for an NPC replace the buttons sent for it (order, hidden,
+        -- added) and set a price per button; no rows = the compiled menu and fee. Same DDL as P1/sql/01-npc-teleport-menu.sql.
+        CREATE TABLE IF NOT EXISTS public.npc_teleport_menu (
+            npc_key text NOT NULL CHECK (npc_key ~ '^[A-Za-z0-9_]{1,96}$'),
+            sub_id integer NOT NULL CHECK (sub_id BETWEEN 1 AND 9999),
+            position smallint NOT NULL CHECK (position BETWEEN 1 AND 99),
+            hidden boolean NOT NULL DEFAULT false,
+            price integer CHECK (price IS NULL OR price BETWEEN 0 AND 2000000000),
+            currency text NOT NULL DEFAULT 'silver' CHECK (currency IN ('silver', 'gold', 'bgold')),
+            target_map_id smallint CHECK (target_map_id IS NULL OR target_map_id BETWEEN 0 AND 255),
+            pos_x real CHECK (pos_x IS NULL OR (pos_x >= -256 AND pos_x < 256)),
+            pos_z real CHECK (pos_z IS NULL OR (pos_z > -256 AND pos_z <= 256)),
+            minimum_level smallint CHECK (minimum_level IS NULL OR minimum_level BETWEEN 1 AND 255),
+            display_name text CHECK (display_name IS NULL OR char_length(display_name) <= 48),
+            note text NOT NULL DEFAULT '',
+            PRIMARY KEY (npc_key, sub_id),
+            CHECK ((target_map_id IS NULL) = (pos_x IS NULL) AND (pos_x IS NULL) = (pos_z IS NULL))
+        );
+        DO $$ BEGIN
+            IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'gweditor') THEN
+                GRANT SELECT, INSERT, UPDATE, DELETE ON public.npc_teleport_menu TO gweditor;
+            END IF;
+        END $$;
         DO $$ BEGIN
             IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'gweditor') THEN
                 GRANT SELECT, INSERT, UPDATE, DELETE ON public.npc_shop_overrides, public.npc_teleport_overrides, public.item_activators, public.event_schedule_overrides, public.server_notices, public.notice_settings, public.server_messages, public.level_band_overrides, public.drop_tier_overrides, public.respawn_tier_overrides TO gweditor;
@@ -289,6 +312,33 @@ internal static class NpcContentRuntime
                         reader.GetInt32(5));
                     teleports.Add(teleport);
                     fingerprint.Append(teleport).Append('\n');
+                }
+            }
+
+            // B22 (d32): editor teleporter menus. A row the policy cannot resolve is skipped when the menu is built.
+            var teleportMenus = new List<NpcTeleportMenuRow>();
+            await using (var command = new NpgsqlCommand(
+                "SELECT npc_key, position, sub_id, hidden, price, currency, target_map_id, pos_x, pos_z, minimum_level, display_name " +
+                "FROM public.npc_teleport_menu ORDER BY npc_key, position, sub_id",
+                connection))
+            await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+            {
+                while (await reader.ReadAsync(cancellationToken))
+                {
+                    var menuRow = new NpcTeleportMenuRow(
+                        reader.GetString(0),
+                        reader.GetInt16(1),
+                        reader.GetInt32(2),
+                        reader.GetBoolean(3),
+                        reader.IsDBNull(4) ? null : reader.GetInt32(4),
+                        reader.GetString(5),
+                        reader.IsDBNull(6) ? null : reader.GetInt16(6),
+                        reader.IsDBNull(7) ? null : reader.GetFloat(7),
+                        reader.IsDBNull(8) ? null : reader.GetFloat(8),
+                        reader.IsDBNull(9) ? null : reader.GetInt16(9),
+                        reader.IsDBNull(10) ? null : reader.GetString(10));
+                    teleportMenus.Add(menuRow);
+                    fingerprint.Append("menu").Append(menuRow).Append('\n');
                 }
             }
 
@@ -446,13 +496,14 @@ internal static class NpcContentRuntime
                     welcomeText),
                 levelBands,
                 dropTiers,
-                respawnTiers));
+                respawnTiers,
+                teleportMenus)); // B22
             if (unknownGates.Count > 0)
             {
                 Console.WriteLine($"[npc-content] ignored level_band_overrides rows for unknown gates: {string.Join(", ", unknownGates)}"); // FINALISE2
             }
 
-            Console.WriteLine($"[npc-content] loaded revision {_revision}: {shops.Count} shops, {teleports.Count} teleports, {levelBands.Count} level bands, {dropTiers.Count} drop tiers, {respawnTiers.Count} respawn tiers");
+            Console.WriteLine($"[npc-content] loaded revision {_revision}: {shops.Count} shops, {teleports.Count} teleports, {teleportMenus.Count} menu rows, {levelBands.Count} level bands, {dropTiers.Count} drop tiers, {respawnTiers.Count} respawn tiers");
         }
         finally
         {
@@ -568,6 +619,8 @@ internal static class NpcContentRuntime
             revision = snapshot.Revision,
             shops,
             npcs,
+            // B22 (d32): what the teleporter menu editor needs; the editor reads/writes public.npc_teleport_menu itself.
+            teleport_menus = DescribeTeleportMenus(snapshot),
             teleports = TransporterProtocol.Destinations.Select(static d => new
             {
                 npc = d.NpcKey,
@@ -614,5 +667,37 @@ internal static class NpcContentRuntime
                 }
             })
         });
+    }
+
+    // B22 (d32): per ordinary transporter, the compiled list (published + server-added), the list sent now, the
+    // compiled fees and the reserved slot sub-ids. Published menus come from the same constants the baseline seals.
+    private static object DescribeTeleportMenus(NpcContentSnapshot snapshot)
+    {
+        var npcs = new (string Key, uint Id, short Map, IReadOnlyList<int> Published)[]
+        {
+            ("Sparta_042", TransporterProtocol.SpartaNpcId, 0, TransporterProtocol.SpartaInitialMenuSubIds),
+            ("Athens_041", TransporterProtocol.AthensNpcId, 1, TransporterProtocol.AthensInitialMenuSubIds),
+            ("Mycenae_All_013", TransporterProtocol.MycenaeNpcId, 6, TransporterProtocol.MycenaeInitialMenuSubIds)
+        };
+        return new
+        {
+            maximum_buttons = TransporterMenuPolicy.MaximumButtons,
+            slot_first = TransporterMenuPolicy.FirstSlotSubId,
+            slot_last = TransporterMenuPolicy.LastSlotSubId,
+            currencies = new[] { TransporterMenuPolicy.Silver, TransporterMenuPolicy.Gold, TransporterMenuPolicy.BindingGold },
+            npcs = npcs.Select(n => new
+            {
+                npc = n.Key,
+                source_map = (int)n.Map,
+                compiled = TransporterMenuPolicy.CompiledMenu(n.Published, n.Key, n.Id),
+                effective = TransporterMenuPolicy.EffectiveMenu(n.Published, n.Key, n.Id, n.Map, snapshot),
+                rows = TransporterMenuPolicy.RowsFor(snapshot, n.Key).Count,
+                compiled_fees = TransporterProtocol.Destinations
+                    .Where(d => d.NpcKey == n.Key)
+                    .Select(d => new { sub = d.SubId, fee = TransporterMenuPolicy.Price(d, null, gmSkips: false).Amount })
+                    .Where(static f => f.fee > 0)
+                    .ToArray()
+            }).ToArray()
+        };
     }
 }

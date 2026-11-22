@@ -8,7 +8,9 @@ internal enum ClassSuitConversionOperation : short
     ConvertToCommon = 104,
     UpgradeTierII = 105,
     UpgradeTierIII = 106,
-    UpgradeTierIV = 108
+    UpgradeTierIV = 108,
+    // B22 G2 (d36): Class Suit IV -> Titan (V) -> Primordial (VI) -> Aether (VII), paid in medals.
+    UpgradeTierBeyond = 109
 }
 
 internal enum ClassSuitConversionStatus

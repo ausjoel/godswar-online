@@ -97,6 +97,11 @@ internal sealed partial class GameClientHandler
         SkillCombatDefinition authoredCombat,
         CancellationToken cancellationToken)
     {
+        if (await TryHitPvpPlayersInClassFieldCastAsync(cast, authoredCombat, cancellationToken)) // B22 B23-F
+        {
+            return;
+        }
+
         var character = _character;
         if (character is null ||
             !Godswar.Server.Application.Finalise2.Finalise2Rates.On(

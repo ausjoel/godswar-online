@@ -30,6 +30,11 @@ internal sealed partial class GameClientHandler
             return true;
         }
 
+        if (await RefuseSwitchedOffCommandAsync(packet, "cmd.medusatitle", cancellationToken)) // W5B
+        {
+            return true;
+        }
+
         if (!valid)
         {
             await SendDeveloperMedusaTitleFeedbackAsync(

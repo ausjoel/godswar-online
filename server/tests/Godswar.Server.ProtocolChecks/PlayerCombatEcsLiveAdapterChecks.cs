@@ -333,6 +333,39 @@ internal static partial class PlayerCombatEcsLiveAdapterChecks
             beforeAreaMana - area.Mp,
             character.CurrentMp,
             "live area cast reserves mana once");
+
+        // B21 item 18: the per-class area multiplier reaches the live ECS area path.
+        var aoeKey = Godswar.Server.Application.Combat.AreaSkillBalance.KeyFor(character.Profession)!;
+        Godswar.Server.Application.Rates.ServerRates.Install(Godswar.Server.Application.Rates.ServerRatesSnapshot.Create(
+            [KeyValuePair.Create(aoeKey, 0.5m)], 1, DateTimeOffset.UtcNow, "check", "test"));
+        try
+        {
+            character.CurrentMp = character.MaxMp;
+            var halved = registry.ResolvePlayerCombatEcs(
+                session,
+                character,
+                WorldObjectIds.ForPlayer(character.Id),
+                DateTimeOffset.MinValue,
+                PlayerCombatEcsRequest.HostileSkill(
+                    PlayerCombatIntentKind.AreaSkill,
+                    Start.AddSeconds(60),
+                    uint.MaxValue,
+                    area));
+            var landed = halved.Resolutions.Where(static r => r.Resolution.Hit && r.Resolution.Damage > 0).ToArray();
+            Check.True(
+                landed.Length > 0 &&
+                landed.All(static r => r.Resolution.Damage == Math.Max(1u, (uint)decimal.Round(
+                    decimal.Round(r.Resolution.Evidence.DamageAfterAbsorption, 0, MidpointRounding.AwayFromZero) * 0.5m,
+                    0, MidpointRounding.AwayFromZero))),
+                $"B21: {aoeKey} = x0.5 halves live ECS area damage ({landed.Length} hits, " +
+                string.Join(",", halved.Resolutions.Select(static r =>
+                    $"{r.Resolution.Damage}/{r.Resolution.Evidence.DamageAfterAbsorption}")) +
+                $", rejection {halved.RejectionReason})");
+        }
+        finally
+        {
+            Godswar.Server.Application.Rates.ServerRates.ResetToDefaults();
+        }
     }
 
     private static void CheckLiveCommittedProjection(

@@ -194,6 +194,9 @@ internal sealed partial class ServerOptions
         Storage.Outbox.PollIntervalMilliseconds = ReadInt(
             "GODSWAR_OUTBOX_POLL_INTERVAL_MILLISECONDS",
             Storage.Outbox.PollIntervalMilliseconds);
+        Storage.Outbox.IdlePollIntervalMilliseconds = ReadInt(
+            "GODSWAR_OUTBOX_IDLE_POLL_INTERVAL_MILLISECONDS",
+            Storage.Outbox.IdlePollIntervalMilliseconds);
         Storage.Outbox.LeaseMilliseconds = ReadInt(
             "GODSWAR_OUTBOX_LEASE_MILLISECONDS",
             Storage.Outbox.LeaseMilliseconds);

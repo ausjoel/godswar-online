@@ -54,7 +54,7 @@ internal static partial class PacketBuilder
             BinaryPrimitives.WriteUInt32LittleEndian(
                 packet.AsSpan(offset),
                 titleIds[index]);
-            packet[offset + 4] = MedusaDesignationType;
+            packet[offset + 4] = DesignationTypeFor(titleIds[index]); // B22: was MedusaDesignationType for all
             packet[offset + 5] = PermanentDesignationState;
             // +6..+7 are native padding; +8 is the remaining-duration field.
             // Zero is the captured permanent-title representation.
@@ -62,4 +62,17 @@ internal static partial class PacketBuilder
 
         return packet;
     }
+
+    /// <summary>
+    /// B22: the Title window tab of a title (client Message.dat DesigType0-4: Leveling, Quest, Attribute, Ranking,
+    /// Event), from the DesigName.dat id ranges. Before B22 every title was sent as Event (4), so the Leveling,
+    /// Quest and Attribute tabs were always empty. Marriage (1401/1402) and everything else stay Event.
+    /// </summary>
+    internal static byte DesignationTypeFor(uint titleId) => titleId switch
+    {
+        >= 1000 and <= 1399 => 0,
+        >= 2000 and <= 2999 => 1,
+        >= 3000 and <= 3999 => 2,
+        _ => MedusaDesignationType
+    };
 }

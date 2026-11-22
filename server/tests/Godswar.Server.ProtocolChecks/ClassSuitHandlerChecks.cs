@@ -135,7 +135,7 @@ internal static partial class ClassSuitHandlerChecks
             "Class Suit menu, operation page, and detail each reply once");
         AssertFunctionResponse(
             packets[0],
-            ClassSuitProtocol.InitialMenuSubIds,
+            ClassSuitProtocol.MenuWithTierBeyond(ClassSuitProtocol.InitialMenuSubIds), // B22 G2: + 109
             "database-authored Class Suit initial menu");
         AssertFunctionResponse(
             packets[1],

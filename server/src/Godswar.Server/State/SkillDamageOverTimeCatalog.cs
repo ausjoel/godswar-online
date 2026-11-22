@@ -53,8 +53,23 @@ internal static class SkillDamageOverTimeCatalog
 
     public static IEnumerable<SkillDamageOverTimeDefinition> All => Definitions.Values;
 
-    public static bool TryGet(int skillId, out SkillDamageOverTimeDefinition definition) =>
-        Definitions.TryGetValue(skillId, out definition);
+    public static bool TryGet(int skillId, out SkillDamageOverTimeDefinition definition)
+    {
+        if (Definitions.TryGetValue(skillId, out definition)) return true;
+        // B22: levels 6-10 = the family's level-5 damage over time, tick damage scaled
+        if (SkillLevelExtension.TryGetLevelFive(skillId, out var five, out var steps) &&
+            Definitions.TryGetValue(five, out var basis))
+        {
+            definition = basis with
+            {
+                SkillId = skillId,
+                Priority = basis.Priority + steps,
+                TickDamage = SkillLevelExtension.Scale(basis.TickDamage, steps)
+            };
+            return true;
+        }
+        return false;
+    }
 
     private static SkillDamageOverTimeDefinition Bleed(int skillId, uint statusId, int priority, int tickDamage) =>
         new(skillId, statusId, SkillDamageOverTimeFamily.Bleeding, priority, tickDamage, 2_000, 3);

@@ -13,6 +13,15 @@ internal sealed class PostgresOutboxDispatcherOptions
 
     public int PollIntervalMilliseconds { get; set; } = 250;
 
+    /// <summary>
+    /// W5A: poll interval used after a pass that found no work while the
+    /// process reports that no client is connected. 0 disables the back-off.
+    /// A value below <see cref="PollIntervalMilliseconds"/> has no effect.
+    /// It must stay well under the readiness monitor's maximum worker
+    /// heartbeat age (15 s by default), because an idle pass is the heartbeat.
+    /// </summary>
+    public int IdlePollIntervalMilliseconds { get; set; } = 1_000;
+
     public int LeaseMilliseconds { get; set; } = 30_000;
 
     public int MaximumDeliveryAttempts { get; set; } = 8;
@@ -33,6 +42,11 @@ internal sealed class PostgresOutboxDispatcherOptions
             50,
             60_000,
             nameof(PollIntervalMilliseconds));
+        RequireRange(
+            IdlePollIntervalMilliseconds,
+            0,
+            10_000,
+            nameof(IdlePollIntervalMilliseconds));
         RequireRange(
             LeaseMilliseconds,
             1_000,
@@ -74,6 +88,16 @@ internal sealed class PostgresOutboxDispatcherOptions
 
     public TimeSpan PollInterval =>
         TimeSpan.FromMilliseconds(PollIntervalMilliseconds);
+
+    /// <summary>
+    /// The delay after an empty pass with no client connected; never shorter
+    /// than <see cref="PollInterval"/>.
+    /// </summary>
+    public TimeSpan IdlePollInterval =>
+        TimeSpan.FromMilliseconds(
+            Math.Max(
+                PollIntervalMilliseconds,
+                IdlePollIntervalMilliseconds));
 
     public TimeSpan Lease =>
         TimeSpan.FromMilliseconds(LeaseMilliseconds);

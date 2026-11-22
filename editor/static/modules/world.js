@@ -240,7 +240,7 @@
         const t=d.tables.find(t=>t.template_key===m.template_key),n=d.rules.filter(r=>r.template_key===m.template_key).length;
         const names=m.map_ids.map(id=>(d.maps.find(x=>x.id===id)||{}).name||"Map "+id).join(", ");
         put(list,h("button",{class:"gw-w-row",type:"button",role:"listitem",onclick:()=>openLoot(right,m.template_key,d)},
-          h("span",{class:"gw-dot "+(t&&t.enabled?"on":"off")}),h("span",{class:"nm"},m.name||m.template_key),
+          h("span",{class:"gw-dot "+(t&&t.enabled?"on":"off")}),h("span",{class:"nm"},GW.monsterLabel?GW.monsterLabel(m.template_key,{name:m.name,compact:true}):(m.name||m.template_key)),
           h("span",{class:"sub"},m.template_key+" · "+(names||"no mapped spawn")+" · "+(t?n+" configured drops":"no custom loot table"))));
         visible++;
       }
@@ -501,7 +501,7 @@
       const canvas = h("canvas", { class: "gw-w-map", width: 760, height: 560, "aria-label": "map of " + d.map.name, tabindex: 0 });
       const side = h("div", { class: "gw-w-side" });
       const legend = h("div", { class: "gw-w-legend" }, h("span", { class: "k pub" }, "monster"), h("span", { class: "k ed" }, "edited"), h("span", { class: "k off" }, "switched off"),
-        h("span", { class: "k gm" }, "GM-added"), h("span", { class: "k npc" }, "NPC"), h("span", { class: "k reg" }, "place name"));
+        h("span", { class: "k gm" }, "GM-added"), h("span", { class: "k npc", "data-help": "Click an NPC square to open that NPC (shop, teleporter, greeting)." }, "NPC"), h("span", { class: "k reg" }, "place name"));
       const pts = d.published.concat(d.gm_spawns.map(g => ({ object_id: g.object_id, template_key: g.template_key, name: g.display_name || g.name, x: g.pos_x, z: g.pos_z, gm: g })));
       const all = pts.concat(d.npcs).concat(d.map.regions || []);
       let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
@@ -511,9 +511,13 @@
       const sc = Math.min((W - 2 * pad) / Math.max(1, maxX - minX), (H - 2 * pad) / Math.max(1, maxZ - minZ));
       const toS = (x, z) => [pad + (x - minX) * sc, H - pad - (z - minZ) * sc];
       const toW = (sx, sy) => [minX + (sx - pad) / sc, minZ + (H - pad - sy) / sc];
+      const under = { u: null, on: true };   // map picture underlay (package E: static/graphics/gw-art.js)
+      (window.GWArt ? Promise.resolve() : new Promise(r => { const s = document.createElement("script"); s.src = "/static/graphics/gw-art.js"; s.onload = r; s.onerror = r; document.head.append(s); }))
+        .then(() => window.GWArt && window.GWArt.underlay(mid)).then(u => { under.u = u; paint(); }).catch(() => {});
       function paint() {
         const c = canvas.getContext("2d");
         c.fillStyle = "#06131b"; c.fillRect(0, 0, W, H);
+        if (under.u && under.on) window.GWArt.drawUnderlay(c, under.u, toS, 0.6);
         c.strokeStyle = "#16303d"; c.lineWidth = 1;
         for (let i = 0; i <= 10; i++) { c.beginPath(); c.moveTo(pad + i * (W - 2 * pad) / 10, pad); c.lineTo(pad + i * (W - 2 * pad) / 10, H - pad); c.stroke(); c.beginPath(); c.moveTo(pad, pad + i * (H - 2 * pad) / 10); c.lineTo(W - pad, pad + i * (H - 2 * pad) / 10); c.stroke(); }
         c.font = "10px Consolas, monospace";
@@ -540,6 +544,9 @@
         if (st.mode === "place") { st.place = { x: Math.round(wx * 10) / 10, z: Math.round(wz * 10) / 10 }; if (st.onPlace) st.onPlace(st.place); paint(); return; }
         let best = null, bd = 64;
         for (const p of pts) { const e = p.gm ? null : editBy.get(Number(p.object_id)); const x0 = e && e.pos_x !== null ? e.pos_x : p.x, z0 = e && e.pos_z !== null ? e.pos_z : p.z; const [x, y] = toS(x0, z0); const dd = (x - sx) ** 2 + (y - sy) ** 2; if (dd < bd) { bd = dd; best = Object.assign({}, p, { x: x0, z: z0 }); } }
+        // B21 item 28: a click on an NPC square (closer than any monster) opens that NPC on the NPC page
+        let npcHit = null, nd = Math.min(bd, 36); for (const n of d.npcs) { const [x, y] = toS(n.x, n.z); const dd = (x - sx) ** 2 + (y - sy) ** 2; if (dd < nd) { nd = dd; npcHit = n; } }
+        if (npcHit && npcHit.npc_key) { location.hash = "#/npcs?npc=" + encodeURIComponent(npcHit.npc_key) + "&map=" + mid; return; }
         if (best) { st.sel = best; paint(); best.gm ? gmSpawnForm(best.gm) : spawnForm(best); }
       });
       canvas.addEventListener("mousemove", ev => {
@@ -551,7 +558,7 @@
       for (const t of Array.from(types.values()).sort((a, b) => a.level - b.level)) {
         const a = attrBy.get(t.key);
         put(typeList, h("button", { class: "gw-w-row", type: "button", "data-tip-type": "monster", "data-tip-id": t.key, onclick: () => { st.selType = t.key; paint(); typeForm(t); } },
-          h("span", { class: "gw-dot " + (a ? "warn" : "on") }), h("span", { class: "nm" }, t.name), h("span", { class: "sub" }, "Lv " + t.level + " · HP " + (t.hpMin === t.hpMax ? GW.fmt(t.hpMin) : GW.fmt(t.hpMin) + "–" + GW.fmt(t.hpMax)) + " · " + t.n + " here" + (a ? " · stats changed" : ""))));
+          h("span", { class: "gw-dot " + (a ? "warn" : "on") }), h("span", { class: "nm" }, GW.monsterLabel ? GW.monsterLabel(t.key, { name: t.name, map: mid, compact: true }) : t.name), h("span", { class: "sub" }, "Lv " + t.level + " · HP " + (t.hpMin === t.hpMax ? GW.fmt(t.hpMin) : GW.fmt(t.hpMin) + "–" + GW.fmt(t.hpMax)) + " · " + t.n + " here" + (a ? " · stats changed" : ""))));
       }
       put(GW.clear(holder), h("div", { class: "gw-w-mapcols" }, h("div", null, canvas, legend), h("div", null, sub("Monster types on " + d.map.name, typeList), side)));
       paint();
@@ -991,7 +998,7 @@
         }))),
       win("Other ways to raise EXP for everyone",
         h("div", { class: "gw-kv" },
-          h("span", { class: "gw-label", "data-help": "server_rates exp.* (hot-reloaded every 5 s)" }, "Server rates"), h("span", null, chipFor("hot_reload"), " ", d.rates.map(r => r.key + " x" + r.value).join(", ") || "not on this server", " ", h("a", { href: "#/rates" }, "edit on Server rates")),
+          h("span", { class: "gw-label", "data-help": "The EXP multipliers from the Server rates page. A change there applies within 5 seconds." }, "Server rates"), h("span", null, chipFor("hot_reload"), " ", d.rates.map(r => r.key + " x" + r.value).join(", ") || "not on this server", " ", h("a", { href: "#/rates" }, "edit on Server rates")),
           h("span", { class: "gw-label", "data-field": "monster_reward_settings.global_experience_multiplier_basis_points" }, "Global kill EXP"), h("span", null, chipFor("after_restart"), " x" + (d.reward_settings ? d.reward_settings.global_experience_multiplier_basis_points / 10000 : "?") + " (1x-5x), level gap " + (d.reward_settings ? d.reward_settings.maximum_lower_level_gap : "?"), " ", h("a", { href: "#/rates" }, "edit on Server rates"))),
         note("The event rows above add a buff icon; the rates change the numbers for everyone with no icon.")));
   }
@@ -1050,7 +1057,7 @@
     const t = h("table", { class: "gw-w-table" }, h("tr", null, ["Map", "Boss", "Area bonus", "Respawn", "Held by"].map((x, i) => h("th", { "data-field": [null, "gameplay_world_boss_definitions.template_key", "gameplay_world_boss_definitions.bonus_basis_points", "gameplay_world_boss_definitions.respawn_interval_seconds", "faction_area_experience_control.controlling_camp"][i] || null }, x))));
     for (const b of d.bosses) {
       const c = d.control.find(x => x.map_id === b.map_id && x.boss_template_key === b.template_key && new Date(x.expires_at) > new Date(d.now));
-      put(t, h("tr", null, h("td", null, b.map_name), h("td", { "data-tip-type": "monster", "data-tip-id": b.template_key }, h("b", { style: "color:var(--gw-monster-textcolor,#f6b596)" }, b.display_name), h("div", { class: "gw-dim" }, b.template_key)),
+      put(t, h("tr", null, h("td", null, b.map_name), h("td", { "data-tip-type": "monster", "data-tip-id": b.template_key }, GW.monsterLabel ? GW.monsterLabel(b.template_key, { name: b.display_name, map: b.map_id }) : [h("b", { style: "color:var(--gw-monster-textcolor,#f6b596)" }, b.display_name), h("div", { class: "gw-dim" }, b.template_key)]),
         h("td", null, "+" + pct(b.bonus_basis_points) + " EXP"), h("td", null, (b.respawn_interval_seconds / 3600) + " h"),
         h("td", null, c ? h("span", null, h("span", { class: "gw-sprite " + (c.controlling_camp ? "gw-camp-athens" : "gw-camp-sparta") }), " " + CAMPS[c.controlling_camp] + " until " + fmtT(c.expires_at)) : h("span", { class: "gw-dim" }, "nobody"))));
     }

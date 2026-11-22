@@ -39,20 +39,32 @@ internal sealed class WonderlandTitleRequest
         Guid admissionReservationId, DateTimeOffset startedAtUtc, DateTimeOffset clearedAtUtc,
         int islandNumber, IReadOnlyCollection<WonderlandTitleMember> admittedMembers,
         IReadOnlyCollection<WonderlandTitleMember> frozenMembers,
-        IReadOnlyCollection<Guid>? admissionReservationIds = null)
+        IReadOnlyCollection<Guid>? admissionReservationIds = null,
+        IReadOnlyDictionary<int, Guid>? lateAdmissionReservations = null)
     {
         ArgumentNullException.ThrowIfNull(admittedMembers);
         ArgumentNullException.ThrowIfNull(frozenMembers);
+        var late = (lateAdmissionReservations ?? new Dictionary<int, Guid>())
+            .OrderBy(pair => pair.Key)
+            .ToArray();
         var reservations = (admissionReservationIds ?? [admissionReservationId])
+            .Concat(late.Select(pair => pair.Value))
             .Where(id => id != Guid.Empty)
             .Distinct()
             .Order()
             .ToArray();
         var admitted = admittedMembers.OrderBy(member => member.CharacterId).ToArray();
         var frozen = frozenMembers.OrderBy(member => member.CharacterId).ToArray();
+        // S5 (5 Nov party run): the registered party is the run's identity. A member admitted after the
+        // seal holds a reservation of its own and is never part of that identity, so the run binding stays
+        // stable while the roster grows.
+        var party = admitted.Where(member => late.All(pair => pair.Key != member.CharacterId)).ToArray();
         if (!worldInstanceId.IsValid || !realmId.IsValid || realmId.Value > short.MaxValue ||
             admissionReservationId == Guid.Empty || reservations.Length == 0 ||
             !reservations.Contains(admissionReservationId) ||
+            party.Length == 0 ||
+            late.Any(pair => pair.Value == Guid.Empty || pair.Value == admissionReservationId ||
+                admitted.All(member => member.CharacterId != pair.Key)) ||
             startedAtUtc == default ||
             startedAtUtc.Offset != TimeSpan.Zero || clearedAtUtc.Offset != TimeSpan.Zero ||
             clearedAtUtc < startedAtUtc || clearedAtUtc - startedAtUtc >= TimeSpan.FromMinutes(40) ||
@@ -63,6 +75,9 @@ internal sealed class WonderlandTitleRequest
         RealmId = realmId;
         AdmissionReservationId = admissionReservationId;
         AdmissionReservationIds = Array.AsReadOnly(reservations);
+        LateAdmissionReservations = late.ToDictionary(pair => pair.Key, pair => pair.Value).AsReadOnly();
+        PartyMembers = Array.AsReadOnly(party);
+        PartyCharacterIds = Array.AsReadOnly(party.Select(member => member.CharacterId).ToArray());
         StartedAtUtc = startedAtUtc;
         ClearedAtUtc = clearedAtUtc;
         Award = WonderlandTitlePolicy.Resolve(islandNumber);
@@ -70,6 +85,7 @@ internal sealed class WonderlandTitleRequest
         FrozenMembers = Array.AsReadOnly(frozen);
         AdmittedCharacterIds = Array.AsReadOnly(admitted.Select(member => member.CharacterId).ToArray());
         CharacterIds = Array.AsReadOnly(frozen.Select(member => member.CharacterId).ToArray());
+        RunHash = HashRun(worldInstanceId, realmId, admissionReservationId, startedAtUtc, party);
         using var stream = new MemoryStream();
         using (var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true))
         {
@@ -79,7 +95,6 @@ internal sealed class WonderlandTitleRequest
             writer.Write(admissionReservationId.ToByteArray());
             writer.Write(startedAtUtc.UtcTicks);
             WriteRoster(writer, admitted);
-            RunHash = Convert.ToHexString(SHA256.HashData(stream.ToArray()));
             writer.Write(clearedAtUtc.UtcTicks);
             writer.Write(islandNumber);
             writer.Write(Award.TitleId);
@@ -107,8 +122,43 @@ internal sealed class WonderlandTitleRequest
     public IReadOnlyList<WonderlandTitleMember> FrozenMembers { get; }
     public IReadOnlyList<int> AdmittedCharacterIds { get; }
     public IReadOnlyList<int> CharacterIds { get; }
+
+    /// <summary>
+    /// Members admitted after the registered party was sealed, each with the admission reservation it
+    /// claimed for itself. Every other admitted member entered on <see cref="AdmissionReservationId"/>.
+    /// </summary>
+    public IReadOnlyDictionary<int, Guid> LateAdmissionReservations { get; }
+
+    /// <summary>Admitted members who entered on the registered party's reservation.</summary>
+    public IReadOnlyList<WonderlandTitleMember> PartyMembers { get; }
+    public IReadOnlyList<int> PartyCharacterIds { get; }
+
+    /// <summary>The reservation that admitted <paramref name="characterId"/> into this run.</summary>
+    public Guid ReservationFor(int characterId) =>
+        LateAdmissionReservations.TryGetValue(characterId, out var reservation) ? reservation : AdmissionReservationId;
     public string RunHash { get; }
     public string RequestHash { get; }
+
+    /// <summary>
+    /// The run's identity: instance, realm, party reservation, start and the registered party's admitted
+    /// roster. Byte-identical to the previous formula whenever nobody joined late, so runs bound by older
+    /// builds keep their hash.
+    /// </summary>
+    private static string HashRun(WorldInstanceId worldInstanceId, RealmId realmId, Guid admissionReservationId,
+        DateTimeOffset startedAtUtc, WonderlandTitleMember[] party)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true))
+        {
+            writer.Write(WonderlandTitlePolicy.Revision);
+            writer.Write(worldInstanceId.Value.ToByteArray());
+            writer.Write(realmId.Value);
+            writer.Write(admissionReservationId.ToByteArray());
+            writer.Write(startedAtUtc.UtcTicks);
+            WriteRoster(writer, party);
+        }
+        return Convert.ToHexString(SHA256.HashData(stream.ToArray()));
+    }
 
     private static bool ValidRoster(WonderlandTitleMember[] members) => members.Length is >= 1 and <= 5 &&
         members.All(member => member.AccountId > 0 && member.CharacterId > 0 && member.Ownership.IsValid) &&

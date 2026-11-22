@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Original emblem for the revival site: a bronze shield with a lightning bolt between laurel sprigs. -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f6d98b"/>
+      <stop offset="1" stop-color="#b8862b"/>
+    </linearGradient>
+  </defs>
+  <circle cx="32" cy="32" r="29" fill="#12355c" stroke="url(#g)" stroke-width="4"/>
+  <g fill="none" stroke="#e8c26a" stroke-width="2.4" stroke-linecap="round">
+    <path d="M17 44c-5-6-6-15-2-23"/>
+    <path d="M47 44c5-6 6-15 2-23"/>
+  </g>
+  <g fill="#e8c26a">
+    <ellipse cx="13.5" cy="27" rx="2" ry="4" transform="rotate(-25 13.5 27)"/>
+    <ellipse cx="13" cy="35" rx="2" ry="4" transform="rotate(-5 13 35)"/>
+    <ellipse cx="16" cy="42" rx="2" ry="4" transform="rotate(20 16 42)"/>
+    <ellipse cx="50.5" cy="27" rx="2" ry="4" transform="rotate(25 50.5 27)"/>
+    <ellipse cx="51" cy="35" rx="2" ry="4" transform="rotate(5 51 35)"/>
+    <ellipse cx="48" cy="42" rx="2" ry="4" transform="rotate(-20 48 42)"/>
+  </g>
+  <path d="M35 12 22 35h9l-4 17 15-25h-9l2-15z" fill="url(#g)" stroke="#7a5418" stroke-width="1" stroke-linejoin="round"/>
+</svg>

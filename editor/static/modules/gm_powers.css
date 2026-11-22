@@ -1,0 +1,23 @@
+.gw-mod-gm_powers .gmp-panel{padding:14px 16px;margin:0 0 16px}
+.gw-mod-gm_powers .gmp-panel h2{margin:0 0 10px;font-size:17px}
+.gw-mod-gm_powers .gmp-panel h3{margin:0;font-size:15px}
+.gw-mod-gm_powers .gmp-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin:8px 0}
+.gw-mod-gm_powers .gmp-card{background:#0a2333;border:1px solid #315366;padding:8px 10px;min-width:0}
+.gw-mod-gm_powers .gmp-card-t{font-size:12px;color:#a9bbc5;text-transform:uppercase;letter-spacing:.04em}
+.gw-mod-gm_powers .gmp-card-v{font-size:20px;margin:2px 0}
+.gw-mod-gm_powers .gmp-card-s{font-size:12px;overflow-wrap:anywhere}
+.gw-mod-gm_powers .gmp-head{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:8px}
+.gw-mod-gm_powers .gmp-row{display:grid;grid-template-columns:24px minmax(0,1fr) minmax(120px,auto);gap:10px;align-items:start;padding:7px 0;border-top:1px solid #1c3a4b;cursor:pointer}
+.gw-mod-gm_powers .gmp-row input{margin-top:3px;width:18px;height:18px}
+.gw-mod-gm_powers .gmp-master{grid-template-columns:24px minmax(0,1fr);border-top:0;font-size:16px}
+.gw-mod-gm_powers .gmp-what code{font-size:13px}
+.gw-mod-gm_powers .gmp-tag{margin-left:8px;font-size:11px;color:#faa955;border:1px solid #faa955;padding:0 5px;border-radius:8px}
+.gw-mod-gm_powers .gmp-state{font-size:12px;text-align:right}
+.gw-mod-gm_powers .gmp-on{color:#5fd068}
+.gw-mod-gm_powers .gmp-off{color:#ff6b6b}
+.gw-mod-gm_powers .gmp-save{position:sticky;bottom:0;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 0;background:#061722}
+.gw-mod-gm_powers .gmp-line{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
+.gw-mod-gm_powers .gmp-table{border-collapse:collapse;width:100%;margin:6px 0}
+.gw-mod-gm_powers .gmp-table th,.gw-mod-gm_powers .gmp-table td{border-bottom:1px solid #315366;padding:4px 8px;text-align:left}
+.gw-mod-gm_powers .gmp-table th{color:#a9bbc5;font-weight:normal;font-size:12px}
+@media(max-width:700px){.gw-mod-gm_powers .gmp-row{grid-template-columns:24px minmax(0,1fr)}.gw-mod-gm_powers .gmp-state{grid-column:2;text-align:left}.gw-mod-gm_powers .gmp-table{display:block;overflow-x:auto}}

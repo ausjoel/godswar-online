@@ -260,37 +260,47 @@ internal static class HalloweenMayDaySeason
     public static IReadOnlyList<ServerRateDefinition> Definitions { get; } =
     [
         Absolute(MayDaySwitchKey, "May Day: envoy, Fertiliser and faction trees", "0/1", 1m, 1m, 60,
-            "1 = while the May Day season is open, the May Day Envoy stands in both capitals at (159,76), hands out " +
-            "Fertiliser and takes it for the faction tree. 0 = none of it (the envoy is hidden)."),
+            "Runs the May Day event while its season is open. On: the May Day Envoy stands in " +
+            "both capitals, hands out Fertiliser and takes it for the faction tree. Off: none of " +
+            "it; the envoy is hidden. Season dates are set on the Events & notices page."),
         Absolute(MayDayAutoDatesKey, "May Day: only the 10 days before May 1", "0/1", 1m, 1m, 61,
-            "1 = May Day is open only from 21 April to the end of 1 May (UTC), on top of the season being on (the admin " +
-            "F-134). 0 = the editor dates alone."),
+            "Limits May Day to the 10 days before 1 May. On: the event is open only from 21 April " +
+            "to the end of 1 May. Off: only the dates set on the Events & notices page count. The " +
+            "season must still be switched on."),
         Absolute(TreeTargetKey, "May Day: Fertiliser a faction tree needs", "Fertiliser", 300m, 100_000m, 62,
-            "The first faction whose tree gets this much Fertiliser wins; claims open then (GENERATED; about 15 " +
-            "players a day for the ten days). On 1 May claims open anyway and the tree with more Fertiliser wins."),
+            "Fertiliser a faction tree needs to be fully grown. The first faction to reach it " +
+            "wins, and rewards can be claimed from then. On 1 May rewards open anyway, and the " +
+            "tree with more Fertiliser wins."),
         Absolute(FertiliserDailyCapKey, "May Day: Fertiliser one character may submit a day", "Fertiliser", 20m, 1_000m,
-            63, "Above this the envoy answers 'maximum amount of submissions' (GENERATED)."),
+            63, "Fertiliser one character may hand in each day. Above it the envoy refuses."),
         Absolute(TreeExpPerLevelKey, "May Day: tree reward EXP per level", "EXP", 2_000m, 1_000_000m, 64,
-            "With the claim, characters whose own faction tree grew fully get this x level EXP (GENERATED). Events EXP " +
-            "rate on top. Winners also get a Crystal Gift Pack (Great), the other faction a Crystal Gift Pack (Small)."),
+            "EXP per character level for players whose own faction tree is fully grown, paid with " +
+            "the reward claim. Winners also get a Crystal Gift Pack (Great), the other faction a " +
+            "Crystal Gift Pack (Small). The 'Event NPC EXP & Talent' setting multiplies the EXP."),
         Absolute(HalloweenSwitchKey, "Halloween: envoy, suit, wand, candy exchange and drops", "0/1", 1m, 1m, 70,
-            "1 = while the Halloween season is open, the Halloween Envoy gives the suit and wand and exchanges Pumpkin " +
-            "Candy, and monsters drop candy. 0 = none of it (the envoy is hidden)."),
+            "Runs the Halloween event while its season is open. On: the Halloween Envoy gives the " +
+            "suit and wand and exchanges Pumpkin Candy, and monsters drop candy. Off: none of it; " +
+            "the envoy is hidden. Season dates are set on the Events & notices page."),
         Absolute(HalloweenAutoDatesKey, "Halloween: only the 10 days before 31 October", "0/1", 1m, 1m, 71,
-            "1 = Halloween is open only from 21 October to the end of 31 October (UTC), on top of the season being on " +
-            "(the admin F-134). 0 = the editor dates alone."),
+            "Limits Halloween to the 10 days before 31 October. On: the event is open only from " +
+            "21 October to the end of 31 October. Off: only the dates set on the Events & notices " +
+            "page count. The season must still be switched on."),
         Absolute(CandyPercentKey, "Halloween: Pumpkin Candy drop chance", "%", 4m, 100m, 72,
-            "Each monster killed anywhere drops a Pumpkin Candy this often (GENERATED; the wand's Halloween Devils are " +
-            "not built). 10 candies make one exchange at the envoy."),
+            "Chance that any monster kill drops a Pumpkin Candy while Halloween is open. 10 " +
+            "candies make one exchange at the envoy. Our own value: the original is unknown."),
         Absolute(WarriorSoulPercentKey, "Halloween: Warrior Soul drop chance", "%", 1m, 100m, 73,
-            "Each monster killed anywhere drops a Warrior Soul (+88 honor) this often (its own text; rate GENERATED)."),
+            "Chance that any monster kill drops a Warrior Soul (+88 honour) while Halloween is " +
+            "open. Our own value: the original is unknown."),
         Absolute(CandyExpPerLevelKey, "Halloween: EXP per level for 10 candies", "EXP", 1_000m, 1_000_000m, 74,
-            "EXP prize = this x character level (GENERATED). Events EXP rate on top."),
+            "EXP prize for 10 Pumpkin Candies, per character level. The 'Event NPC EXP & Talent' " +
+            "setting multiplies it."),
         Absolute(CandyTalentKey, "Halloween: Talent Points for 10 candies", "TP", 10m, 10_000m, 75,
-            "Talent Point prize (GENERATED)."),
+            "Talent Point prize for 10 Pumpkin Candies."),
         Absolute(CandyPetExpPerLevelKey, "Halloween: pet EXP per level for 10 candies", "EXP", 2_000m, 1_000_000m, 76,
-            "Pet EXP prize = this x character level, to the summoned pet (GENERATED). No pet out = 'call your pet out'."),
+            "Pet EXP prize for 10 Pumpkin Candies, per character level, to the summoned pet. With " +
+            "no pet out, the envoy asks the player to call one."),
         Absolute(CandyZodiacKey, "Halloween: Zodiac energy for 10 candies", "energy", 20m, 10_000m, 77,
-            "Zodiac energy prize, up to the storage limit (GENERATED). A full store pays the EXP prize instead.")
+            "Zodiac energy prize for 10 Pumpkin Candies. With a full energy store, the player " +
+            "gets the EXP prize instead.")
     ];
 }

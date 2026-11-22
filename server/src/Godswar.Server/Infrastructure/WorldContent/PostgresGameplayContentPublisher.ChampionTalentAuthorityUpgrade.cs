@@ -214,6 +214,18 @@ internal static partial class PostgresGameplayContentPublisher
             string.Equals(
                 current.Publisher,
                 ChampionAuthorityPublisher,
+                StringComparison.Ordinal) ||
+            string.Equals( // B22: skill levels 6-10 successor
+                current.Publisher,
+                SkillLevelExtensionPublisher,
+                StringComparison.Ordinal) ||
+            string.Equals( // B22 G2: Aether Sanctum (map 70) successor
+                current.Publisher,
+                AetherSanctumPublisher,
+                StringComparison.Ordinal) ||
+            string.Equals( // B22 B23-F: class field skills successor
+                current.Publisher,
+                ClassFieldPublisher,
                 StringComparison.Ordinal);
         if (!string.Equals(current.Source, Source, StringComparison.Ordinal) ||
             !knownPublisher)

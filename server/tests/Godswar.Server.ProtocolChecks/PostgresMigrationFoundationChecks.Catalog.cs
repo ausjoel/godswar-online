@@ -14,7 +14,7 @@ internal static partial class PostgresMigrationFoundationChecks
     private static void CheckForwardOnlyCatalog()
     {
         Check.Equal(
-            199, // ROUND3: reviewed main includes the additive migrations through NPC successors (238).
+            205, // W14: reviewed main through session health (242) and the stale login-flag clean-up (243); MEDUSA-TITLES order swap (244).
             PostgresSchemaMigrationCatalog.All.Count,
             "migration catalog entry count");
         var baseline = PostgresSchemaMigrationCatalog.All[0];

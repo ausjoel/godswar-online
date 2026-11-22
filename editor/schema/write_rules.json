@@ -31,6 +31,7 @@
       "hidden": "not shown"
     },
     "applies": {
+      "game_reload": "the compatible game server must reload the saved settings",
       "now": "the server reads it at the next use",
       "next_login": "the character sees it at the next world entry (it must be offline to edit)",
       "after_restart": "gw251 restart needed",
@@ -136,20 +137,23 @@
         "account_id": {
           "applies": "not_editable",
           "editor": "read_only",
-          "why": "owner account (FK accounts, cascade); moving a character between accounts also needs account_realm and the one-active-slot index"
+          "why": "The account that owns the character. Moving a character to another account needs more than this one value, so it is read-only here.",
+          "evidence": "why (before the plain-language pass): owner account (FK accounts, cascade); moving a character between accounts also needs account_realm and the one-active-slot index"
         },
         "server_id": {
           "applies": "not_editable",
           "editor": "read_only",
-          "why": "realm (FK server); the snapshot only reads characters of the process realm (PostgresCharacterSnapshotReader.Core.cs:322-324)"
+          "why": "The realm the character lives on. The game only loads characters of its own realm.",
+          "evidence": "why (before the plain-language pass): realm (FK server); the snapshot only reads characters of the process realm (PostgresCharacterSnapshotReader.Core.cs:322-324)"
         },
         "name": {
           "applies": "next_login",
           "editor": "edit",
           "min_len": 1,
           "max_len": 31,
-          "rule": "ASCII letters, digits, _ - . and inner spaces, at most 31 (32-byte packet fields keep a terminating zero); unique without case among active characters (index ux_character_base_active_name_ci) and not the name of a deleted character that can still be restored; stored only here (guilds, parties and rankings read it by character id); the name is sent to other players at world entry, so online renames are refused",
-          "live_capability": "character.rename"
+          "rule": "Letters, digits, _ - . and spaces inside the name, at most 31 characters. No other active character may use it (upper and lower case count as the same), nor a deleted character that can still be restored. Other players are told the name when the character enters the world, so an online character cannot be renamed.",
+          "live_capability": "character.rename",
+          "evidence": "rule (before the plain-language pass): ASCII letters, digits, _ - . and inner spaces, at most 31 (32-byte packet fields keep a terminating zero); unique without case among active characters (index ux_character_base_active_name_ci) and not the name of a deleted character that can still be restored; stored only here (guilds, parties and rankings read it by character id); the name is sent to other players at world entry, so online renames are refused"
         },
         "gender": {
           "applies": "next_login",
@@ -158,12 +162,19 @@
             "male",
             "female"
           ],
-          "rule": "CHECK character_base_gender_check"
+          "rule": "Only the values the database allows.",
+          "evidence": "rule (before the plain-language pass): CHECK character_base_gender_check"
         },
         "GM": {
-          "applies": "never",
-          "editor": "read_only",
-          "why": "not read by this server; GM rights come from the DeveloperCommandOptions account allowlist in appsettings.json"
+          "applies": "now",
+          "editor": "edit_advanced",
+          "enum": [0, 1],
+          "online": {
+            "edit": "allowed",
+            "why": "The game reads it again for every GM command and never writes it after the character is created."
+          },
+          "rule": "1 makes this character a GM, 0 an ordinary player. Change it on the GM powers page.",
+          "evidence": "GODSWAR_CHARACTER_GM_FLAGS=true (live): OperatorAuthority reads character_base.GM on every command. With that switch off the account allow list GODSWAR_DEVELOPER_ACCOUNT_IDS decides and this flag does nothing."
         },
         "camp": {
           "applies": "not_editable",
@@ -180,16 +191,18 @@
           "editor": "edit",
           "min": 1,
           "max": 200,
-          "rule": "PlayerExperienceCatalog.MaximumLevel = 200 (S/State/PlayerExperienceCatalog.cs:5). DB-authoritative: kills read it FOR UPDATE (PostgresGameStore.Progression.cs:79-86), so an online edit is not lost, but the client and the session's stats stay at the old level until relog",
-          "live_capability": "character.level"
+          "rule": "Level 1 to 200. An edit made while the character is online is kept, but the game and the character's stats show the old level until the next login.",
+          "live_capability": "character.level",
+          "evidence": "rule (before the plain-language pass): PlayerExperienceCatalog.MaximumLevel = 200 (S/State/PlayerExperienceCatalog.cs:5). DB-authoritative: kills read it FOR UPDATE (PostgresGameStore.Progression.cs:79-86), so an online edit is not lost, but the client and the session's stats stay at the old level until relog"
         },
         "fighter_job_exp": {
           "applies": "next_login",
           "editor": "edit",
           "min": 0,
           "max": 4294967295,
-          "rule": "CHECK uint32; keep it below the cost of the next level or the next kill levels up (PlayerExperienceCatalog.Apply)",
-          "live_capability": "character.level"
+          "rule": "Keep it below the EXP the next level costs, or the next kill levels the character up.",
+          "live_capability": "character.level",
+          "evidence": "rule (before the plain-language pass): CHECK uint32; keep it below the cost of the next level or the next kill levels up (PlayerExperienceCatalog.Apply)"
         },
         "scholar_job_lv": {
           "applies": "never",
@@ -206,7 +219,8 @@
           "editor": "edit",
           "min": 0,
           "revision": "vitals_revision",
-          "rule": "the session flushes HP/MP from memory (GameClientHandler.CharacterCheckpoints.cs, fenced by vitals_revision): an online edit is overwritten or makes the session's next flush fail"
+          "rule": "The game saves HP and MP from memory while the character is online: an online edit is overwritten, or makes the game's next save fail.",
+          "evidence": "rule (before the plain-language pass): the session flushes HP/MP from memory (GameClientHandler.CharacterCheckpoints.cs, fenced by vitals_revision): an online edit is overwritten or makes the session's next flush fail"
         },
         "curMP": {
           "applies": "next_login",
@@ -230,7 +244,8 @@
           "editor": "edit",
           "min": 0,
           "max": 255,
-          "rule": "faith; read by the snapshot (PostgresCharacterSnapshotReader.Core.cs:224)"
+          "rule": "Faith. The game reads it when the character enters the world.",
+          "evidence": "rule (before the plain-language pass): faith; read by the snapshot (PostgresCharacterSnapshotReader.Core.cs:224)"
         },
         "zodiac_type": {
           "applies": "next_login",
@@ -251,14 +266,16 @@
           "editor": "edit",
           "min": 1,
           "max": 30,
-          "rule": "storage-cap ladder has 30 levels (S/State/ZodiacEnergyCatalog.cs:7-39)"
+          "rule": "1 to 30: the zodiac has 30 levels.",
+          "evidence": "rule (before the plain-language pass): storage-cap ladder has 30 levels (S/State/ZodiacEnergyCatalog.cs:7-39)"
         },
         "zodiac_energy": {
           "applies": "next_login",
           "editor": "edit",
           "min": 0,
-          "rule": "must not exceed the storage cap of zodiac_level (ZodiacEnergyCatalog.StorageLimits; level 1 = 1,000 ... level 30 = 1,090,000)",
-          "live_capability": "character.zodiac_energy"
+          "rule": "Not more than the zodiac level can store: 1,000 at level 1 up to 1,090,000 at level 30.",
+          "live_capability": "character.zodiac_energy",
+          "evidence": "rule (before the plain-language pass): must not exceed the storage cap of zodiac_level (ZodiacEnergyCatalog.StorageLimits; level 1 = 1,000 ... level 30 = 1,090,000)"
         },
         "zodiac_energy_remainder_x100": {
           "applies": "not_editable",
@@ -308,7 +325,8 @@
         "consortia": {
           "applies": "next_login",
           "editor": "read_only",
-          "why": "guild id; written only together with guild_members and consortia_job/guild_duty by PostgresGuildStore - edit it in the Guild editor, never alone"
+          "why": "The character's guild. It must change together with the guild's member list and the character's guild rank: edit it on the Guild page, never alone.",
+          "evidence": "why (before the plain-language pass): guild id; written only together with guild_members and consortia_job/guild_duty by PostgresGuildStore - edit it in the Guild editor, never alone"
         },
         "consortia_job": {
           "applies": "next_login",
@@ -319,12 +337,14 @@
           "applies": "next_login",
           "editor": "edit_advanced",
           "min": 0,
-          "rule": "guild contribution; worship spends it (PostgresGuildStore.Worship.cs:106)"
+          "rule": "Guild contribution. Worship at the guild altar spends it.",
+          "evidence": "rule (before the plain-language pass): guild contribution; worship spends it (PostgresGuildStore.Worship.cs:106)"
         },
         "guild_duty": {
           "applies": "next_login",
           "editor": "read_only",
-          "why": "FK guild_duties; written with consortia by PostgresGuildStore"
+          "why": "The character's guild rank. It is saved together with the guild: edit it on the Guild page.",
+          "evidence": "why (before the plain-language pass): FK guild_duties; written with consortia by PostgresGuildStore"
         },
         "store_num": {
           "applies": "never",
@@ -374,8 +394,9 @@
           "max": 2147483647,
           "revision": "wallet_revision",
           "label": "Silver",
-          "rule": "CHECK; needs an economy baseline row first (see invariants)",
-          "live_capability": "character.wallet"
+          "rule": "Only values the database allows. The character needs its starting-balance record first.",
+          "live_capability": "character.wallet",
+          "evidence": "rule (before the plain-language pass): CHECK; needs an economy baseline row first (see invariants)"
         },
         "Stone": {
           "applies": "next_login",
@@ -437,7 +458,8 @@
           "min": 0,
           "max": 99,
           "label": "Talent EXP",
-          "rule": "100 talent EXP = 1 point (TalentExperienceCatalog); keep below 100"
+          "rule": "100 talent EXP make 1 talent point; keep it below 100.",
+          "evidence": "rule (before the plain-language pass): 100 talent EXP = 1 point (TalentExperienceCatalog); keep below 100"
         },
         "holy_suit_points": {
           "applies": "not_editable",
@@ -454,12 +476,14 @@
           "applies": "next_login",
           "editor": "edit_advanced",
           "min": 1,
-          "rule": "as MaxHP"
+          "rule": "Same rule as maximum HP.",
+          "evidence": "rule (before the plain-language pass): as MaxHP"
         },
         "Register_time": {
           "applies": "not_editable",
           "editor": "read_only",
-          "why": "creation time; lifecycle CHECK uses it"
+          "why": "When the character was created. The deletion rules depend on it.",
+          "evidence": "why (before the plain-language pass): creation time; lifecycle CHECK uses it"
         },
         "LastLogin_time": {
           "applies": "not_editable",
@@ -469,8 +493,9 @@
         "mutetime": {
           "applies": "never",
           "editor": "read_only",
-          "why": "stock server ignores it; round2 /mute uses it (unix seconds) - edit through the live endpoint when advertised",
-          "live_capability": "character.mute"
+          "why": "Only a newer game server uses it, for its /mute command (a time in seconds). Mute a player through the game server instead.",
+          "live_capability": "character.mute",
+          "evidence": "why (before the plain-language pass): stock server ignores it; round2 /mute uses it (unix seconds) - edit through the live endpoint when advertised"
         },
         "wallet_revision": {
           "applies": "not_editable",
@@ -500,7 +525,8 @@
         "character_slot": {
           "applies": "not_editable",
           "editor": "read_only",
-          "why": "CHECK = 0"
+          "why": "Always 0 on this server.",
+          "evidence": "why (before the plain-language pass): CHECK = 0"
         },
         "lifecycle_state": {
           "applies": "not_editable",
@@ -515,17 +541,20 @@
         "deleted_at": {
           "applies": "not_editable",
           "editor": "read_only",
-          "why": "lifecycle CHECK"
+          "why": "Part of the character deletion record; the database checks these dates together.",
+          "evidence": "why (before the plain-language pass): lifecycle CHECK"
         },
         "restore_until": {
           "applies": "not_editable",
           "editor": "read_only",
-          "why": "lifecycle CHECK"
+          "why": "Part of the character deletion record; the database checks these dates together.",
+          "evidence": "why (before the plain-language pass): lifecycle CHECK"
         },
         "purge_after": {
           "applies": "not_editable",
           "editor": "read_only",
-          "why": "lifecycle CHECK"
+          "why": "Part of the character deletion record; the database checks these dates together.",
+          "evidence": "why (before the plain-language pass): lifecycle CHECK"
         },
         "progression_reward_revision": {
           "applies": "not_editable",
@@ -537,7 +566,8 @@
           "editor": "edit",
           "type": "bool",
           "revision": "fighter_level_seal_revision",
-          "rule": "CHECK: only with level 1..200"
+          "rule": "Only together with a level from 1 to 200.",
+          "evidence": "rule (before the plain-language pass): CHECK: only with level 1..200"
         },
         "pet_shed_capacity": {
           "applies": "next_login",
@@ -545,7 +575,8 @@
           "min": 2,
           "max": 8,
           "revision": "pet_shed_revision",
-          "rule": "owned pets must fit (the 10237 pet list throws otherwise, PacketBuilder.Pets.cs:160-185)"
+          "rule": "All owned pets must fit, or the game cannot show the pet list.",
+          "evidence": "rule (before the plain-language pass): owned pets must fit (the 10237 pet list throws otherwise, PacketBuilder.Pets.cs:160-185)"
         },
         "pet_shed_revision": {
           "applies": "not_editable",
@@ -582,7 +613,8 @@
           "editor": "edit",
           "min": 0,
           "revision": "medusa_reward_revision",
-          "rule": "0 or a title the character owns (character_title_ownership / atlantis_ / wonderland_ tables); the server's own selection bumps medusa_reward_revision (PostgresCharacterTitleSelectionStore.cs:67)"
+          "rule": "0, or a title the character owns.",
+          "evidence": "rule (before the plain-language pass): 0 or a title the character owns (character_title_ownership / atlantis_ / wonderland_ tables); the server's own selection bumps medusa_reward_revision (PostgresCharacterTitleSelectionStore.cs:67)"
         },
         "fighter_level_seal_revision": {
           "applies": "not_editable",
@@ -597,7 +629,8 @@
         "quest_completed_ids": {
           "applies": "never",
           "editor": "hidden",
-          "why": "legacy column, copied once into character_quests by a migration (PostgresSchemaMigrationCatalog.CharacterQuests.cs:52); the server reads completed quests from character_quests state 1"
+          "why": "An old column that is no longer used: the game reads finished quests from the character's quest list.",
+          "evidence": "why (before the plain-language pass): legacy column, copied once into character_quests by a migration (PostgresSchemaMigrationCatalog.CharacterQuests.cs:52); the server reads completed quests from character_quests state 1"
         }
       },
       "reborn_py": {
@@ -945,7 +978,7 @@
       },
       "invariants": [
         "talent_id FK talent_templates; class talents only",
-        "rank 0..100 (TalentProgression.RankCap = 100); the admin's client shows at most 60 - warn above 60"
+        "rank 0..100 (TalentProgression.RankCap = 100); the game client shows at most 60 - warn above 60"
       ],
       "reborn_py": {
         "status": "partly_wrong",
@@ -1059,9 +1092,12 @@
         "edit": "refuse",
         "why": "the server reads this when the character enters the world and keeps its own copy in memory for the session; the client is never told about a database change"
       },
-      "why": "each row is earned by a recorded instance run (FK to the reward rows); the selected title (character_base.selected_title_id) is editable",
+      "why": "Each title here was earned in a recorded instance run. Which title the character shows can be changed on the character.",
       "rows_live": 0,
-      "class": "evidence"
+      "class": "evidence",
+      "evidence": [
+        "why (before the plain-language pass): each row is earned by a recorded instance run (FK to the reward rows); the selected title (character_base.selected_title_id) is editable"
+      ]
     },
     "atlantis_character_title_ownership": {
       "group": "titles",
@@ -1074,9 +1110,12 @@
         "edit": "refuse",
         "why": "the server reads this when the character enters the world and keeps its own copy in memory for the session; the client is never told about a database change"
       },
-      "why": "each row is earned by a recorded instance run (FK to the reward rows); the selected title (character_base.selected_title_id) is editable",
+      "why": "Each title here was earned in a recorded instance run. Which title the character shows can be changed on the character.",
       "rows_live": 0,
-      "class": "evidence"
+      "class": "evidence",
+      "evidence": [
+        "why (before the plain-language pass): each row is earned by a recorded instance run (FK to the reward rows); the selected title (character_base.selected_title_id) is editable"
+      ]
     },
     "wonderland_character_title_ownership": {
       "group": "titles",
@@ -1089,9 +1128,12 @@
         "edit": "refuse",
         "why": "the server reads this when the character enters the world and keeps its own copy in memory for the session; the client is never told about a database change"
       },
-      "why": "each row is earned by a recorded instance run (FK to the reward rows); the selected title (character_base.selected_title_id) is editable",
+      "why": "Each title here was earned in a recorded instance run. Which title the character shows can be changed on the character.",
       "rows_live": 0,
-      "class": "evidence"
+      "class": "evidence",
+      "evidence": [
+        "why (before the plain-language pass): each row is earned by a recorded instance run (FK to the reward rows); the selected title (character_base.selected_title_id) is editable"
+      ]
     },
     "character_experience_modifiers": {
       "group": "buffs",
@@ -1314,9 +1356,12 @@
       "online": {
         "edit": "n/a"
       },
-      "why": "its presence disables raw pet mutations in the stock store (PostgresGameStore.PetDurabilityGuards.cs)",
+      "why": "The game uses this record to protect pet data; while it exists pets must not be edited directly.",
       "rows_live": 0,
-      "class": "bookkeeping"
+      "class": "bookkeeping",
+      "evidence": [
+        "why (before the plain-language pass): its presence disables raw pet mutations in the stock store (PostgresGameStore.PetDurabilityGuards.cs)"
+      ]
     },
     "monster_death_pet_experience": {
       "group": "evidence",
@@ -1352,12 +1397,14 @@
         "username": {
           "editor": "edit_advanced",
           "applies": "next_login",
-          "rule": "unique; AccountUsername rules"
+          "rule": "Must be unique and follow the user-name rules.",
+          "evidence": "rule (before the plain-language pass): unique; AccountUsername rules"
         },
         "password": {
           "editor": "edit_advanced",
           "applies": "next_login",
-          "rule": "never plain text: a versioned verifier gws$pbkdf2-sha256$v1$<iterations>$<salt b64, 16 bytes>$<hash b64, 32 bytes> (Security/Authentication/PasswordVerifierRecord.cs:8-10,103). Build it with hashlib.pbkdf2_hmac over the exact bytes the login path feeds the KDF; prove it with a headless login on a copy before enabling"
+          "rule": "Never plain text: the game stores a protected form of the password. Set a password on the Accounts page, which builds it correctly.",
+          "evidence": "rule (before the plain-language pass): never plain text: a versioned verifier gws$pbkdf2-sha256$v1$<iterations>$<salt b64, 16 bytes>$<hash b64, 32 bytes> (Security/Authentication/PasswordVerifierRecord.cs:8-10,103). Build it with hashlib.pbkdf2_hmac over the exact bytes the login path feeds the KDF; prove it with a headless login on a copy before enabling"
         },
         "email": {
           "editor": "edit",
@@ -1366,8 +1413,9 @@
         "status": {
           "editor": "edit",
           "applies": "next_login",
-          "rule": "round2: 1 = banned (login and game ports refuse); use the live ban endpoint to also kick",
-          "live_capability": "account.ban"
+          "rule": "1 = banned: login is refused. To also kick a player who is online, use the ban button.",
+          "live_capability": "account.ban",
+          "evidence": "rule (before the plain-language pass): round2: 1 = banned (login and game ports refuse); use the live ban endpoint to also kick"
         },
         "donator_tier": {
           "editor": "edit",
@@ -1555,7 +1603,7 @@
     "character_economy_baseline": {
       "group": "evidence",
       "label": "Economy opening baseline",
-      "why": "immutable; the only allowed write is the missing-baseline insert that mirrors PostgresCharacterEconomyBaseline.EnsureAsync (revisions 0)",
+      "why": "A character's starting balance. It is written once and never changed.",
       "editor": "read_only",
       "applies": "not_editable",
       "online": {
@@ -1563,12 +1611,15 @@
       },
       "server_writes": "append_only",
       "rows_live": 5,
-      "class": "evidence"
+      "class": "evidence",
+      "evidence": [
+        "why (before the plain-language pass): immutable; the only allowed write is the missing-baseline insert that mirrors PostgresCharacterEconomyBaseline.EnsureAsync (revisions 0)"
+      ]
     },
     "character_inventory_baseline_items": {
       "group": "evidence",
       "label": "Economy opening baseline",
-      "why": "immutable; the only allowed write is the missing-baseline insert that mirrors PostgresCharacterEconomyBaseline.EnsureAsync (revisions 0)",
+      "why": "A character's starting items. They are written once and never changed.",
       "editor": "read_only",
       "applies": "not_editable",
       "online": {
@@ -1576,7 +1627,10 @@
       },
       "server_writes": "append_only",
       "rows_live": 34,
-      "class": "evidence"
+      "class": "evidence",
+      "evidence": [
+        "why (before the plain-language pass): immutable; the only allowed write is the missing-baseline insert that mirrors PostgresCharacterEconomyBaseline.EnsureAsync (revisions 0)"
+      ]
     },
     "command_inbox": {
       "group": "evidence",
@@ -3747,9 +3801,12 @@
       "online": {
         "edit": "n/a"
       },
-      "why": "FK targets of character_skills / character_talents; the running game uses the pinned gameplay_* definitions, so an edit has no effect",
+      "why": "Other tables refer to these rows, and the running game uses its own published skill data, so an edit would have no effect.",
       "rows_live": 227,
-      "class": "authoring_content"
+      "class": "authoring_content",
+      "evidence": [
+        "why (before the plain-language pass): FK targets of character_skills / character_talents; the running game uses the pinned gameplay_* definitions, so an edit has no effect"
+      ]
     },
     "talent_templates": {
       "group": "content.authoring",
@@ -3761,9 +3818,12 @@
       "online": {
         "edit": "n/a"
       },
-      "why": "FK targets of character_skills / character_talents; the running game uses the pinned gameplay_* definitions, so an edit has no effect",
+      "why": "Other tables refer to these rows, and the running game uses its own published talent data, so an edit would have no effect.",
       "rows_live": 73,
-      "class": "authoring_content"
+      "class": "authoring_content",
+      "evidence": [
+        "why (before the plain-language pass): FK targets of character_skills / character_talents; the running game uses the pinned gameplay_* definitions, so an edit has no effect"
+      ]
     },
     "guild_duties": {
       "group": "content.guild",
@@ -3774,9 +3834,12 @@
       "online": {
         "edit": "n/a"
       },
-      "why": "guild_duties is an FK target; building types/levels drive altar bonuses (GuildAltarContent). Leave as shipped",
+      "why": "The guild ranks, building types and building levels the game was shipped with. Guild altar bonuses depend on them: leave them as they are.",
       "rows_live": 7,
-      "class": "authoring_content"
+      "class": "authoring_content",
+      "evidence": [
+        "why (before the plain-language pass): guild_duties is an FK target; building types/levels drive altar bonuses (GuildAltarContent). Leave as shipped"
+      ]
     },
     "guild_building_types": {
       "group": "content.guild",
@@ -3787,9 +3850,12 @@
       "online": {
         "edit": "n/a"
       },
-      "why": "guild_duties is an FK target; building types/levels drive altar bonuses (GuildAltarContent). Leave as shipped",
+      "why": "The guild ranks, building types and building levels the game was shipped with. Guild altar bonuses depend on them: leave them as they are.",
       "rows_live": 17,
-      "class": "authoring_content"
+      "class": "authoring_content",
+      "evidence": [
+        "why (before the plain-language pass): guild_duties is an FK target; building types/levels drive altar bonuses (GuildAltarContent). Leave as shipped"
+      ]
     },
     "guild_building_levels": {
       "group": "content.guild",
@@ -3800,9 +3866,12 @@
       "online": {
         "edit": "n/a"
       },
-      "why": "guild_duties is an FK target; building types/levels drive altar bonuses (GuildAltarContent). Leave as shipped",
+      "why": "The guild ranks, building types and building levels the game was shipped with. Guild altar bonuses depend on them: leave them as they are.",
       "rows_live": 194,
-      "class": "authoring_content"
+      "class": "authoring_content",
+      "evidence": [
+        "why (before the plain-language pass): guild_duties is an FK target; building types/levels drive altar bonuses (GuildAltarContent). Leave as shipped"
+      ]
     },
     "monster_loot_tables": {
       "group": "content.loot",
@@ -4322,7 +4391,7 @@
       "online": {
         "edit": "n/a"
       },
-      "why": "Calendar changes use audited revisions and require a coordinated game restart. Addresses and ports remain read-only.",
+      "why": "Name, address, port, limit, order, enabled and recommended are edited under Operations > Servers; the login list is read again at every login. The identifier and number of a realm never change.",
       "rows_live": 2,
       "class": "runtime_setting",
       "fields": {
@@ -4340,33 +4409,43 @@
           "applies": "not_editable"
         },
         "ip_address": {
-          "editor": "read_only",
-          "applies": "not_editable"
+          "editor": "edit_advanced",
+          "applies": "next_login",
+          "rule": "An IPv4 address or host name of at most 23 characters: the address the game connects to.",
+          "evidence": "rule (before the plain-language pass): IPv4 or DNS name, at most 23 ASCII bytes (RealmCatalogEntry.MaximumLegacyHostBytes); the address the client's game connection goes to."
         },
         "server_limit": {
-          "editor": "read_only",
-          "applies": "not_editable"
+          "editor": "edit_advanced",
+          "applies": "next_login",
+          "rule": "1 to 2,147,483,647.",
+          "evidence": "rule (before the plain-language pass): 1..2147483647 (RealmCatalogEntry: positive)."
         },
         "enabled": {
-          "editor": "read_only",
-          "applies": "not_editable"
+          "editor": "edit_advanced",
+          "applies": "next_login",
+          "rule": "At least 1 and at most 16 realms may be enabled; add a new realm disabled.",
+          "evidence": "rule (before the plain-language pass): At least 1 and at most 16 enabled realms (RealmCatalogSnapshot.MaximumEntries); add realms disabled."
         },
         "display_order": {
-          "editor": "read_only",
-          "applies": "not_editable"
+          "editor": "edit_advanced",
+          "applies": "next_login",
+          "rule": "0 or more; order in the server list."
         },
         "game_port": {
-          "editor": "read_only",
-          "applies": "not_editable"
+          "editor": "edit_advanced",
+          "applies": "next_login",
+          "rule": "1..65535; a game process for this realm must listen there."
         },
         "recommended": {
-          "editor": "read_only",
-          "applies": "not_editable"
+          "editor": "edit_advanced",
+          "applies": "next_login",
+          "rule": "At most one enabled realm is recommended."
         },
         "time_zone_id": {
           "editor": "edit_advanced",
           "applies": "after_restart",
-          "rule": "IANA name recognized by host and PostgreSQL; next revision and trigger-generated audit required."
+          "rule": "A standard time-zone name such as Australia/Brisbane. A change is recorded in the audit history.",
+          "evidence": "rule (before the plain-language pass): IANA name recognized by host and PostgreSQL; next revision and trigger-generated audit required."
         },
         "time_zone_revision": {
           "editor": "read_only",
@@ -4380,7 +4459,10 @@
           "editor": "read_only",
           "applies": "not_editable"
         }
-      }
+      },
+      "evidence": [
+        "why (before the plain-language pass): Name, address, port, limit, order, enable and recommended: Operations -> Servers (validated like the server's RealmCatalogEntry; the login list is re-read at every login). Identifier and id stay fixed; calendar changes use audited revisions."
+      ]
     },
     "server_rates": {
       "group": "rates",
@@ -4548,6 +4630,24 @@
       "while_running": "safe to write; the server reloads it",
       "invariants": []
     },
+    "npc_teleport_menu": {
+      "group": "content.npc",
+      "label": "Teleporter menus: which buttons, their order, price and currency",
+      "evidence": [
+        "S/Infrastructure/Rates/NpcContentRuntime.cs",
+        "S/Application/Npc/TransporterMenuPolicy.cs"
+      ],
+      "editor": "edit",
+      "server_reads": "poll every 15 s + reload",
+      "server_writes": "none",
+      "applies": "now",
+      "online": {
+        "edit": "allowed",
+        "why": "players see it the next time they open the teleporter"
+      },
+      "while_running": "safe to write; the server reloads it",
+      "invariants": []
+    },
     "item_activators": {
       "group": "content.npc",
       "label": "Reusable items that cast a buff",
@@ -4565,7 +4665,6 @@
       "while_running": "safe to write; the server reloads it",
       "invariants": []
     },
-
     "event_schedule_overrides": {
       "group": "content.npc",
       "label": "Opening times (battlefields on the Events page; every gate on the Gates page)",
@@ -4583,7 +4682,6 @@
       "while_running": "safe to write; the server reloads it",
       "invariants": []
     },
-
     "level_band_overrides": {
       "group": "content.npc",
       "label": "Gates: level band, opening mode and GM rule of every transporter, battlefield, instance and event",
@@ -4600,9 +4698,76 @@
         "why": "players meet the new band the next time they ask to enter"
       },
       "while_running": "safe to write; the server reloads it",
-      "invariants": ["minimum_level <= maximum_level (CHECK)", "schedule_mode IN (compiled, always, windows, closed) (CHECK)", "windows live in event_schedule_overrides (activity = the gate's window_activity)"]
+      "invariants": [
+        "minimum_level <= maximum_level (CHECK)",
+        "schedule_mode IN (compiled, always, windows, closed) (CHECK)",
+        "windows live in event_schedule_overrides (activity = the gate's window_activity)"
+      ]
     },
-
+    "gm_power_policy": {
+      "group": "operations",
+      "label": "GM powers: which GM commands and powers this server allows",
+      "evidence": [
+        "S/Application/Operators/GmPowerPolicy.cs, S/Infrastructure/Operators/GmPowerPolicyRuntime.cs (W5B)"
+      ],
+      "editor": "edit",
+      "server_reads": "poll every 5 s",
+      "server_writes": "none (created by the game at start-up; a trigger writes gm_power_policy_log)",
+      "applies": "hot_reload",
+      "online": {
+        "edit": "allowed",
+        "why": "the next GM command is checked against the new policy; active /god, /power ... stop at once"
+      },
+      "while_running": "safe to write; the server polls it",
+      "invariants": [
+        "no row = allowed (the behaviour before the table existed)",
+        "power_key must be a key of the server's catalogue (GET /admin/capabilities gmPowers); unknown keys are ignored and logged",
+        "'master' = false refuses every GM power"
+      ]
+    },
+    "drop_tier_overrides": {
+      "group": "content.monster",
+      "label": "Drop chance by map and monster tier",
+      "evidence": [
+        "docs/handoff/EDITOR-2026-11-05.md E1"
+      ],
+      "editor": "edit",
+      "server_reads": "compatible server POST /npc-content/reload",
+      "server_writes": "none; table created by the compatible server release",
+      "applies": "game_reload",
+      "online": {
+        "edit": "allowed",
+        "why": "server content settings, not character rows"
+      },
+      "while_running": "safe to save; compatible game server must reload the overrides",
+      "invariants": [
+        "map_id between -1 and 255",
+        "tier in normal, elite, boss",
+        "any_drop_basis_points between 0 and 10000"
+      ]
+    },
+    "respawn_tier_overrides": {
+      "group": "content.monster",
+      "label": "Respawn interval by map and monster tier",
+      "evidence": [
+        "docs/handoff/EDITOR-2026-11-05.md E1"
+      ],
+      "editor": "edit",
+      "server_reads": "compatible server POST /npc-content/reload",
+      "server_writes": "none; table created by the compatible server release",
+      "applies": "game_reload",
+      "online": {
+        "edit": "allowed",
+        "why": "server content settings, not character rows"
+      },
+      "while_running": "safe to save; compatible game server must reload the overrides",
+      "invariants": [
+        "map_id between -1 and 255",
+        "tier in normal, elite",
+        "minimum_seconds and maximum_seconds between 15 and 86400",
+        "minimum_seconds <= maximum_seconds"
+      ]
+    },
     "server_notices": {
       "group": "content.npc",
       "label": "Scheduled server notices",
@@ -4620,7 +4785,6 @@
       "while_running": "safe to write; the server reloads it",
       "invariants": []
     },
-
     "notice_settings": {
       "group": "content.npc",
       "label": "Notice settings",
@@ -4638,7 +4802,117 @@
       "while_running": "safe to write; the server reloads it",
       "invariants": []
     },
-    "server_messages": {"group": "content.npc", "label": "Server messages (welcome line)", "evidence": ["S/Infrastructure/Rates/NpcContentRuntime.cs", "S/Game/GameSessionRegistry.Board.cs"], "editor": "edit", "server_reads": "poll every 15 s + reload", "server_writes": "none", "applies": "now", "online": {"edit": "allowed", "why": "shown at the next login"}, "while_running": "safe to write; the server reloads it", "invariants": []},
-    "seasonal_events": {"group": "content.npc", "label": "Seasonal events (on/off and dates)", "evidence": ["S/Infrastructure/Rates/NpcContentRuntime.cs", "S/Application/Seasons/SeasonalEvents.cs"], "editor": "edit", "server_reads": "poll every 15 s + reload", "server_writes": "none", "applies": "now", "online": {"edit": "allowed", "why": "envoys change at the next map entry; drops at the next kill"}, "while_running": "safe to write; the server reloads it", "invariants": []}
+    "server_messages": {
+      "group": "content.npc",
+      "label": "Server messages (welcome line)",
+      "evidence": [
+        "S/Infrastructure/Rates/NpcContentRuntime.cs",
+        "S/Game/GameSessionRegistry.Board.cs"
+      ],
+      "editor": "edit",
+      "server_reads": "poll every 15 s + reload",
+      "server_writes": "none",
+      "applies": "now",
+      "online": {
+        "edit": "allowed",
+        "why": "shown at the next login"
+      },
+      "while_running": "safe to write; the server reloads it",
+      "invariants": []
+    },
+    "seasonal_events": {
+      "group": "content.npc",
+      "label": "Seasonal events (on/off and dates)",
+      "evidence": [
+        "S/Infrastructure/Rates/NpcContentRuntime.cs",
+        "S/Application/Seasons/SeasonalEvents.cs"
+      ],
+      "editor": "edit",
+      "server_reads": "poll every 15 s + reload",
+      "server_writes": "none",
+      "applies": "now",
+      "online": {
+        "edit": "allowed",
+        "why": "envoys change at the next map entry; drops at the next kill"
+      },
+      "while_running": "safe to write; the server reloads it",
+      "invariants": []
+    },
+    "login_window_awards": {
+      "group": "content.npc",
+      "label": "Login-window awards (W4-B)",
+      "evidence": [
+        "S/Infrastructure/Awards/LoginAwardLedger.cs",
+        "S/Game/GameClientHandler.LoginAwards.cs"
+      ],
+      "editor": "edit",
+      "server_reads": "every world entry",
+      "server_writes": "none",
+      "applies": "now",
+      "online": {
+        "edit": "allowed",
+        "why": "read at each character's next world entry"
+      },
+      "while_running": "safe to write; read at each login",
+      "invariants": [
+        "items: 1-99 per row, at most 16 rows",
+        "ends_at > starts_at (UTC)"
+      ]
+    },
+    "login_window_award_claims": {
+      "group": "content.npc",
+      "label": "Login-award claims (W4-B)",
+      "evidence": [
+        "S/Infrastructure/Awards/LoginAwardLedger.cs"
+      ],
+      "editor": "read_only",
+      "server_reads": "every world entry",
+      "server_writes": "claim on world entry",
+      "applies": "now",
+      "online": {
+        "edit": "refused",
+        "why": "the server's once-only ledger"
+      },
+      "while_running": "read only",
+      "invariants": [],
+      "why": "the server's once-only ledger; removing a row would pay the award again"
+    },
+    "prize_chest_entries": {
+      "group": "character.inventory",
+      "label": "Prize Chest award storage (W4-B)",
+      "evidence": [
+        "S/Infrastructure/Awards/LoginAwardLedger.cs",
+        "S/Game/GameClientHandler.PrizeChest.cs"
+      ],
+      "editor": "edit",
+      "server_reads": "Prize Chest talk + world entry",
+      "server_writes": "login awards add rows; a draw sets claimed_at",
+      "applies": "now",
+      "online": {
+        "edit": "allowed",
+        "why": "the player collects at the Prize Chest"
+      },
+      "while_running": "safe to insert; never edit a claimed row",
+      "invariants": [
+        "item rows: quantity 1-99"
+      ]
+    },
+    "pending_character_buffs": {
+      "group": "character.base",
+      "label": "Buffs queued for the next login (W4-B)",
+      "evidence": [
+        "S/Game/GameClientHandler.LoginAwards.cs"
+      ],
+      "editor": "edit",
+      "server_reads": "world entry",
+      "server_writes": "applied_at + result",
+      "applies": "now",
+      "online": {
+        "edit": "allowed",
+        "why": "applied at the character's next world entry"
+      },
+      "while_running": "safe to insert or cancel waiting rows",
+      "invariants": []
+    }
   }
 }

@@ -248,17 +248,17 @@ internal static class PlayerTradeChecks
 
     private static void CheckGate()
     {
-        ServerRates.ResetToDefaults();
-        Check.True(ServerRateCatalog.TryGet(ServerRateKeys.PlayerTrade, out var tradeRate) && tradeRate.DefaultValue == 0m,
-            "trade.player exists and defaults to 0");
-        Check.True(ServerRateCatalog.TryGet(ServerRateKeys.PlayerStalls, out var stallRate) && stallRate.DefaultValue == 0m,
-            "trade.stalls exists and defaults to 0");
+        Check.True(ServerRateCatalog.TryGet(ServerRateKeys.PlayerTrade, out var tradeRate) && tradeRate.DefaultValue == 1m,
+            "B21: trade.player exists and defaults to 1 (live is on)");
+        Check.True(ServerRateCatalog.TryGet(ServerRateKeys.PlayerStalls, out var stallRate) && stallRate.DefaultValue == 1m,
+            "B21: trade.stalls exists and defaults to 1 (live is on)");
+        ServerRates.Install(ServerRatesSnapshot.Create([KeyValuePair.Create(ServerRateKeys.PlayerTrade, 0m), KeyValuePair.Create(ServerRateKeys.PlayerStalls, 0m)], 1, DateTimeOffset.UtcNow, "check", "test")); // B21: switch now defaults on; this part tests it off
         foreach (var opcode in new ushort[] { 10061, 10062, 10063, 10065, 10066, 10104, 10105, 10106, 10107, 10108 })
         {
             Check.True(!GameClientHandler.ClaimsPlayerTradePacket(opcode), $"gate off: {opcode} still reaches the default branch");
         }
         ServerRates.Install(ServerRatesSnapshot.Create(
-            [KeyValuePair.Create(ServerRateKeys.PlayerTrade, 1m)], 1, DateTimeOffset.UtcNow, "check", "test"));
+            [KeyValuePair.Create(ServerRateKeys.PlayerTrade, 1m), KeyValuePair.Create(ServerRateKeys.PlayerStalls, 0m)], 1, DateTimeOffset.UtcNow, "check", "test")); // B21: stalls off here
         Check.True(GameClientHandler.ClaimsPlayerTradePacket(10104) && GameClientHandler.ClaimsPlayerTradePacket(10107),
             "trade.player 1 claims the trade opcodes");
         Check.True(!GameClientHandler.ClaimsPlayerTradePacket(10061) && !GameClientHandler.ClaimsPlayerTradePacket(10106),

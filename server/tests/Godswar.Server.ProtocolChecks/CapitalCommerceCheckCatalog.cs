@@ -56,6 +56,12 @@ internal static class CapitalCommerceCheckCatalog
             MidAutumnChecks.RunAsync),
         (RookieGrowthChecks.CheckName, // F-138 newbie growth rewards
             RookieGrowthChecks.RunAsync),
+        (LoginAwardChecks.CheckName, // W4-B login awards, Prize Chest, buff broadcast
+            LoginAwardChecks.RunAsync),
+        (OnlineAwardOnlineTimeChecks.CheckName, // B21 item 29
+            OnlineAwardOnlineTimeChecks.RunAsync),
+        (PostgresLoginAwardIntegrationChecks.CheckName, // W4-B (needs GODSWAR_TEST_POSTGRES_CONNECTION_STRING)
+            PostgresLoginAwardIntegrationChecks.RunAsync),
         (PetQuestDispatchChecks.CheckName, // W3 Magic Bell
             PetQuestDispatchChecks.RunAsync),
         (HermesHoodPetRenameChecks.CheckName, // ITEMS-HERMES F-55 / F-56

@@ -426,6 +426,7 @@ internal sealed partial class GameClientHandler
             203 => 2203,
             132 => 1132,
             142 => 1133,
+            172 => 1172, // B22 G2
             _ => 0
         };
         return detailSubId != 0;
@@ -441,7 +442,7 @@ internal sealed partial class GameClientHandler
         out ClassSuitCommandOperation operation)
     {
         operation = (ClassSuitCommandOperation)wire;
-        return wire is 100 or 101 or 102 or 104 or 105 or 106 or 108;
+        return wire is 100 or 101 or 102 or 104 or 105 or 106 or 108 or 109; // B22 G2: 109
     }
 
     private static CommandOutcome MapClassSuitOutcome(

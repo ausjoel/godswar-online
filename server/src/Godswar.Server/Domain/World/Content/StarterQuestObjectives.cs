@@ -278,7 +278,7 @@ internal static partial class StarterQuestObjectives
             [543u] = [new QuestObjective("Vicious Fawns", "", 30, 1442u, 4u, -13.0f, 39.0f)],
             [544u] = [new QuestObjective("Brown Dragons", "", 30, 1443u, 4u, -13.0f, 39.0f)],
             [545u] = [new QuestObjective("Fluttering Swords", "", 30, 1446u, 4u, -192.0f, 31.0f), new QuestObjective("Animated Axes", "", 30, 1445u, 4u, -110.0f, -56.0f), new QuestObjective("Wild Spears", "", 30, 1447u, 4u, -134.0f, -197.0f)],
-            [546u] = [new QuestObjective("Divine Staff Selayan", "", 100, 1448u, 4u, -153.0f, -211.0f)],
+            [546u] = [new QuestObjective("Divine Staff Selayan", "", 1, 1448u, 4u, -153.0f, -211.0f)], // B21: the quest text asks for one elite (was 100)
             [547u] = [new QuestObjective("Gordon", "", 1, 1026u, 4u, -181.0f, 154.0f)],
             [549u] = [new QuestObjective("Plains Boas", "", 35, 1031u, 13u, 183.0f, -51.0f)],
             [550u] = [new QuestObjective("Huge Scorpions", "", 35, 1040u, 13u, 192.0f, -166.0f)],
@@ -565,7 +565,7 @@ internal static partial class StarterQuestObjectives
             [1543u] = [new QuestObjective("Farm Wasps", "", 30, 1423u, 2u, -13.0f, 39.0f)],
             [1544u] = [new QuestObjective("Woodland Drones", "", 30, 1424u, 2u, -13.0f, 39.0f)],
             [1545u] = [new QuestObjective("Young Firemane Dragons", "", 30, 1428u, 2u, -192.0f, 31.0f), new QuestObjective("Young Flamescale Dragons", "", 30, 1427u, 2u, -109.0f, -92.0f), new QuestObjective("Young Jade Dragons", "", 30, 1429u, 2u, -134.0f, -197.0f)],
-            [1546u] = [new QuestObjective("Young Armored Dragon", "", 100, 1430u, 2u, -153.0f, -211.0f)],
+            [1546u] = [new QuestObjective("Young Armored Dragon", "", 1, 1430u, 2u, -153.0f, -211.0f)], // B21: the quest text asks for one elite (was 100)
             [1547u] = [new QuestObjective("Kelly the Venom Queen", "", 1, 1426u, 2u, -184.0f, 160.0f)],
             [1549u] = [new QuestObjective("Boas", "", 35, 1031u, 11u, 179.0f, 121.0f)],
             [1550u] = [new QuestObjective("Vicious Wolves", "", 35, 1032u, 11u, 90.0f, 124.0f)],

@@ -188,6 +188,13 @@ internal sealed partial class PostgresHolySuitCommandExecutor
                 character,
                 daily);
         }
+        if (!Godswar.Server.Application.Limits.GameLimitProfile.HolySuitTargetAllowed(upgrade.TargetSuitType)) // W4F
+        {
+            return Reject(
+                HolySuitCommandResultStatus.MaximumHolySuit,
+                character,
+                daily);
+        }
         if (!catalog.TryGetConsumable(ware.Item.Id, out var wareDefinition) ||
             wareDefinition.Role != HolySuitConsumableRole.Ware)
         {

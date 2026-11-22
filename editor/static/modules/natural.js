@@ -7,7 +7,8 @@
   GW.module("natural", {
     async mount(el, ctx) {
       const D = await ctx.api("report");
-      el.append(h("p", { class: "gw-dim" }, "Read-only. Nothing here changes a character or blocks an edit. GM characters are expected to show up."));
+      el.append(h("p", { class: "gw-dim" }, "Read-only. Nothing here changes a character or blocks an edit. GM characters are expected to show up. ",
+        h("a", { href: "#/legality" }, "Item legality"), " says which items stop a login and fixes them."));   // B21 item 30
       for (const c of D.characters) {
         const bad = c.findings.filter(f => f.severity === "impossible").length;
         el.append(h("details", { class: "gw-nat-char", open: bad > 0 },

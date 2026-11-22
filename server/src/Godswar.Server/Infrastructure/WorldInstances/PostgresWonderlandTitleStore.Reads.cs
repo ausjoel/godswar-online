@@ -96,8 +96,11 @@ internal sealed partial class PostgresWonderlandTitleStore
     private static async Task<bool> AdmissionMatchesAsync(NpgsqlConnection connection,
         NpgsqlTransaction transaction, WonderlandTitleRequest request, CancellationToken token)
     {
+        // S5: each admitted character must hold exactly one admitted ledger row, on the reservation that
+        // admitted it. The registered party claimed before the run started; a member admitted after the
+        // seal claimed its own reservation later, but before the island it is being paid for cleared.
         await using var command = new NpgsqlCommand("""
-            SELECT realm_id,instance_kind,character_id,claimed_at FROM public.legacy_instance_daily_entries
+            SELECT realm_id,instance_kind,character_id,claimed_at,reservation_id FROM public.legacy_instance_daily_entries
             WHERE reservation_id=ANY(@reservations) AND admitted_at IS NOT NULL ORDER BY character_id FOR SHARE;
             """, connection, transaction);
         command.Parameters.AddWithValue("reservations", request.AdmissionReservationIds.ToArray());
@@ -106,8 +109,11 @@ internal sealed partial class PostgresWonderlandTitleStore
         while (await reader.ReadAsync(token))
         {
             if (index >= request.AdmittedCharacterIds.Count || reader.GetInt16(0) != request.RealmId.Value ||
-                reader.GetInt16(1) != 2 || reader.GetInt32(2) != request.AdmittedCharacterIds[index] ||
-                reader.GetDateTime(3) > request.StartedAtUtc.UtcDateTime) return false;
+                reader.GetInt16(1) != 2 || reader.GetInt32(2) != request.AdmittedCharacterIds[index]) return false;
+            var characterId = reader.GetInt32(2);
+            var reservation = request.ReservationFor(characterId);
+            var fence = reservation == request.AdmissionReservationId ? request.StartedAtUtc : request.ClearedAtUtc;
+            if (reader.GetGuid(4) != reservation || reader.GetDateTime(3) > fence.UtcDateTime) return false;
             index++;
         }
         return index == request.AdmittedCharacterIds.Count;

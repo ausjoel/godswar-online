@@ -83,6 +83,64 @@ internal static class HolySuitContentArchitectureChecks
             65_349_705L,
             FindUpgrade(3, 2).RequiredItemExperience,
             "Gold level 2 to 3 uses corrected EquipEffect cost");
+        // W4F: row 410 placeholder is corrected at runtime lookup only.
+        var platinumTen = FindUpgrade(4, 10);
+        Check.Equal(999_999_999L, platinumTen.RequiredItemExperience,
+            "sealed baseline keeps the original 410 value (revision hash)");
+        Check.Equal(1_073_990_114L,
+            PinnedHolySuitContentCatalog.ApplyReviewedCorrection(platinumTen)
+                .RequiredItemExperience,
+            "Platinum 10 to Mithril 1 uses the reviewed trend cost");
+        // W4H: rows 110 and 309 are smoothed the same way (runtime only).
+        var bronzeTen = FindUpgrade(1, 10);
+        var goldNine = FindUpgrade(3, 9);
+        Check.Equal(3_875_101L, bronzeTen.RequiredItemExperience,
+            "sealed baseline keeps the original 110 value (revision hash)");
+        Check.Equal(100_000_000L, goldNine.RequiredItemExperience,
+            "sealed baseline keeps the original 309 value (revision hash)");
+        var bronzeTenCost = PinnedHolySuitContentCatalog
+            .ApplyReviewedCorrection(bronzeTen).RequiredItemExperience;
+        var goldNineCost = PinnedHolySuitContentCatalog
+            .ApplyReviewedCorrection(goldNine).RequiredItemExperience;
+        Check.Equal(8_565_954L, bronzeTenCost,
+            "Bronze 10 to Silver 1 uses the reviewed trend cost");
+        Check.Equal(102_429_086L, goldNineCost,
+            "Gold 9 to 10 uses the reviewed trend cost");
+        Check.True(
+            bronzeTenCost > FindUpgrade(1, 9).RequiredItemExperience &&
+            goldNineCost > FindUpgrade(3, 8).RequiredItemExperience &&
+            goldNineCost < FindUpgrade(3, 10).RequiredItemExperience,
+            "smoothed 110 and 309 costs sit above the previous row (309 below 310)");
+        Check.True(
+            PinnedHolySuitContentCatalog.ApplyReviewedCorrection(
+                bronzeTen with { RequiredItemExperience = 4_000_000 })
+                .RequiredItemExperience == 4_000_000 &&
+            PinnedHolySuitContentCatalog.ApplyReviewedCorrection(
+                goldNine with { RequiredItemExperience = 101_000_000 })
+                .RequiredItemExperience == 101_000_000 &&
+            PinnedHolySuitContentCatalog.ApplyReviewedCorrection(
+                platinumTen with { RequiredItemExperience = 1_000_000_000 })
+                .RequiredItemExperience == 1_000_000_000,
+            "a republished row with any other value is not overridden");
+        Check.True(
+            HolySuitContentBaseline.Upgrades
+                .Where(value => value != platinumTen &&
+                    value != bronzeTen && value != goldNine)
+                .All(static value =>
+                    PinnedHolySuitContentCatalog.ApplyReviewedCorrection(value)
+                    == value),
+            "no other Holy Suit upgrade is corrected");
+        Check.True(
+            new[]
+            {
+                PinnedHolySuitContentCatalog.CorrectedPlatinumToMithrilExperience,
+                PinnedHolySuitContentCatalog.CorrectedBronzeToSilverExperience,
+                PinnedHolySuitContentCatalog.CorrectedGoldNineToTenExperience
+            }.All(static cost =>
+                cost < HolySuitContentBaseline.OperationPolicy
+                    .GearExperienceCapacity &&
+                cost < int.MaxValue),
+            "corrected 110/309/410 costs fit gear EXP storage (int32, 2B cap)");
         Check.True(
             HolySuitContentBaseline.Upgrades.All(static value =>
                 value.WareQuantity == value.TargetLevel &&

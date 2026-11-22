@@ -113,7 +113,8 @@ internal sealed partial class PostgresOperatorStore : IOperatorStore
         CancellationToken cancellationToken)
     {
         await using var command = _dataSource.CreateCommand(
-            "UPDATE public.accounts SET status = @status WHERE id = @id;");
+            // W4A: never touches an account deleted in the editor (status 2): /ban and /unban must not undelete it.
+            "UPDATE public.accounts SET status = @status WHERE id = @id AND status <> 2;");
         command.Parameters.AddWithValue("status", status);
         command.Parameters.AddWithValue("id", accountId);
         return await command.ExecuteNonQueryAsync(cancellationToken) == 1;

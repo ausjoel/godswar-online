@@ -164,7 +164,7 @@ class AttributeDatabase(unittest.TestCase):
         self.assertEqual(code,400,data)
         self.assertIn('read-only',data['error'].lower())
         self.rb.writable=True
-        with patch.object(common,'online_info',return_value={'online':True,'name':'the admin','phase':'world','reason':'test character online'}):
+        with patch.object(common,'online_info',return_value={'online':True,'name':'Odin','phase':'world','reason':'test character online'}):
             self.assertEqual(self.post(body)[0],423)
         body['expected']=dict(self.source,item_grade=25)
         self.assertEqual(self.post(body)[0],409)

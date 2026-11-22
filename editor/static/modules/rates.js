@@ -26,7 +26,12 @@
   };
   const isMult = r => r.kind === "multiplier";
   const isSwitch = r => r.unit === "0/1" || (r.kind !== "multiplier" && Number(r.min_value) === 0 && Number(r.max_value) === 1);
-  const valText = (r, v) => isMult(r) ? "x" + fmtN(v) : isSwitch(r) ? (Number(v) ? "on" : "off") : fmtN(v) + (r.unit ? " " + r.unit : "");
+  const isBp = r => r.unit === "basis points";      // stored in 1/100 of a percent: always say the percent too
+  const valText = (r, v) => isMult(r) ? "x" + fmtN(v) : isSwitch(r) ? (Number(v) ? "on" : "off") : isBp(r) ? fmtN(v) + " (" + fmtN(Number(v) / 100) + "%)" : fmtN(v) + (r.unit ? " " + r.unit : "");
+  // a stock setting stored in internal units (scale 10000 = basis points) is shown and edited as value / scale
+  const stockText = (s, v) => v === null || v === undefined ? "(empty)" : s.scale ? ((s.shown || {}).prefix || "") + fmtN(Number(v) / s.scale) : fmtN(v);
+  // the server's description in the house style: "On: / Off: / Needs:" start their own line
+  const descLines = d => String(d || "").replace(/([.!?])\s+(On|Off|Needs|Example): /g, "$1\n$2: ").replace(/([.!?])\s+(\d+ = )/g, "$1\n$2");
   // "2", "x2", "2x", "1,000,000", "1 000 000", "1m", "2.5k", "1e6", "3b"
   function parseVal(s) {
     let t = String(s).trim().toLowerCase().replace(/[,_\s]/g, "").replace(/^[x×]/, "").replace(/[x×]$/, "");
@@ -117,7 +122,7 @@
       "drop.max_items": () => {
         const per = {};
         for (const x of loot.rules || []) per[x.monster] = (per[x.monster] || 0) + 1;
-        const rows = (loot.tables || []).slice(0, 5).map(t => [(t.monster_name || t.monster) + " (" + (per[t.monster] || 0) + " loot rules)", t.maximum_drops,
+        const rows = (loot.tables || []).slice(0, 5).map(t => [(t.monster_name || t.monster) + " (" + (per[t.monster] || 0) + " items it can drop)", t.maximum_drops,
           cm(32, Math.min(per[t.monster] || 0, T(t.maximum_drops, v))), "items"]);
         return rows.length ? rows : [["A 1-item monster", 1, cm(32, T(1, v)), "items"]];
       },
@@ -127,7 +132,7 @@
       "forge.success": () => [["A 40% forge step", "40%", pct(40, v)], ["A 10% forge step", "10%", pct(10, v)]],
       "forge.holystone_success": () => [["Holy stone level 1-3", "90%", pct(90, v)], ["Level 4-6", "25%", pct(25, v)], ["Level 7-9", "10%", pct(10, v)]],
       "holybox.daily_limit": () => [["EXP one account may store per day", 2000000000, v, "EXP"], ["Full Holy Box V (400,000,000)", 5, +(v / 4e8).toFixed(2), "boxes"],
-        ["The client's counter shows", 214748364, cm(214748364, v)]],
+        ["The game's counter shows", 214748364, cm(214748364, v)]],
       "holybox.per_store_max": () => [["Largest single Store", 400000000, v, "EXP"]],
       "holybox.capacity": () => [["Holy Box I", 100000, cm(I32, T(100000, v)), "EXP"], ["Holy Box III", 10000000, cm(I32, T(10000000, v)), "EXP"], ["Holy Box V", 400000000, cm(I32, T(400000000, v)), "EXP"]],
       "holybox.min_level": () => [["Level needed at the forger", 70, v]],
@@ -149,32 +154,32 @@
       "event.battlefield_minutes": () => [["Each entry window", "45 min", v + " min"]],
       "event.battlefield_shift_hours": () => {
         const hh = x => String(((x % 24) + 24) % 24).padStart(2, "0") + ":00";
-        return [["Wednesday Pindus window (realm time, UTC+8)", "21:00", hh(21 + Number(v))], ["Same window in Brisbane (AEST, UTC+10)", "23:00", hh(23 + Number(v))]];
+        return [["A battle that normally starts at 21:00 (server time)", "21:00", hh(21 + Number(v))]];
       },
       "event.wonderland_close_hour": () => [["Wonderland entry", "until 23:00", Number(v) >= 24 ? "all day" : "until " + String(v).padStart(2, "0") + ":00"]],
       "event.zeus_stone_any_day": () => [["Praying stones accepted", "Monday-Friday", Number(v) ? "every day" : "Monday-Friday"]],
     };
     const f = P[r.rate_key];
     if (f) return f();
-    return isMult(r) ? [["A stock amount of 100", 100, T(100, v)]] : [["Value", r.default_value, v, r.unit]];
+    return isMult(r) ? [["A normal amount of 100", 100, T(100, v)]] : isBp(r) ? [["Chance", fmtN(Number(r.default_value) / 100) + "%", fmtN(Number(v) / 100) + "%"]] : [["Value", r.default_value, v, r.unit]];
   }
 
-  // a value past a hard limit of the server or of the admin's client (Polish/POINTS-AUDIT.md): one plain sentence, or ""
+  // a value past a hard limit of the server or of the game client (POINTS-AUDIT): one plain sentence, or ""
   function capWarning(r, v) {
     const info = r.info || {}, k = r.rate_key;
-    if (info.unused) return "The running game server does not read this setting: the row was left by a newer server build (round-2). Changing it does nothing until that build runs again.";
+    if (info.unused) return "The running game server does not use this setting: it belongs to a newer server version. Changing it does nothing until that version runs again.";
     if (k === "drop.max_items") {
       const md = Number((S.st.loot || {}).max_drops) || 1, n = Math.min(32, Math.trunc(md * v + 1e-9));
       const per = {};
       for (const x of (S.st.loot || {}).rules || []) per[x.monster] = (per[x.monster] || 0) + 1;
       const most = Math.max(0, ...Object.values(per));
-      if (n > 8) return "Client limit: this allows up to " + n + " items on one corpse (a monster with " + md + " maximum drops), but the game's loot window has only 8 slots; what the client does with more was never tested. Keep this at x" + fmtN(Math.floor(8 / md)) + " or less. " +
-        (most <= 8 ? "Today no monster has more than " + most + " loot rule" + (most === 1 ? "" : "s") + ", so nothing goes past 8 until monster_loot_rules is filled." : "");
+      if (n > 8) return "Game limit: this allows up to " + n + " items on one corpse, but the game's loot window has only 8 slots, so only the best 8 show at a time. x" + fmtN(Math.floor(8 / md)) + " or less keeps every drop visible. " +
+        (most <= 8 ? "Today no monster can drop more than " + most + " different item" + (most === 1 ? "" : "s") + ", so nothing goes past 8 yet." : "");
       return "";
     }
-    if (k === "holybox.daily_limit" && v > 214748364) return "Client display: the Holy Box counter in the game stops at 214,748,364; the server still enforces " + fmtN(v) + ".";
-    if (k === "money.sell_price" && v > 5) return "Above x5 an expensive full stack overflows a 32-bit total and the sale fails.";
-    if (info.first_cap && v > Number(info.first_cap) * 1.0001) return "Past the cap from about " + valText(r, info.first_cap) + ": " + info.first_cap_why + ". Higher values change little or nothing.";
+    if (k === "holybox.daily_limit" && v > 214748364) return "Game display: the Holy Box counter in the game stops at 214,748,364; the real limit of " + fmtN(v) + " still applies.";
+    if (k === "money.sell_price" && v > 5) return "Above x5, selling an expensive full stack would fail.";
+    if (info.first_cap && v > Number(info.first_cap) * 1.0001) return "Past a hard limit: from about " + valText(r, info.first_cap) + ", " + info.first_cap_why + ". Higher values change little or nothing.";
     return "";
   }
 
@@ -197,7 +202,7 @@
   function setStockDraft(s, v) {
     const same = String(v === null || v === undefined ? "" : v) === String(s.value === null || s.value === undefined ? "" : s.value);
     if (same) { delete S.stockDraft[s.id]; S.bar.unset("s:" + s.id); }
-    else { S.stockDraft[s.id] = v; S.bar.set("s:" + s.id, { label: s.label, from: s.value === null ? "(empty)" : s.value, to: v === null ? "(empty)" : v, applies: s.applies === "restart" ? "after_restart" : "per_use", field: s.field }); }
+    else { S.stockDraft[s.id] = v; S.bar.set("s:" + s.id, { label: s.label, from: stockText(s, s.value), to: stockText(s, v), applies: s.applies === "restart" ? "after_restart" : "per_use", field: s.field }); }
   }
 
   // ------------------------------------------------------------ one rate row
@@ -207,41 +212,42 @@
     const srvRates = (S.st.server && S.st.server.rates) || {};
     const srv = srvRates[r.rate_key];
     const info = r.info || {};
-    const helpText = "|cFFFFFF00" + r.label + "|cFFFFFFFF\n" + r.description + "\n\n|cFF6BCCFEKey:|cFFFFFFFF " + r.rate_key + (r.unit && r.unit !== "x" ? " (" + r.unit + ")" : "") +
-      "\n|cFF6BCCFEStock:|cFFFFFFFF " + valText(r, r.default_value) + "   |cFF6BCCFERange on this server:|cFFFFFFFF " + valText(r, r.min_value) + " – " + valText(r, r.max_value) +
-      "\n|cFF6BCCFEApplies:|cFFFFFFFF " + info.applies + " (the running server reloads within seconds; nobody has to log out)" +
-      ((info.caps || []).length ? "\n\n|cFFFF9F3FLimits:|cFFFFFFFF\n• " + info.caps.join("\n• ") : "") + "\n\n|cFF8AA3B0Stored in public.server_rates (row " + r.rate_key + "); the code reading it: " + (r.applies_to || "") + ".";
+    // one hover for the whole row, in the house style: what it does, then short facts, limits as a list
+    const helpText = GW.helpText({ title: r.label, text: descLines(r.description),
+      facts: [["Normal value", valText(r, r.default_value)], ["Allowed here", valText(r, r.min_value) + " – " + valText(r, r.max_value)],
+        ["Applies", info.applies + "; no restart or logout needed"]],
+      listTitle: "Limits", list: info.caps || [], note: "Setting name: " + r.rate_key });
 
     const big = h("span", { class: "gw-rt-big" });
     const err = h("span", { class: "gw-rt-err tt-bad", role: "alert" });
-    const warn = h("div", { class: "gw-rt-capwarn", role: "status", "data-help": "A hard limit in the server or in the admin's game client. Saving is still allowed." });
+    const warn = h("div", { class: "gw-rt-capwarn", role: "status", "data-help": "A hard limit of the game. You can still save this value." });
     const box = h("input", { class: "gw-rt-num", type: "text", inputmode: "decimal", "aria-label": r.label + " exact value", "data-field": "server_rates.value",
-      "data-help": "Type the exact value: 2, x2, 1,000,000, 1m, 2.5k or 1e6. Allowed here: " + valText(r, r.min_value) + " – " + valText(r, r.max_value) + ".", disabled: editable ? null : true });
+      "data-help": "Type an exact value.\n• Accepted: 2, x2, 1,000,000, 2.5k or 1m.\n• Allowed here: " + valText(r, r.min_value) + " – " + valText(r, r.max_value) + ".", disabled: editable ? null : true });
     const slider = h("input", { class: "gw-rt-slider", type: "range", min: 0, max: Math.max(1, list.length - 1), step: 1, "aria-label": r.label + " slider (log scale)", disabled: editable ? null : true,
-      "data-help": "Drag to set " + r.label + (list.length > 40 ? " on a log scale (each mark is 10 times the last)" : "") + ". Yellow ▼ = stock, red line = where a hard cap starts, green dot = what the running server uses. Arrow keys step through the marks; type an exact value in the box.",
+      "data-help": "Drag to set " + r.label + "." + (list.length > 40 ? "\n• Each labelled mark is 10 times the one before." : "") + "\n• Yellow ▼ = normal value.\n• Red line = where a hard limit starts.\n• Green dot = what the game server uses now.\nArrow keys move one step; the box takes an exact value.",
       "aria-valuetext": valText(r, curVal(r)) });
     const ticks = h("div", { class: "gw-rt-ticks", "aria-hidden": "true" });
     const pos = i => (list.length > 1 ? i / (list.length - 1) * 100 : 0) + "%";
     for (const [i, lab] of decadeLabels(r, list)) ticks.append(h("span", { class: "gw-rt-tick", style: "left:" + pos(i) }, lab));
     const marks = h("div", { class: "gw-rt-marks" });
-    marks.append(h("span", { class: "gw-rt-mark stock", style: "left:" + pos(nearest(list, Number(r.default_value))), "data-help": "Stock value: " + valText(r, r.default_value) }));
+    marks.append(h("span", { class: "gw-rt-mark stock", style: "left:" + pos(nearest(list, Number(r.default_value))), "data-help": "Normal value: " + valText(r, r.default_value) }));
     if (info.first_cap && info.first_cap >= Number(r.min_value) && info.first_cap <= Number(r.max_value))
       marks.append(h("span", { class: "gw-rt-mark cap", style: "left:" + pos(nearest(list, Number(info.first_cap))), "data-help": "From about " + valText(r, info.first_cap) + " on: " + info.first_cap_why + ". Higher values change less and less." }));
     if (srv !== undefined) marks.append(h("span", { class: "gw-rt-mark srv", style: "left:" + pos(nearest(list, Number(srv))), "data-help": "The running game server uses " + valText(r, srv) + " right now." }));
     const meta = h("div", { class: "gw-rt-meta" });
     const pv = h("table", { class: "gw-rt-preview" });
     const toggle = isSwitch(r) ? h("button", { class: "gw-rt-switch", type: "button", role: "switch", "aria-label": r.label, disabled: editable ? null : true,
-      "data-help": "Switch " + r.label + " on or off (stock: " + (Number(r.default_value) ? "on" : "off") + ").",
+      "data-help": "Switch " + r.label + " on or off.\nNormal value: " + (Number(r.default_value) ? "on" : "off"),
       onclick: () => setDraft(r, curVal(r) ? 0 : 1) }, h("span", { class: "knob" })) : null;
     const btn = (label, help, fn, cls) => h("button", { class: "gw-btnx small" + (cls ? " " + cls : ""), type: "button", "data-help": help, disabled: editable ? null : true, onclick: fn }, label);
-    const stockBtn = btn("Stock", "Back to the stock value " + valText(r, r.default_value) + ".", () => setDraft(r, Number(r.default_value)));
+    const stockBtn = btn("Stock", "Back to the normal value: " + valText(r, r.default_value) + ".", () => setDraft(r, Number(r.default_value)));
     const maxBtn = btn("Max", "The highest value this server allows: " + valText(r, r.max_value) + ".", () => setDraft(r, Number(r.max_value)));
     const why = h("button", { class: "gw-rt-why", type: "button", "data-help": "Why can't it go higher than " + valText(r, r.max_value) + "?",
       onclick: async () => {
         try { await S.ctx.api("bounds", { key: r.rate_key }); }
         catch (e) { GW.alert((e.status === 403 ? "" : "") + e.message + "\n\nThis setting: " + valText(r, r.min_value) + " – " + valText(r, r.max_value) + ((info.caps || []).length ? "\n\nLimits in the game:\n• " + info.caps.join("\n• ") : ""), "Why " + valText(r, r.max_value) + " is the limit"); }
       } }, "why this limit?");
-    const capsEl = (info.caps || []).length ? h("details", { class: "gw-rt-caps" }, h("summary", { "data-help": "Hard limits in the server and the client that cap this setting." }, "Limits (" + info.caps.length + ")"),
+    const capsEl = (info.caps || []).length ? h("details", { class: "gw-rt-caps" }, h("summary", { "data-help": "Hard limits of the game that stop this setting from doing more." }, "Limits (" + info.caps.length + ")"),
       h("ul", null, info.caps.map(c => h("li", null, c)))) : null;
     const cell = GW.cell({ sprite: info.sprite, name: r.label, help: helpText });
 
@@ -257,7 +263,7 @@
           : h("div", { class: "gw-rt-ctl" },
             h("div", { class: "gw-rt-track" }, slider, marks, ticks),
             h("span", { class: "gw-rt-numwrap" }, isMult(r) ? h("span", { class: "gw-rt-x" }, "x") : null, h("span", { class: "gw-nf-box" }, h("span", { class: "gw-sprite gw-edit-left" }), box, h("span", { class: "gw-sprite gw-edit-right" })),
-              !isMult(r) && r.unit ? h("span", { class: "gw-rt-unit" }, r.unit) : null),
+              !isMult(r) && r.unit ? h("span", { class: "gw-rt-unit" }, isBp(r) ? "hundredths of a percent" : r.unit) : null),
             stockBtn, maxBtn),
         err, warn, meta, pv, h("div", { class: "gw-rt-foot" }, capsEl, why)));
 
@@ -275,10 +281,10 @@
       stockBtn.disabled = !editable || Number(v) === Number(r.default_value);
       if (maxBtn) maxBtn.disabled = !editable || Number(v) === Number(r.max_value);
       GW.clear(meta).append(...[
-        h("span", { "data-help": "The stock reborn value." }, "stock " + valText(r, r.default_value)),
-        h("span", { "data-help": "The range comes from the game server binary (this server). The round-2 update raises it." }, "range " + valText(r, r.min_value) + " – " + valText(r, r.max_value)),
-        srv !== undefined ? h("span", { class: Number(srv) === Number(r.value) ? "gw-good" : "tt-bad", "data-help": "GET /rates on the game server's management port: the value the running server uses." },
-          "server uses " + valText(r, srv) + (Number(srv) === Number(r.value) ? " ✓" : " (database: " + valText(r, r.value) + ")"))
+        h("span", { "data-help": "The normal value: what the game does when nobody changed this setting." }, "stock " + valText(r, r.default_value)),
+        h("span", { "data-help": "The lowest and highest value this game server accepts. They are built into the server." }, "range " + valText(r, r.min_value) + " – " + valText(r, r.max_value)),
+        srv !== undefined ? h("span", { class: Number(srv) === Number(r.value) ? "gw-good" : "tt-bad", "data-help": "The value the running game server is using right now." },
+          "server uses " + valText(r, srv) + (Number(srv) === Number(r.value) ? " ✓" : " (saved: " + valText(r, r.value) + ")"))
           : h("span", { class: "gw-dim", "data-help": (S.st.server || {}).note || "" }, "server value unknown"),
         changed ? h("span", { class: "gw-rt-was" }, "saved " + valText(r, r.value)) : null].filter(Boolean));
       const cw = capWarning(r, v);
@@ -291,7 +297,7 @@
         pv.append(h("tr", null,
           h("td", null, ex && ex.sprite !== undefined && ex.sprite !== null ? h("span", { class: "gw-rt-pvicon", "data-tip-type": "item", "data-tip-id": String(ex.item) }, GW.icon(ex.sprite)) : null, what),
           h("td", { class: "gw-dim" }, typeof stock === "number" ? fmtN(stock) : stock, unit && typeof stock === "number" ? " " + unit : ""),
-          h("td", { class: "gw-value" + (capped ? " capped" : ""), "data-help": capped ? "Capped: a hard limit stops this value here." : null },
+          h("td", { class: "gw-value" + (capped ? " capped" : ""), "data-help": capped ? "A hard limit of the game stops this value here." : null },
             typeof now === "number" ? fmtN(now) : now, unit && typeof now === "number" ? " " + unit : "", capped ? " (cap)" : "")));
       }
     }
@@ -329,26 +335,35 @@
     const editable = S.st.writable;
     const panel = only
       ? h("section", { class: "gw-frame-normalwindow gw-win gw-rt-cat", id: "gw-rt-dungeons" }, h("div", { class: "gw-wtitle" }, "Dungeon entries per day: Medusa Island, Atlantis, Wonderland, Harbor Attack"),
-        h("p", { class: "gw-dim" }, "Read at every entry, so a change works at once. Wonderland also closes at a set hour (Event times > Wonderland closes at; 24 = open all day)."))
+        h("p", { class: "gw-dim" }, "A change works at once. Wonderland also closes at a set hour: see 'Wonderland closes at' under Event times (24 = open all day)."))
       : h("section", { class: "gw-frame-normalwindow gw-win gw-rt-cat", id: "gw-rt-stock" }, h("div", { class: "gw-wtitle" }, "Stock reborn settings"),
-        h("p", { class: "gw-dim" }, "The stock server's own settings. The global EXP multiplier and the level gap are read at start-up (they apply after a gw251 restart); the daily entries are read at every entry."));
+        h("p", { class: "gw-dim" }, "Older settings of the game server. The global EXP multiplier and the level gap apply after a server restart; the daily entries apply at once."));
     const grid = h("div", { class: "gw-rt-stockgrid" });
     for (const s of (S.st.stock || []).filter(x => !only || DUNGEON_IDS.test(x.id))) {
       if (!s.available) { grid.append(h("div", { class: "gw-dim" }, s.label + ": not in this database")); continue; }
       const cur = s.id in S.stockDraft ? S.stockDraft[s.id] : s.value;
       const extra = h("span", { class: "gw-rt-stockx gw-dim" });
       const nullable = !!s.nullable;
-      const nf = GW.numberField({ field: s.field, label: s.label, value: cur, min: s.min, max: s.max, step: s.step || 1, disabled: !editable,
-        onChange: (v, ok) => { if (!ok) return; if (v === null && !nullable) return; setStockDraft(s, v); paint(v); } });
+      // a setting stored in internal units (the global EXP multiplier: 10000 = x1) is shown and typed as a
+      // multiplier (x1.00 .. x5.00) and converted back on change; S.stockDraft and the save keep stored units
+      const sc = s.scale || 0, sh = s.shown || {};
+      const toShown = v => v === null || v === undefined ? v : sc ? Number(v) / sc : v;
+      const toStored = v => v === null || v === undefined ? v : sc ? Math.round(Number(v) * sc) : v;
+      const nf = GW.numberField(sc
+        ? { label: s.label, value: toShown(cur), min: sh.min, max: sh.max, step: sh.step, decimals: sh.decimals || 2, disabled: !editable,
+          onChange: (v, ok) => { if (!ok || v === null) return; setStockDraft(s, toStored(v)); paint(toStored(v)); } }
+        : { field: s.field, label: s.label, value: cur, min: s.min, max: s.max, step: s.step || 1, disabled: !editable,
+          onChange: (v, ok) => { if (!ok) return; if (v === null && !nullable) return; setStockDraft(s, v); paint(v); } });
+      if (sc && sh.prefix) { const box = nf.querySelector && nf.querySelector(".gw-nf-box"); if (box) box.before(h("span", { class: "gw-rt-x" }, sh.prefix)); }
       function paint(v) {
-        if (s.id === "global_exp") extra.textContent = v ? "= x" + fmtN(v / 10000) + " on every monster kill (Fighter, Talent and pet EXP), on top of the rates above" : "";
+        if (s.id === "global_exp") extra.textContent = v ? "= " + stockText(s, v) + " EXP on every monster kill (character, Talent and pet), on top of the 'Monster kill EXP' sliders" : "";
         else if (nullable) extra.textContent = v === null || v === undefined ? "empty = unlimited paid retries" : Number(v) === 0 ? "no paid retries" : v + " paid retries (1 Opal each) after the free entries";
-        else if (s.id === "level_gap") extra.textContent = "monsters more than " + v + " levels below the player pay no EXP";
+        else if (s.id === "level_gap") extra.textContent = "monsters more than " + v + " levels below the player give no EXP";
         else extra.textContent = v + " a day per character";
       }
       paint(cur);
-      grid.append(h("div", { class: "gw-rt-stockrow", "data-help": s.help || null }, nf, nullable ? h("button", { class: "gw-btnx small", type: "button", disabled: editable ? null : true,
-        "data-help": "Empty the box: no limit on paid retries (the database's NULL).", onclick: () => { nf.value = null; setStockDraft(s, null); paint(null); } }, "Unlimited") : null, extra));
+      grid.append(h("div", { class: "gw-rt-stockrow", "data-help": s.help || null }, nf, sc ? GW.appliesChip(s.applies === "restart" ? "after_restart" : "per_use") : null, nullable ? h("button", { class: "gw-btnx small", type: "button", disabled: editable ? null : true,
+        "data-help": "Empties the box: no limit on paid retries.", onclick: () => { nf.value = null; setStockDraft(s, null); paint(null); } }, "Unlimited") : null, extra));
     }
     panel.append(grid);
     return panel;
@@ -361,7 +376,7 @@
       const res = p.resolved || {};
       const diff = Object.keys(res).filter(k => { const r = rowOf(k); return r && Number(res[k].value) !== curVal(r); });
       bar.append(h("button", { class: "gw-rt-preset", type: "button", disabled: writable() ? null : true,
-        "data-help": "|cFFFFFF00" + p.label + "|cFFFFFFFF\n" + p.help + "\n\nKeys the preset does not name go back to stock. Nothing is saved until you press Review & save.",
+        "data-help": GW.helpText({ title: p.label, text: p.help, note: "Settings the preset does not mention go back to normal. Nothing is saved until you press Review & save." }),
         onclick: () => openPreset(p) }, GW.icon(p.sprite), h("span", { class: "nm" }, p.label), h("span", { class: "sub" }, diff.length ? diff.length + " changes" : "matches the page")));
     }
     return bar;
@@ -371,11 +386,11 @@
     const rows = (S.st.rows || []).filter(r => res[r.rate_key] && Number(res[r.rate_key].value) !== curVal(r));
     const clamped = (S.st.rows || []).filter(r => res[r.rate_key] && res[r.rate_key].clamped);
     const table = h("table", { class: "gw-sb-review gw-rt-ptable" }, h("tr", null, h("th", null, "Setting"), h("th", null, "On the page"), h("th", null, p.label), h("th", null, "")),
-      rows.map(r => h("tr", null, h("td", { "data-help": r.description }, r.label), h("td", null, valText(r, curVal(r))), h("td", { class: "gw-value" }, valText(r, res[r.rate_key].value)),
+      rows.map(r => h("tr", null, h("td", { "data-help": descLines(r.description) }, r.label), h("td", null, valText(r, curVal(r))), h("td", { class: "gw-value" }, valText(r, res[r.rate_key].value)),
         h("td", { class: "tt-bad" }, res[r.rate_key].clamped ? "wanted " + valText(r, res[r.rate_key].wanted) + "; this server allows " + valText(r, r.min_value) + " – " + valText(r, r.max_value) : (res[r.rate_key].note || "")))));
     const ok = await GW.confirm({ title: "Preset: " + p.label, wide: true, ok: rows.length ? "Put these on the page" : "OK", cancel: rows.length ? "Cancel" : false,
       el: h("div", null, h("p", null, p.help), rows.length ? table : h("p", { class: "gw-good" }, "The page already has these values."),
-        clamped.length ? h("p", { class: "gw-dim" }, clamped.length + " value(s) were limited to what this server allows. The round-2 server update raises the multipliers up to x1,000,000.") : null,
+        clamped.length ? h("p", { class: "gw-dim" }, clamped.length + " value(s) were lowered to the highest this game server allows.") : null,
         h("p", { class: "gw-dim" }, "Nothing is saved yet: check the sliders, then press Review & save.")) });
     if (!ok || !rows.length) return;
     for (const r of rows) setDraft(r, Number(res[r.rate_key].value));
@@ -393,7 +408,7 @@
         h("span", { class: "gw-rt-hact" }, c.action || "", c.note && c.note !== "gwadmin-web" ? h("i", { class: "gw-dim" }, " — " + c.note) : null),
         c.applies ? GW.appliesChip(c.applies, c.applies_text) : null,
         c.undone ? h("b", { class: "tt-bad" }, "undone") : null,
-        undoable ? h("button", { class: "gw-btnx small", type: "button", disabled: S.st.writable ? null : true, "data-help": "Put back the values this save changed (refused if they changed since; then you can overwrite).",
+        undoable ? h("button", { class: "gw-btnx small", type: "button", disabled: S.st.writable ? null : true, "data-help": "Puts back the values this save changed.\nIf they were changed again since, you are asked before anything is overwritten.",
           onclick: () => undo(c) }, "Undo") : null));
     }
     if (!(S.st.module_changes || []).length) mine.append(h("div", { class: "gw-dim" }, "No saves from this editor yet."));
@@ -401,10 +416,10 @@
       (S.st.rows || []).map(r => h("option", { value: r.rate_key }, r.label)));
     const log = h("table", { class: "gw-rt-log" });
     const drawLog = rows => {
-      GW.clear(log).append(h("tr", null, h("th", null, "When (UTC)"), h("th", null, "Setting"), h("th", null, "Old"), h("th", null, "New"), h("th", null, "By"), h("th", null, "Note"), h("th", { "data-help": "server_rates_state.revision after the change" }, "Rev.")));
+      GW.clear(log).append(h("tr", null, h("th", null, "When (UTC)"), h("th", null, "Setting"), h("th", null, "Old"), h("th", null, "New"), h("th", null, "By"), h("th", null, "Note"), h("th", { "data-help": "Change number: goes up by one with every save." }, "No.")));
       for (const l of rows) {
         const r = rowOf(l.rate_key) || { label: l.rate_key, kind: "multiplier" };
-        log.append(h("tr", null, h("td", { class: "gw-dim" }, String(l.changed_at || "").replace("T", " ").slice(0, 19)), h("td", { "data-help": l.rate_key }, r.label),
+        log.append(h("tr", null, h("td", { class: "gw-dim" }, String(l.changed_at || "").replace("T", " ").slice(0, 19)), h("td", { "data-help": "Setting name: " + l.rate_key }, r.label),
           h("td", null, l.old_value === null ? "-" : valText(r, l.old_value)), h("td", { class: "gw-value" }, valText(r, l.new_value)),
           h("td", { class: "gw-dim" }, l.changed_by), h("td", { class: "gw-dim" }, l.note), h("td", { class: "gw-dim" }, l.revision)));
       }
@@ -416,11 +431,11 @@
       catch (e) { GW.status(e.message, "err"); }
     });
     panel.append(h("h3", { class: "gw-rt-h3" }, "Saves from this editor"), mine,
-      h("h3", { class: "gw-rt-h3", "data-field": "server_rates_log.new_value" }, "Database history (server_rates_log: every change, also by SQL) ", keySel), h("div", { class: "gw-rt-logwrap" }, log));
+      h("h3", { class: "gw-rt-h3", "data-help": "Every change to a rate, whoever made it and however: this page, another admin or a direct database edit." }, "Full history ", keySel), h("div", { class: "gw-rt-logwrap" }, log));
     return panel;
   }
   async function undo(c) {
-    if (!await GW.confirm({ title: "Undo this save?", message: c.action + "\n\nThe values go back to what they were before it. The running server reloads at once." , ok: "Undo" })) return;
+    if (!await GW.confirm({ title: "Undo this save?", message: c.action + "\n\nThe values go back to what they were before it. The game server picks that up at once." , ok: "Undo" })) return;
     let r;
     try {
       try { r = await S.ctx.api("undo", { change: c.id }); }
@@ -444,28 +459,28 @@
     const same = srv.reachable && srv.revision === st.revision;
     const head = h("section", { class: "gw-frame-normalwindow gw-win gw-rt-headwin" }, h("div", { class: "gw-wtitle" }, "Server rates"));
     head.append(h("div", { class: "gw-rt-status" },
-      h("span", { class: "gw-badge", "data-help": "PostgreSQL database this page edits. 'godswar' is the live game; any other name is a copy." }, "DB " + st.database + " · revision " + (st.revision ?? "-")),
-      srv.reachable ? h("span", { class: "gw-badge " + (same ? "ok" : "warn"), "data-help": "GET /rates on the game server's management port: the revision it runs. It re-reads the table every " + (srv.pollSeconds || 5) + " s and at once after a save." },
-        "game server runs revision " + srv.revision + (same ? " ✓" : " (catching up)")) : h("span", { class: "gw-badge warn", "data-help": srv.note || "" }, "game server not reachable: it still picks changes up within 5 s"),
-      h("span", { class: "gw-badge " + (b.round2 ? "ok" : "dim"), "data-help": b.note || "" }, b.round2 ? "round-2 server · " + b.keys + " settings" : "stock RATES server · " + b.keys + " settings"),
+      h("span", { class: "gw-badge", "data-help": "The database this page edits.\n• 'godswar' is the live game; any other name is a copy.\n• The change number goes up by one with every save." }, "DB " + st.database + " · change " + (st.revision ?? "-")),
+      srv.reachable ? h("span", { class: "gw-badge " + (same ? "ok" : "warn"), "data-help": "The latest save the running game server has picked up.\n• It checks every " + (srv.pollSeconds || 5) + " seconds, and at once after a save from this page." },
+        "game server has change " + srv.revision + (same ? " ✓" : " (catching up)")) : h("span", { class: "gw-badge warn", "data-help": "This page cannot ask the game server directly, so it cannot show the values in use. Saves still reach it." }, "game server not reachable: it still picks changes up within 5 s"),
+      h("span", { class: "gw-badge " + (b.round2 ? "ok" : "dim"), "data-help": b.note || "" }, b.round2 ? b.keys + " settings" : "older server version · " + b.keys + " settings"),
       st.writable ? h("span", { class: "gw-badge " + (st.live ? "bad" : "ok") }, st.live ? "LIVE · saving changes the real game" : "copy · writable") : h("span", { class: "gw-badge dim" }, "read-only")));
     head.append(h("div", { class: "gw-online off gw-rt-online", role: "status" },
       h("span", { class: "gw-dot " + (w.count ? "on" : "off") }),
       h("b", null, "Changes apply while the game runs. "),
-      "Rates are server-wide: they never touch a character's saved rows, so nobody has to log out. ",
-      w.count ? h("span", { "data-help": "Marked in the world (character_base.checkpoint_owner_id set; a crash can leave it set): " + (w.names || []).join(", ") }, w.count + " character" + (w.count === 1 ? " is" : "s are") + " in the world now; they get a saved rate at their next kill, hand-in or tick. ")
+      "Rates are game-wide and never change a saved character, so nobody has to log out. ",
+      w.count ? h("span", { "data-help": GW.helpText({ text: "Characters marked as in the game right now.", list: w.names || [], note: "After a server crash a character can stay marked until its next login." }) }, w.count + " character" + (w.count === 1 ? " is" : "s are") + " in the world now; they get a saved rate at their next kill, hand-in or tick. ")
         : "Nobody is in the world right now. ",
-      h("span", { class: "gw-dim", "data-help": b.live_edits ? "The game server offers live edits of logged-in characters: " + (b.live_operations || []).join(", ") + ". Rates do not need them." : "The game server does not offer live character edits (" + (b.capabilities_error || "stock server") + "). Rates do not need them: the server reloads the rates table by itself." },
-        b.live_edits ? "Live character edits: on (round-2)." : "Live character edits: not on this server (not needed here).")));
+      h("span", { class: "gw-dim", "data-help": b.live_edits ? "The game server can change characters while they are logged in. Rates do not need this." : "This game server cannot change characters while they are logged in. Rates do not need this: the server picks up rate changes by itself." },
+        b.live_edits ? "Live character edits: on." : "Live character edits: not on this server (not needed here).")));
     if (!b.round2 && st.table) head.append(h("div", { class: "gw-rt-note" }, b.note));
     for (const c of st.checks || []) head.append(h("div", { class: c.severity === "error" ? "tt-bad" : "gw-rt-note" }, c.msg));
-    if (!st.writable) head.append(h("div", { class: "gw-rt-note" }, "Read-only: this editor was started without write access to " + st.database + ". You can look and plan, not save."));
+    if (!st.writable) head.append(h("div", { class: "gw-rt-note" }, "Read-only: this editor was started without permission to change " + st.database + ". You can look and plan, not save."));
     const note = h("input", { class: "gw-rt-input gw-rt-note-in", type: "text", maxlength: 200, placeholder: "note for the history (optional)", value: S.note, "aria-label": "Note for the history",
       oninput: e => { S.note = e.target.value; } });
     head.append(h("div", { class: "gw-rt-tools" },
-      h("button", { class: "gw-btnx", type: "button", "data-help": "Ask the running server to re-read the rates table now (POST /rates/reload). It also does that by itself every 5 s.", onclick: reloadServer }, "Reload server now"),
-      h("button", { class: "gw-btnx", type: "button", "data-help": "Read the table and the server's values again (keeps your unsaved edits).", onclick: () => load(true) }, "Refresh"),
-      h("button", { class: "gw-btnx", type: "button", "data-help": "Open the change log of every page.", onclick: () => GW.changes.open() }, "Change log"),
+      h("button", { class: "gw-btnx", type: "button", "data-help": "Asks the game server to pick up the saved rates now.\nIt also does that by itself every 5 seconds.", onclick: reloadServer }, "Reload server now"),
+      h("button", { class: "gw-btnx", type: "button", "data-help": "Reads the saved values and the game server's values again.\nYour unsaved edits are kept.", onclick: () => load(true) }, "Refresh"),
+      h("button", { class: "gw-btnx", type: "button", "data-help": "Opens the list of changes saved from every page of the editor.", onclick: () => GW.changes.open() }, "Change log"),
       note));
     head.append(presetBar());
     return head;
@@ -476,7 +491,7 @@
     const st = S.st;
     GW.clear(tabsEl);
     const mk = (id, label, sprite, n, nd) => h("button", { class: "gw-rt-tab" + (S.cat === id ? " on" : ""), type: "button", "aria-pressed": S.cat === id ? "true" : "false",
-      "data-help": label + ": " + n + " settings" + (nd ? ", " + nd + " not stock" : ", all stock"), onclick: () => { S.cat = id; drawTabs(); drawList(); } },
+      "data-help": label + ": " + n + " settings" + (nd ? ", " + nd + " changed from normal" : ", all at their normal value"), onclick: () => { S.cat = id; drawTabs(); drawList(); } },
       sprite !== undefined && sprite !== null ? GW.icon(sprite) : null, h("span", null, label), nd ? h("span", { class: "gw-rt-badge" }, nd) : null);
     const all = st.rows || [];
     const pend = k => k in S.draft;
@@ -492,7 +507,7 @@
   function drawList() {
     GW.clear(listEl);
     const st = S.st, q = S.q.toLowerCase();
-    if (!st.table) listEl.append(h("div", { class: "gw-rt-note" }, "public.server_rates does not exist in this database: the server is stock reborn without the RATES patch. The stock settings below still work."));
+    if (!st.table) listEl.append(h("div", { class: "gw-rt-note" }, "This database has no server rates: its game server is an older version. The stock settings below still work."));
     if (S.cat === "all" || S.cat !== "stock") {
       for (const c of st.categories || []) {
         if (S.cat !== "all" && S.cat !== c) continue;
@@ -513,8 +528,8 @@
     listEl = h("div", { class: "gw-rt-list" });
     searchEl = h("input", { class: "gw-rt-input gw-rt-search", type: "search", placeholder: "Search settings (EXP, honour, drop, Holy Box ...)", value: S.q, "aria-label": "Search settings",
       oninput: e => { S.q = e.target.value; drawList(); } });
-    const only = h("label", { class: "gw-rt-only", "data-help": "Show only settings that are not at their stock value (or have an unsaved edit)." },
-      h("input", { type: "checkbox", checked: S.onlyChanged ? true : null, onchange: e => { S.onlyChanged = e.target.checked; drawList(); } }), " only not-stock");
+    const only = h("label", { class: "gw-rt-only", "data-help": "Shows only settings that differ from their normal value or have an unsaved edit." },
+      h("input", { type: "checkbox", checked: S.onlyChanged ? true : null, onchange: e => { S.onlyChanged = e.target.checked; drawList(); } }), " only changed");
     el.append(header(), h("div", { class: "gw-rt-filter" }, searchEl, only), tabsEl, listEl, historyPanel(), S.bar.el);
     // re-apply drafts to the bar (render after a reload keeps unsaved edits)
     for (const k of Object.keys(S.draft)) { const r = rowOf(k); if (!r || Number(S.draft[k]) === Number(r.value)) { delete S.draft[k]; S.bar.unset("r:" + k); } }
@@ -532,7 +547,7 @@
     try {
       const r = await S.ctx.api("reload", {});
       const rl = r.reload || {};
-      GW.status(rl.reachable ? "the server re-read the table: revision " + rl.revision : "reload failed: " + (rl.note || "not reachable"), rl.reachable ? "ok" : "err");
+      GW.status(rl.reachable ? "the game server picked up the saved rates (change " + rl.revision + ")" : "the game server could not be asked: " + (rl.note || "not reachable"), rl.reachable ? "ok" : "err");
       S.st = r.state; render();
     } catch (e) { GW.status(e.message, "err"); }
   }
@@ -551,7 +566,7 @@
     S.st = r.state;
     render();
     const ok = Object.values(r.server_applied || {});
-    const msg = r.mode === "hot" ? "saved; the running server reloaded revision " + r.server_revision + (ok.length ? (ok.every(Boolean) ? " and uses the new values ✓" : " but does NOT use every new value yet") : "")
+    const msg = r.mode === "hot" ? "saved; the game server picked it up (change " + r.server_revision + ")" + (ok.length ? (ok.every(Boolean) ? " and uses the new values ✓" : " but does NOT use every new value yet") : "")
       : "saved; " + (r.output || "the server picks it up within 5 s");
     setTimeout(() => GW.status(msg, ok.every(Boolean) ? "ok" : "err"), 30);
     return r;

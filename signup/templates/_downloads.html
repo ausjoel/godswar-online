@@ -1,0 +1,50 @@
+{# One place for every download link. Files live under /downloads/files/ (Caddy, /var/www/gwdownloads). #}
+{% set mac_launcher = "/downloads/files/GodsWar-Launcher-mac.zip" %}
+{% set win_launcher = "/downloads/files/GodsWar-Launcher-windows.exe" %}
+{% set native_zip = "/downloads/files/GodsWar-Native-mac-0.6.1.zip" %}
+{% set native_src = "https://github.com/YOUR-GITHUB-USER/godswar-online/tree/main/native" %}
+
+{% macro hero_buttons() %}
+<div class="dl-row">
+  <a class="btn btn-gold" href="{{ mac_launcher }}" rel="noopener"><span>Download for Mac<small>Launcher · 6 MB zip</small></span></a>
+  <a class="btn btn-gold" href="{{ win_launcher }}" rel="noopener"><span>Download for Windows<small>Launcher · 6 MB</small></span></a>
+</div>
+<p class="dl-note">The launcher fetches the game (about 900 MB on Mac, 580 MB on Windows) and keeps it up to date. First time? <a href="/static/player-guide.html">Install help</a>.</p>
+<p class="dl-note">New, test version for Apple Silicon Macs: <a href="{{ native_zip }}" rel="noopener">GodsWar Native</a> runs the game without Wine.</p>
+{% endmacro %}
+
+{% macro small_buttons() %}
+<div class="done-dl">
+  <a class="go link" href="{{ mac_launcher }}" rel="noopener">Download for Mac</a>
+  <a class="go link" href="{{ win_launcher }}" rel="noopener">Download for Windows</a>
+</div>
+{% endmacro %}
+
+{% macro native_line() %}
+<strong>New, test version for Apple Silicon Macs:</strong> <a href="{{ native_zip }}" rel="noopener">GodsWar Native</a> runs the game without Wine (590 MB, game included, updates itself). The first time, macOS blocks it: <a href="/static/player-guide.html">the how-to-play guide</a> shows how to allow it. <a href="{{ native_src }}" rel="noopener">Source code</a> (GPL-2).
+{% endmacro %}
+
+{% macro cards() %}
+<div class="dl-cards">
+  <div class="dl-card">
+    <h3>Mac launcher</h3>
+    <p class="meta">macOS · GodsWar-Launcher-mac.zip · 6 MB</p>
+    <p>Unzip it and open <b>GodsWar Launcher</b>. The first start downloads the game (about 900 MB) and opens it when it is ready. Runs the Windows game through a built-in Wine, on Intel and Apple Silicon Macs. On the first start it asks Wine or Native (Beta); hold Option while opening it to change that.</p>
+    <p class="small">Apple Silicon Macs need Rosetta once. macOS asks you to allow the app the first time: see <a href="/static/player-guide.html">install help</a>.</p>
+    <a class="btn btn-plain" href="{{ mac_launcher }}" rel="noopener">Download for Mac</a>
+  </div>
+  <div class="dl-card">
+    <h3>Windows launcher</h3>
+    <p class="meta">Windows · GodsWar-Launcher-windows.exe · 6 MB</p>
+    <p>Run it from anywhere. The first start downloads the game (about 580 MB) into your user folder and opens it. After that it only checks for updates.</p>
+    <p class="small">If Windows says it protected your PC, choose <b>More info</b>, then <b>Run anyway</b>.</p>
+    <a class="btn btn-plain" href="{{ win_launcher }}" rel="noopener">Download for Windows</a>
+  </div>
+  <div class="dl-card test">
+    <h3>GodsWar Native <span class="tag">Test</span></h3>
+    <p class="meta">Apple Silicon Macs · GodsWar-Native-mac-0.6.1.zip · 594 MB</p>
+    <p>{{ native_line() }}</p>
+    <a class="btn btn-plain" href="{{ native_zip }}" rel="noopener">Download GodsWar Native 0.6.1</a>
+  </div>
+</div>
+{% endmacro %}

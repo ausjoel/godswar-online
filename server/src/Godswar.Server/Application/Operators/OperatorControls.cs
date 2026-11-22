@@ -199,12 +199,39 @@ internal static class OperatorControls
 
     public static bool UsesCharacterGmFlags { get; set; }
 
+    /// <summary>W5B: GODSWAR_DEVELOPER_COMMANDS_ENABLED as this process started (advertised in /admin/capabilities).</summary>
+    public static bool CommandsEnabled { get; set; }
+
     public static void ClearPowers(int characterId) => PowersByCharacter.TryRemove(characterId, out _);
 
     public static OperatorPowers PowersOf(int characterId) =>
         PowersByCharacter.TryGetValue(characterId, out var powers)
-            ? powers
+            ? MaskByPolicy(powers)
             : OperatorPowers.None;
+
+    /// <summary>W5B: a power whose command is switched off (or the master switch) stops working at once, not at logout.</summary>
+    internal static OperatorPowers MaskByPolicy(OperatorPowers powers)
+    {
+        if (powers.IsNone || GmPowerPolicy.Current.Denied.Count == 0)
+        {
+            return powers;
+        }
+
+        if (!GmPowerPolicy.Allows(GmPowerPolicy.Master))
+        {
+            return OperatorPowers.None;
+        }
+
+        return powers with
+        {
+            Invulnerable = powers.Invulnerable && GmPowerPolicy.Allows("cmd.god"),
+            SpeedFactor = GmPowerPolicy.Allows("cmd.speed") ? powers.SpeedFactor : 1f,
+            AttackMultiplier = GmPowerPolicy.Allows("cmd.power") ? powers.AttackMultiplier : 1,
+            DefenseBonus = GmPowerPolicy.Allows("cmd.armor") ? powers.DefenseBonus : 0,
+            BuffLock = powers.BuffLock && GmPowerPolicy.Allows("cmd.bufflock"),
+            PetCareLock = powers.PetCareLock && GmPowerPolicy.Allows("cmd.petlock")
+        };
+    }
 
     public static OperatorPowers UpdatePowers(
         int characterId,
@@ -267,6 +294,9 @@ internal static class OperatorControls
     public const short AccountStatusNormal = 0;
 
     public const short AccountStatusBanned = 1;
+
+    /// <summary>W4A: deleted in the editor, kept 30 days for Restore (public.account_deletions), then purged.</summary>
+    public const short AccountStatusDeleted = 2;
 
     /// <summary>
     /// True when the account may not log in. A missing store or a failed read

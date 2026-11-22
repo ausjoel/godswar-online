@@ -59,8 +59,40 @@ internal static class ChatChannelChecks
         CheckAudience(
             0x60401,
             ChatAudience.Private,
-            "0x60401 is a private message to 12v312: the extra bit the two " +
-            "captured private frames differ by does not change the audience");
+            "0x60401 is a private message to 12v312: the target name length " +
+            "byte does not change the audience");
+        // Measured 2026-11-12 with the real client: Odinii (6) whispering Bob (3)
+        // wrote 0x30601, which the old flag test (bits 0x40000 and 0x400) took for
+        // a nearby line and showed to the whole map.
+        CheckAudience(
+            0x30601,
+            ChatAudience.Private,
+            "0x30601 (a 6-letter name whispering a 3-letter one) is private");
+        CheckAudience(
+            0x0C0301,
+            ChatAudience.Private,
+            "0x0C0301 (a 3-letter name whispering a 12-letter one) is private");
+        CheckAudience(
+            0x100801,
+            ChatAudience.Private,
+            "0x100801 (an 8-letter name whispering a 16-letter one) is private");
+        CheckAudience(
+            0x0810,
+            ChatAudience.Nearby,
+            "0x810 is the nearby channel from an 8-letter name");
+        CheckAudience(
+            0x0582,
+            ChatAudience.World,
+            "0x582 is the world channel from a 5-letter name");
+        CheckAudience(
+            0x0302,
+            ChatAudience.Party,
+            "0x302 is the party channel from a 3-letter name");
+        CheckAudience(
+            0x50483,
+            ChatAudience.Nearby,
+            "0x83, the server's own 'Sent to' type, is not a channel a client " +
+            "can address: it never becomes a private or world message");
         CheckAudience(
             0x12345678,
             ChatAudience.Nearby,
@@ -121,50 +153,155 @@ internal static class ChatChannelChecks
                 out _) == false,
             "a name pair that does not end with the speaker's name is refused");
 
-        // The client's private line is "[text 0..4] + 对 + [text 4..8] + 说: + [text
-        // 9..]". Two live measurements from 2026-10-01 pin it: a body of
-        // "test:nihao" drew nothing after the colon, and a body of
-        // "test12e1说:hello" drew "test对12e1说:说:hello" - so the client writes its
-        // own 说: and the colon at character eight is the one it replaces. The body
-        // is therefore "<lead><visible>:<message>".
-        var recipientCopy = ChatChannelProtocol.BuildPrivateBody(
-            "test",
-            "12e1",
-            "hello");
-        var senderCopy = ChatChannelProtocol.BuildPrivateBody(
-            "12e1",
-            "test",
-            "hello");
+        // The client cuts the text by the two name length bytes of the channel
+        // word (GodsWar.exe 0x5351bf): target = text[0..aim], speaker =
+        // text[aim..aim+res], message = the rest. Each case below is a frame the
+        // real client 1.5.0 wrote or drew on the private rig on 2026-11-12.
+        CheckSplit(0x50601, "FreyaOdinii:oi", "Odinii", "Freya", "oi",
+            "Odinii whispering Freya (the frame the real client wrote)");
+        CheckSplit(0x60501, "OdiniiFreya:well well", "Freya", "Odinii",
+            "well well", "Freya whispering Odinii");
+        CheckSplit(0x30601, "BobOdinii:secret", "Odinii", "Bob", "secret",
+            "a 3-letter recipient");
+        CheckSplit(0x0C0301, "Twelve12NameAbc:hi", "Abc", "Twelve12Name", "hi",
+            "a 3-letter speaker and a 12-letter recipient with digits");
+        // One name inside the other: only the lengths can place the cut.
+        CheckSplit(0x70401, "OdinJoeOdin:hi", "Odin", "OdinJoe", "hi",
+            "a recipient whose name starts with the speaker's name");
+        CheckSplit(0x80401, "AnnaOdinOdin:hi", "Odin", "AnnaOdin", "hi",
+            "a recipient whose name ends with the speaker's name");
+        CheckSplit(0x40801, "OdinAnnaOdin:hi", "AnnaOdin", "Odin", "hi",
+            "a speaker whose name ends with the recipient's name");
+        CheckSplit(0x30401, "A:bOdin:hi", "Odin", "A:b", "hi",
+            "a colon inside the recipient's name does not move the cut");
+        CheckSplit(0x50401, "FreyaOdin:a:b: c", "Odin", "Freya", "a:b: c",
+            "colons in the message stay in the message");
+        CheckSplit(0x50401, "Freyaodin:hi", "Odin", "Freya", "hi",
+            "the speaker segment is compared without case");
+        // Length bytes that do not describe the text fall back to the first-colon
+        // rule, and that rule still refuses what it refused before.
+        CheckSplit(0x40401, "12v312test:haha", "test", "12v312", "haha",
+            "a wrong target length byte falls back to the first colon");
         Check.True(
-            recipientCopy == "test12e1:hello" &&
-            senderCopy == "12e1test:hello" &&
-            recipientCopy.Substring(4, 4) == "12e1" &&
-            recipientCopy[9..] == "hello" &&
-            senderCopy.Substring(4, 4) == "test" &&
-            senderCopy[9..] == "hello" &&
-            recipientCopy[8] == ':' &&
-            !recipientCopy.Contains('说') &&
-            !senderCopy.Contains('说'),
-            "each side's copy puts the other party's name in the slot the " +
-            "client renders and never writes 说, which the client adds itself");
+            !ChatChannelProtocol.TryReadPrivateRecipient(
+                0x40B01,
+                "12e1someoneelse:nihao",
+                "test",
+                out _,
+                out _) &&
+            !ChatChannelProtocol.TryReadPrivateRecipient(
+                0x00401,
+                "test:hello",
+                "test",
+                out _,
+                out _),
+            "a frame whose speaker segment is not the session's character, or " +
+            "that names no recipient, is refused");
 
-        // A name shorter than the four-character slot is padded and a longer one
-        // truncated, so the offsets hold for every name the operator can have.
-        var shortName = ChatChannelProtocol.BuildPrivateBody(
-            "ab",
-            "cd",
-            "hello");
-        var longName = ChatChannelProtocol.BuildPrivateBody(
-            "12v312",
-            "tester",
-            "hello");
+        // Both sides get the same text; only the type byte differs. The lines in
+        // the comments are what the real client drew (screens in
+        // Development/w5/g-whisper/screens).
+        CheckRelay("Freya", "Odin", "oi", "FreyaOdin: oi", 0x50401, 0x50483,
+            "Odin Say to you: oi", " Sent to-> Freya: oi");
+        CheckRelay("Odin", "Freya", "well well", "OdinFreya: well well",
+            0x40501, 0x40583,
+            "Freya Say to you: well well", " Sent to-> Odin: well well");
+        CheckRelay("Twelve12Name", "Abc", "hi", "Twelve12NameAbc: hi",
+            0x0C0301, 0x0C0383,
+            "Abc Say to you: hi", " Sent to-> Twelve12Name: hi");
+        CheckRelay("Abc", "Twelve12Name", "hi", "AbcTwelve12Name: hi",
+            0x030C01, 0x030C83,
+            "Twelve12Name Say to you: hi", " Sent to-> Abc: hi");
+        CheckRelay("SixteenLetters16", "Fourteen14Name", "a:b",
+            "SixteenLetters16Fourteen14Name: a:b", 0x100E01, 0x100E83,
+            "Fourteen14Name Say to you: a:b",
+            " Sent to-> SixteenLetters16: a:b");
+        CheckRelay("X9", "Q", " spaced", "X9Q: spaced", 0x020101, 0x020183,
+            "Q Say to you: spaced", " Sent to-> X9: spaced");
+
         Check.True(
-            shortName.Substring(4, 4) == "cd  " &&
-            shortName[9..] == "hello" &&
-            longName.Substring(4, 4) == "test" &&
-            longName[9..] == "hello",
-            "the name slots are exact: a short name is padded and a long one " +
-            "truncated, so the message always starts at character nine");
+            ChatChannelProtocol.BuildPrivateWord(
+                ChatChannelProtocol.PrivateType,
+                "Freya",
+                "Odin",
+                0x0705_0401) == 0x0705_0401 &&
+            ChatChannelProtocol.BuildPrivateWord(
+                ChatChannelProtocol.PrivateSentType,
+                "Freya",
+                "Odin",
+                0x0709_0901) == 0x0705_0483,
+            "the relayed word keeps the speaker's bubble style byte and takes " +
+            "its length bytes from the real names, never from the client");
+    }
+
+    private static void CheckSplit(
+        uint channelWord,
+        string text,
+        string speaker,
+        string expectedRecipient,
+        string expectedMessage,
+        string description) =>
+        Check.True(
+            ChatChannelProtocol.TryReadPrivateRecipient(
+                channelWord,
+                text,
+                speaker,
+                out var recipient,
+                out var message) &&
+            recipient == expectedRecipient &&
+            message == expectedMessage,
+            "private text split: " + description);
+
+    /// <summary>
+    /// Builds both copies of one private message and reads them the way the
+    /// client does: by the two length bytes of the channel word.
+    /// </summary>
+    private static void CheckRelay(
+        string target,
+        string speaker,
+        string message,
+        string expectedBody,
+        uint expectedRecipientWord,
+        uint expectedSenderWord,
+        string expectedRecipientLine,
+        string expectedSenderLine)
+    {
+        var body = ChatChannelProtocol.BuildPrivateBody(target, speaker, message);
+        var recipientWord = ChatChannelProtocol.BuildPrivateWord(
+            ChatChannelProtocol.PrivateType,
+            target,
+            speaker,
+            0);
+        var senderWord = ChatChannelProtocol.BuildPrivateWord(
+            ChatChannelProtocol.PrivateSentType,
+            target,
+            speaker,
+            0);
+        Check.True(
+            body == expectedBody &&
+            recipientWord == expectedRecipientWord &&
+            senderWord == expectedSenderWord &&
+            ClientLine(recipientWord, body) == expectedRecipientLine &&
+            ClientLine(senderWord, body) == expectedSenderLine,
+            $"private relay {speaker} -> {target}: the recipient reads " +
+            $"'{expectedRecipientLine}' and the sender '{expectedSenderLine}'");
+    }
+
+    /// <summary>
+    /// The stock client's rule for a private line (GodsWar.exe 0x5351bf), with the
+    /// en_us Message.dat texts SaytoU = " Say to you" and SentTo = " Sent to-> ".
+    /// </summary>
+    private static string ClientLine(uint channelWord, string text)
+    {
+        var aim = ChatChannelProtocol.ReadTargetNameLength(channelWord);
+        var res = ChatChannelProtocol.ReadSpeakerNameLength(channelWord);
+        var target = text[..aim];
+        var speaker = text.Substring(aim, res);
+        var message = text[(aim + res)..];
+        return ChatChannelProtocol.ReadType(channelWord) ==
+            ChatChannelProtocol.PrivateSentType
+            ? " Sent to-> " + target + message
+            : speaker + " Say to you" + message;
     }
 
     /// <summary>

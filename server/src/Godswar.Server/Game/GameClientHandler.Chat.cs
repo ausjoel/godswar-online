@@ -185,26 +185,19 @@ internal sealed partial class GameClientHandler
 
     /// <summary>
     /// The private channel: the client names the recipient inside the text it sends
-    /// (<c>&lt;recipient&gt;&lt;speaker&gt;:&lt;message&gt;</c>). That name is
-    /// resolved to an online session and the frame is rebuilt the way the stock
-    /// client reads an incoming private message.
+    /// (<c>&lt;recipient&gt;&lt;speaker&gt;:&lt;message&gt;</c>) and writes both
+    /// names' lengths in the channel word. That name is resolved to an online
+    /// session and one frame goes to each side.
     /// </summary>
     /// <remarks>
-    /// The recipient's client renders a private message as
-    /// "&lt;speaker&gt;对你说:&lt;message&gt;", and it takes the message from a fixed
-    /// offset in the text: the first <see cref="PrivateBodyPrefixLength"/> UTF-16
-    /// characters are the line's own header and are not displayed. The captured
-    /// frame carries exactly that - <c>12e1test:nihao</c>, a ten-character header,
-    /// then the message - and the operator confirmed the rendered line is
-    /// <c>test对你说:nihao</c>. Writing only <c>&lt;speaker&gt;:&lt;message&gt;</c>
-    /// therefore lost the message: those twelve characters were all header, and the
-    /// recipient saw "test对你说:" with nothing after it.
-    /// <para>
-    /// The header is therefore built to the same width: the recipient's name, the
-    /// speaker's name, and one pad character for every character the two names fall
-    /// short of ten. A name pair at or past the width needs no padding, which is
-    /// what the second captured frame shows (<c>12v312test:</c> is already twelve).
-    /// </para>
+    /// Both copies carry the same text, built from the run's own character names:
+    /// <c>&lt;recipient&gt;&lt;speaker&gt;: &lt;message&gt;</c>, with the names' real
+    /// lengths in the channel word, because the client cuts the text by those two
+    /// bytes (<see cref="ChatChannelProtocol"/>). The recipient's copy is type
+    /// 0x01 and reads "the admin Say to you: oi"; the speaker's copy is type 0x83 and
+    /// reads " Sent to-&gt; a player: oi". Until 2026-11-12 both copies were type 0x01
+    /// with the names forced into four-character slots, which lost characters for
+    /// every pair that was not 4 + 4 long.
     /// </remarks>
     private async Task DeliverPrivateChatAsync(
         uint channelWord,
@@ -213,11 +206,12 @@ internal sealed partial class GameClientHandler
     {
         var character = _character!;
         if (!ChatChannelProtocol.TryReadPrivateRecipient(
+                channelWord,
                 text,
                 character.Name,
                 out var recipientName,
                 out var message) ||
-            message.Length == 0)
+            string.IsNullOrWhiteSpace(message))
         {
             Console.WriteLine(
                 "[chat] private refused character=" + character.Name +
@@ -257,28 +251,32 @@ internal sealed partial class GameClientHandler
             return;
         }
 
-        // One copy per side, and nothing else. The recipient reads
-        // "12e1对test说:hello" and the sender reads "test对12e1说:hello": each side's
-        // copy names the other party in the slot its client renders (characters
-        // 4..8), which is the shape the captured client frames carry.
+        // One copy per side, and nothing else: the same text, the recipient's as
+        // a received private line (0x01), the speaker's as "Sent to->" (0x83).
+        var body = ChatChannelProtocol.BuildPrivateBody(
+            targetName,
+            character.Name,
+            message);
         await target.SendAsync(
             PacketBuilder.ChatMessage(
                 CurrentPlayerObjectId,
-                channelWord,
-                ChatChannelProtocol.BuildPrivateBody(
+                ChatChannelProtocol.BuildPrivateWord(
+                    ChatChannelProtocol.PrivateType,
                     targetName,
                     character.Name,
-                    message)),
+                    channelWord),
+                body),
             cancellationToken,
             "ChatPrivate");
         await _session.SendAsync(
             PacketBuilder.ChatMessage(
                 CurrentPlayerObjectId,
-                channelWord,
-                ChatChannelProtocol.BuildPrivateBody(
-                    character.Name,
+                ChatChannelProtocol.BuildPrivateWord(
+                    ChatChannelProtocol.PrivateSentType,
                     targetName,
-                    message)),
+                    character.Name,
+                    channelWord),
+                body),
             cancellationToken,
             "ChatPrivateEcho");
         Console.WriteLine(

@@ -51,7 +51,7 @@ internal sealed partial class GameClientHandler
         ClearBattlefieldTransporterDialogueContext();
         // FINALISE2: the Gates table (band, opening mode, GM rule incl. gm.obey_gates, which Parnassus ignored before).
         var operatorBypass = Godswar.Server.Application.Gates.GateRules.GmMaySkip(Godswar.Server.Application.Gates.GateKeys.Parnassus) &&
-            await HasOperatorAuthorityAsync(cancellationToken);
+            await HasOperatorPowerAsync(Godswar.Server.Application.Operators.GmPowerPolicy.GateBypass, cancellationToken);
         var band = Godswar.Server.Application.Gates.GateRules.Band(
             Godswar.Server.Application.Gates.GateKeys.Parnassus, ParnassusProtocol.MinimumLevel, ParnassusProtocol.MaximumLevel);
         int? refusal = null;

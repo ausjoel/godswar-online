@@ -1,0 +1,19 @@
+{% extends "_article.html" %}
+{% import "_news.html" as news %}
+{% block title %}News{% endblock %}
+{% block crumb %}News{% endblock %}
+{% block heading %}News{% endblock %}
+{% block intro %}What changed on the server and in the game client, newest first. The launcher installs client updates by itself.{% endblock %}
+{% block slug %}news{% endblock %}
+{% block article %}
+<div class="news-full">
+  {% for n in news['items'] %}
+  <article>
+    <time>{{ n.date }}</time>
+    <h2>{{ n.title }}</h2>
+    <p>{{ n.text }}</p>
+    {% if n.link %}<p><a href="{{ n.link }}">Read more</a></p>{% endif %}
+  </article>
+  {% endfor %}
+</div>
+{% endblock %}

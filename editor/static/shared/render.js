@@ -86,7 +86,7 @@
     if(e.pet_egg)t.append(line("tt-desc",aptitude ? "Pet aptitude: "+aptitude.name+" (#"+q+")" : "Choose a native pet aptitude before hatching this egg."));
     if (e.slot_label || e.category) t.append(line("tt-two", h("span", null, e.slot_label || ""), h("span", null, e.category && e.category !== e.slot_label ? e.category : "")));
     if (e.desc) t.append(line("tt-desc", GW.text(e.desc)));
-    if (e.generated_translation) t.append(ed("GENERATED English translation; original text retained in catalogue data."));
+    if (e.generated_translation) t.append(ed("Our own English translation; the original text is kept in the catalogue."));
     if (e.dead_status) t.append(ed("Dead items: " + ({defunct: "Defunct", "no-system": "No system", remove: "Removed promotion"}[e.dead_status] || e.dead_status)));
     if (inst.bound !== undefined && inst.bound !== null) t.append(line(Number(inst.bound) ? "tt-bound" : "", Number(inst.bound) ? "Can't be traded" : "Can be traded"));
     const lv = e.playlv || e.minlv;
@@ -218,24 +218,30 @@
   };
 
   // ------------------------------------------------------------ field help (UIHelper, UI-STYLE s.4.3)
-  const APPLY_CLASS = { now: "now", per_use: "now", hot_reload: "now", live: "now", next_login: "login", login: "login",
+  const APPLY_CLASS = { game_reload: "restart", now: "now", per_use: "now", hot_reload: "now", live: "now", next_login: "login", login: "login",
     after_restart: "restart", startup: "restart", never: "never", not_editable: "never", new_revision_and_restart: "never", unknown: "never" };
+  // One layout for every field hover: name, one plain sentence, then short facts (range, values, when a change
+  // applies), the read-only reason or a caution, and last a small dim note saying where it is stored.
   GW.render.fieldHelp = function (f) {
     const range = (f.min !== null && f.min !== undefined) || (f.max !== null && f.max !== undefined)
       ? GW.fmt(f.min) + " – " + GW.fmt(f.max) + (f.unit ? " " + f.unit : "") : "";
-    const vals = f.values && typeof f.values === "object" ? Object.entries(f.values).slice(0, 12).map(([k, v]) => k + " = " + v).join(", ") : (Array.isArray(f.values) ? f.values.join(", ") : "");
+    const pairs = f.values && !Array.isArray(f.values) && typeof f.values === "object" ? Object.entries(f.values) : null;
+    const shown = pairs ? pairs.slice(0, 12).map(([k, v]) => k + " = " + v) : (Array.isArray(f.values) ? f.values.slice(0, 12).map(String) : []);
+    const more = (pairs || (Array.isArray(f.values) ? f.values : [])).length - shown.length;
+    const fact = (k, v) => h("div", { class: "tt-line tt-fact" }, h("span", { class: "tt-key" }, k + ": "), v);
     return h("div", { class: "gw-tooltip gw-help" },
-      h("div", { class: "tt-name tt-left" }, f.label || f.column, h("span", { class: "tt-col" }, " (" + f.column + ")")),
-      h("div", { class: "tt-line" }, f.description || ""),
-      range ? h("div", { class: "tt-line" }, "Range: " + range + ".") : null,
-      vals ? h("div", { class: "tt-line" }, "Values: " + vals) : null,
-      h("div", { class: "tt-line tt-small" }, "Stored in " + f.table + "." + f.column + (f.type ? " (" + f.type + ")" : "") + "."),
-      f.revision ? h("div", { class: "tt-line tt-small" }, "A change also moves " + f.revision + " forward by one.") : null,
+      h("div", { class: "tt-name tt-left" }, f.label || f.column),
+      f.description ? h("div", { class: "tt-line" }, f.description) : null,
+      range ? fact("Range", range) : null,
+      shown.length > 4 ? h("div", { class: "tt-line tt-fact" }, h("span", { class: "tt-key" }, "Values:"), h("ul", { class: "tt-list" }, shown.map(v => h("li", null, v)), more > 0 ? h("li", { class: "tt-small" }, "and " + more + " more") : null))
+        : shown.length ? fact("Values", shown.join(", ")) : null,
       h("div", { class: "tt-line" }, h("span", { class: "gw-chip " + (APPLY_CLASS[f.applies_rule] || "never") }, f.applies_text || f.applies_rule || "")),
       !f.editable ? h("div", { class: "tt-line tt-bad" }, "Read-only" + (f.why ? ": " + f.why : "")) : (f.why ? h("div", { class: "tt-line tt-small" }, f.why) : null),
+      f.revision ? h("div", { class: "tt-line tt-small" }, "Saving also raises this row's change counter by one.") : null,
       f.advanced ? h("div", { class: "tt-line tt-small" }, "Advanced: shown behind the 'Advanced' switch.") : null,
-      f.live_capability ? h("div", { class: "tt-line tt-small" }, "Online edit through the game server: " + f.live_capability + " (when the server offers it).") : null,
-      f.caution ? h("div", { class: "tt-line tt-bad" }, f.caution) : null);
+      f.live_capability ? h("div", { class: "tt-line tt-small" }, "Can be changed while the character is online, when the game server offers it.") : null,
+      f.caution ? h("div", { class: "tt-line tt-bad" }, f.caution) : null,
+      h("div", { class: "tt-line tt-small tt-note" }, "Stored in " + f.table + "." + f.column));
   };
   GW.APPLY_CLASS = APPLY_CLASS;
 })();

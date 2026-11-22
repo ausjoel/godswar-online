@@ -84,6 +84,8 @@ internal sealed partial class
                 ClassSuitConversionOperation.UpgradeTierIII,
             ClassSuitCommandOperation.UpgradeTierIV =>
                 ClassSuitConversionOperation.UpgradeTierIV,
+            ClassSuitCommandOperation.UpgradeTierBeyond => // B22 G2
+                ClassSuitConversionOperation.UpgradeTierBeyond,
             _ => throw new ArgumentOutOfRangeException(nameof(operation))
         };
 

@@ -2,6 +2,10 @@ namespace Godswar.Server.State;
 
 internal static partial class PostgresSchemaMigrationCatalog
 {
+    // MEDUSA-TITLES: the Advanced title order seeded below (Challengers fastest, +3%) is OLD. Migration
+    // 20261122_244_medusa_title_order (PostgresSchemaMigrationCatalog.MedusaTitleOrder.cs) swaps it to the live
+    // order (Executioners fastest, +3%). Do NOT edit this SQL: its checksum is stored in every database that ran
+    // it, and a changed checksum stops the server at start. MedusaTitleOrderChecks pins it.
     private static PostgresSchemaMigration CreateMedusaRewardPolicy() => new(
         "20260827_117_medusa_reward_policy",
         "Move Medusa completion points, titles, and attributes to PostgreSQL",

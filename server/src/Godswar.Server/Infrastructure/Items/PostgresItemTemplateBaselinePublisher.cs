@@ -30,6 +30,9 @@ internal static partial class PostgresItemTemplateBaselinePublisher
     private const string PublicationSource =
         "items-v9+pets-v7+nameplates-v1+warehouse-v1+opal-v1+holy-v5+" +
         "holy-stones-v3+sockets-v2+ascension-v1+wonderland-v1+exp-pill-v1";
+    // B22 G1: the gear-tiers-v1 family (GearTiers.cs) adds no suffix here: the label is already 124 of the
+    // 128 characters item_template_content_revisions.source allows. Its completeness checks route an older
+    // release into the republish path instead.
 
     public static async Task<ItemTemplatePublicationResult>
         EnsurePublishedAsync(
@@ -124,6 +127,18 @@ internal static partial class PostgresItemTemplateBaselinePublisher
                     transaction,
                     existing.Revision,
                     cancellationToken);
+            // B22: generated gear tiers + weapon ranks 10-14
+            var hasGearTiers =
+                await PublishedGearTierItemsAreCompleteAsync(
+                    connection,
+                    transaction,
+                    existing.Revision,
+                    cancellationToken) &&
+                await PublishedGearTierWeaponRanksAreCurrentAsync(
+                    connection,
+                    transaction,
+                    existing.Revision,
+                    cancellationToken);
             // The published release is only reusable while it still matches the
             // reviewed baselines. A baseline that grew (a newly reviewed stock
             // item) leaves the sealed revision one entry short, so validating it
@@ -149,6 +164,7 @@ internal static partial class PostgresItemTemplateBaselinePublisher
                 hasOpal &&
                 hasMountSpeedProfile &&
                 hasClientCatalogItems &&
+                hasGearTiers && // B22
                 publishedHolySuit.OperationPolicy.Equals(
                     ReviewedHolySuitPolicy.OperationPolicy))
             {
@@ -197,6 +213,15 @@ internal static partial class PostgresItemTemplateBaselinePublisher
                     connection,
                     transaction,
                     existing.Revision,
+                    cancellationToken);
+                await EnsureGearTierMutableTemplateCompatibilityAsync( // B22
+                    connection,
+                    transaction,
+                    existing.Revision,
+                    cancellationToken);
+                await EnsureGearTierMutableRankCompatibilityAsync(
+                    connection,
+                    transaction,
                     cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
                 return new ItemTemplatePublicationResult(
@@ -307,6 +332,15 @@ internal static partial class PostgresItemTemplateBaselinePublisher
             connection,
             transaction,
             revision,
+            cancellationToken);
+        await EnsureGearTierMutableTemplateCompatibilityAsync( // B22
+            connection,
+            transaction,
+            revision,
+            cancellationToken);
+        await EnsureGearTierMutableRankCompatibilityAsync(
+            connection,
+            transaction,
             cancellationToken);
         await PublishRevisionAsync(
             connection,

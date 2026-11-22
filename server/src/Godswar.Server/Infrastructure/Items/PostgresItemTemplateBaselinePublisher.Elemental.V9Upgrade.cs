@@ -119,6 +119,11 @@ internal static partial class PostgresItemTemplateBaselinePublisher
             transaction,
             definitions,
             cancellationToken);
+        definitions = await ReconcileReviewedGearTierItemsAsync( // B22
+            connection,
+            transaction,
+            definitions,
+            cancellationToken);
         definitions = await ReplaceReviewedMountDefinitionsAsync(
             connection,
             transaction,
@@ -132,7 +137,10 @@ internal static partial class PostgresItemTemplateBaselinePublisher
                 // definition tombstones on upgrade, but no longer carry a
                 // material policy in the authoritative v9 manifest.
                 EnhancementMaterials = ReplaceElementalMaterialPolicies(
-                    prior.Policies.EnhancementMaterials)
+                    prior.Policies.EnhancementMaterials),
+                // B22: weapon ranks 10-14 (gear-tiers-v1)
+                EquipmentRanks = ReconcileGearTierWeaponRanks(
+                    prior.Policies.EquipmentRanks)
             },
             prior.HolySuit);
     }

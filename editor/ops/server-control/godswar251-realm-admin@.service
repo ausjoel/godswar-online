@@ -1,0 +1,10 @@
+[Unit]
+Description=Set up or take down a GodsWar extra realm: %i (started only by gweditor-control)
+After=postgresql.service
+[Service]
+Type=oneshot
+# %i is provision-<realm>-<port> or remove-<realm>; the script re-validates it and derives everything else
+ExecStart=/usr/local/sbin/godswar251-realm job %i
+TimeoutStartSec=420
+User=root
+PrivateTmp=true

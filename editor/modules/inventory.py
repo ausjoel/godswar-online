@@ -31,7 +31,7 @@ Where the rules come from (reborn source, commit b85a1244; S/ = src/Godswar.Serv
 """
 import re
 
-from . import common, _attribute_families as AF
+from . import common, _attribute_families as AF, _class_stat_anywhere as CSA
 from .common import Bad, Refused, NotFound, Conflict, OnlineRefused, R, RebornError
 
 M = common.module(
@@ -272,9 +272,14 @@ def _check_item(rb, d, loc, slot, item, override, force=False):
     e1 = _int_or_none(item.get("elemental_attribute1"), 1, 32767, "elemental attribute 1")
     e2 = _int_or_none(item.get("elemental_attribute2"), 1, 32767, "elemental attribute 2")
     if ca is not None or e1 is not None or e2 is not None:
-        if pid not in class_suit_items():
-            raise Bad("%s is not a class-suit item: only the %d class-suit pieces may carry class / elemental attributes "
+        # B22 d55: the class stone may sit on any gear once the database allows it; elemental attributes stay suit-only
+        if (e1 is not None or e2 is not None) and pid not in class_suit_items():
+            raise Bad("%s is not a class-suit item: only the %d class-suit pieces may carry elemental attributes "
                       "(database CHECK)" % (meta["name"], len(class_suit_items())))
+        if ca is not None:
+            ok, why = CSA.eligible(rb, pid, meta, class_suit_items(), gear=meta["slot"] >= 0 or meta["kind"] in R.KIND_SLOT)
+            if not ok:
+                raise Bad(why)
         if not 1 <= g <= 25:
             raise Bad("class / elemental attributes need grade 1-25 (database CHECK)")
     if ca is not None and ca not in CLASS_ATTRS:
@@ -419,6 +424,8 @@ def _values(rb, p, old, force):
     meta = rb.item_meta(pid)
     if not meta["server"] and not force:
         raise Bad("item %d is not in item_templates (the server would not load it)" % pid)
+    if not (old and old.get("prop_id") == pid):   # an existing packed (sealed) pet keeps its own row
+        common.refuse_ungrantable(pid)
     v = {"prop_id": pid, "stack": common.to_int(p.get("stack", 1), 1, 32767, "count")}
     if v["stack"] > meta["overlap"] and not force:
         raise Bad("%s stacks to %d (Overlap); a bigger count needs force" % (meta["name"], meta["overlap"]))
@@ -564,6 +571,25 @@ ONLINE_WAREHOUSE_NOTE = ("written to the warehouse while the player is online: t
                          "(if their storage window is open now, close and reopen it)")
 
 
+# W4F (wave 4 item 5): known default qualities (data/item-default-quality.json). Warn-only: the editor still saves.
+def default_qualities():
+    import json as _json
+    from pathlib import Path as _Path
+    try:
+        doc = _json.loads((_Path(__file__).resolve().parents[1] / "data" / "item-default-quality.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    out = {}
+    for k, v in (doc.get("items") or {}).items():
+        if not isinstance(v, dict) or not str(k).isdigit():
+            continue
+        row = {"quality": v.get("quality"), "source": v.get("source") or ""}
+        if v.get("grade") is not None:
+            row["grade"] = v.get("grade")
+        out[str(int(k))] = row
+    return out
+
+
 # =========================================================================== routes
 @M.get("meta")
 def meta(ctx):
@@ -599,10 +625,12 @@ def meta(ctx):
         "class_attributes": [dict(id=a, professions=[0,1] if a in (200,201,210,211) else [2,3], **({"label": (attrs.get(str(a)) or {}).get("label")} if attrs.get(str(a)) else {})) for a in CLASS_ATTRS],
         "elementals": elemental_list(), "slot_family": SLOT_FAMILY, "families": FAMILIES,
         "class_suit_items": class_suit_items(),
+        "class_stat_any_item": CSA.allowed(rb),       # B22 d55
         "allow_force": bool(getattr(rb, "allow_force", False)), "writable": bool(rb.writable),
         "kind_slot": dict(R.KIND_SLOT),
         "pet_eggs": {str(sp["egg_item_id"]):R.pet_egg_info(rb.cat(),sp["egg_item_id"]) for sp in rb.cat()["species"].values() if sp.get("egg_item_id")},
         "pet_aptitudes":common.CATALOG.file("labels").get("pet_aptitudes") or {},
+        "default_quality": default_qualities(),
     }
 
 
@@ -786,3 +814,82 @@ def move_item(ctx, cid):
     r3["note"] = "A swap is saved as three moves (park, move, unpark); Undo them newest first."
     r3["warnings"] = notes
     return r3
+
+
+# =========================================================================== W4A: warehouse opener
+# the admin 2026-11-12: "Can we unlock warehouse spaces? There is a button for storage box keys, maybe we can swap this for a
+# warehouse opener." The capacity cannot be written by the editor: character_base.warehouse_capacity only grows, by +40
+# per step, and a deferred trigger requires a warehouse_expansion_settlements row per step that points at a
+# command_inbox / command_audit row and two outbox_events (server migration 107, WarehouseFoundation.Guards.cs), which
+# only the server's expansion executor writes (PostgresWarehouseExpansionCommandExecutor). So the opener gives the
+# player exactly the Storage Box Keys the published policy asks for, box by box, up to the chosen box; the player then
+# talks to the Warehouse Manager once per box. The published policy (live: revision 3) stops at 160 cells (SB-4);
+# SB-5..SB-9 need the policy successor in server/.../PostgresSchemaMigrationCatalog.WarehouseNineBoxKeys.cs.
+POLICY_SQL = ("(SELECT json_build_object('revision', p.revision, 'levels', (SELECT coalesce(json_agg(json_build_object("
+              "'capacity', l.capacity, 'keys', l.key_cost, 'item', l.key_item_id) ORDER BY l.capacity), '[]') FROM "
+              "warehouse_expansion_policy_levels l WHERE l.revision = p.revision)) FROM warehouse_expansion_policy_publication p "
+              "WHERE p.family = 'warehouse-expansion')")
+
+
+def keys_needed(levels, capacity, boxes, held=0):
+    """Keys to open every box up to `boxes` from `capacity` cells with the policy `levels` [{capacity, keys, item}].
+    Returns {target, steps: [{box, capacity, keys}], total, give, item}; raises Bad past the policy's last level."""
+    capacity, boxes = int(capacity), int(boxes)
+    if not 1 <= boxes <= WH_BOXES:
+        raise Bad("boxes must be 1..%d" % WH_BOXES)
+    by_cap = {int(l["capacity"]): l for l in levels or []}
+    top = max(by_cap) if by_cap else WH_BOX
+    target = boxes * WH_BOX
+    if target > top:
+        raise Bad("the published warehouse policy opens at most %d boxes (%d cells) with Storage Box Keys; SB-%d..SB-9 need "
+                  "the nine-box policy successor (a server release)" % (top // WH_BOX, top, top // WH_BOX + 1))
+    steps, item = [], STORAGE_KEY
+    for cap in range(capacity + WH_BOX, target + 1, WH_BOX):
+        lv = by_cap.get(cap)
+        if lv is None:
+            raise Bad("the policy has no level for %d cells" % cap)
+        steps.append({"box": cap // WH_BOX, "capacity": cap, "keys": int(lv["keys"])})
+        item = int(lv.get("item") or STORAGE_KEY)
+    total = sum(s["keys"] for s in steps)
+    return {"target": max(target, capacity), "steps": steps, "total": total, "give": max(0, total - int(held)), "item": item}
+
+
+@M.get(r"warehouse/(\d+)")
+def warehouse_plan(ctx, cid):
+    """GET /api/m/inventory/warehouse/<cid>?boxes=N - the published key policy, the character's boxes and (with boxes)
+    the keys it needs to open them."""
+    rb, cid, d = _cid_check(ctx, cid)
+    b = d["character_base"][0]
+    pol = rb.pg.json(POLICY_SQL) or {"revision": None, "levels": []}
+    held = sum(int(r["stack"]) for r in _items(d) if r["prop_id"] == STORAGE_KEY and r["item_location"] == LOC_BAG)
+    out = {"capacity": int(b.get("warehouse_capacity") or WH_BOX), "policy": pol, "held": held,
+           "max_boxes": (max([int(l["capacity"]) for l in pol.get("levels") or []] or [WH_BOX]) // WH_BOX)}
+    if ctx.q("boxes"):
+        out["plan"] = keys_needed(pol.get("levels"), out["capacity"], ctx.qint("boxes", 2, 1, WH_BOXES), held)
+    return out
+
+
+@M.post(r"warehouse-keys/(\d+)")
+def warehouse_keys(ctx, cid):
+    """POST /api/m/inventory/warehouse-keys/<cid> {boxes, expected_capacity} - put exactly the Storage Box Keys needed to
+    open the boxes up to `boxes` into the bag (minus the keys already there). Works live with the round-2 server."""
+    rb, cid, d = _cid_check(ctx, cid)
+    b = d["character_base"][0]
+    cap = int(b.get("warehouse_capacity") or WH_BOX)
+    exp = ctx.body.get("expected_capacity")
+    if exp is not None and int(exp) != cap:
+        raise Conflict("the warehouse capacity changed (%s -> %s); look again" % (exp, cap))
+    pol = rb.pg.json(POLICY_SQL) or {}
+    held = sum(int(r["stack"]) for r in _items(d) if r["prop_id"] == STORAGE_KEY and r["item_location"] == LOC_BAG)
+    plan = keys_needed(pol.get("levels"), cap, common.to_int(ctx.body.get("boxes"), 1, WH_BOXES, "boxes"), held)
+    if not plan["steps"]:
+        return {"plan": plan, "note": "%s already has %d boxes" % (b["name"], cap // WH_BOX)}
+    if not plan["give"]:
+        return {"plan": plan, "note": "%s already holds the %d keys needed: talk to the Warehouse Manager %d time%s" % (
+            b["name"], plan["total"], len(plan["steps"]), "" if len(plan["steps"]) == 1 else "s")}
+    r = ctx.bag_item(cid, "add", {"item": plan["item"], "quantity": plan["give"]})
+    r["plan"] = plan
+    r["note"] = ("%d Storage Box Key%s added. In game: talk to the Warehouse Manager %d time%s (each opens the next box: %s)." % (
+        plan["give"], "" if plan["give"] == 1 else "s", len(plan["steps"]), "" if len(plan["steps"]) == 1 else "s",
+        ", ".join("SB-%d %d key%s" % (s["box"], s["keys"], "" if s["keys"] == 1 else "s") for s in plan["steps"])))
+    return r

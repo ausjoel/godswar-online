@@ -84,7 +84,8 @@ internal static partial class GiftPackPolicy
             [12104] = new(5160, [new(12030, 99)]),
             // Perfect Raw Gem: Raw Gem x99
             [12105] = new(5161, [new(12040, 99)]),
-        }.Concat(GeneratedPacks).Concat(Finalise2Packs) // FINALISE2: + Finalise2Packs
+        }.Concat(GeneratedPacks).Concat(Finalise2Packs).Concat(SkillBookChestPacks) // B22: + skill-book chests
+            // FINALISE2: + Finalise2Packs
             .Select(WithSealerChestBindingGold).ToFrozenDictionary(); // F-150: Sacred Sealer chests pay B-Gold
 
     public static bool TryResolve(IItemTemplateCatalog templates, uint itemId, out GiftPackDefinition pack)
@@ -96,6 +97,10 @@ internal static partial class GiftPackPolicy
         if (pack.KeyItemId != 0) pack = GiftPackDialPools.Apply(itemId, pack, templates, GiftPackDialPools.Mode);
         return true;
     }
+
+    // B22: checks read a pack without an item catalogue.
+    internal static bool TryGetDefinitionForChecks(uint itemId, out GiftPackDefinition pack) =>
+        Packs.TryGetValue(itemId, out pack!);
 
     // Rolled once per open; the receipt stores the result. Repeats are allowed within a pick.
     public static IEnumerable<GiftPackReward> RollRewards(GiftPackDefinition pack, int profession)

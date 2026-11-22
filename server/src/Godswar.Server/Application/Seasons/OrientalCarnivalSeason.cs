@@ -289,28 +289,34 @@ internal static class OrientalCarnivalSeason
     public static IReadOnlyList<ServerRateDefinition> Definitions { get; } =
     [
         Absolute(OrientalSwitchKey, "Oriental Cuisine: Master, recipe wishes, scrolls and recipe drops", "0/1", 1m, 1m, 50,
-            "1 = while the Oriental Cuisine season is open the Oriental Cuisine Master stands in both capitals: 4 Greek " +
-            "Cuisine Recipes buy a Mysterious Oriental Scroll (its quest pays Delicate Mooncakes for the Lunar Priest), " +
-            "3 free recipe wishes a day, and monsters drop recipes. 0 = none of it (the Master is hidden). Scroll " +
-            "quests already taken still pay their mooncakes while this is 1."),
+            "Runs the Oriental Cuisine event while its season is open. On: the Oriental Cuisine " +
+            "Master stands in both capitals, trades 4 Greek Cuisine Recipes for a Mysterious " +
+            "Oriental Scroll, grants 3 free recipe wishes a day, and monsters drop recipes. Off: " +
+            "none of it; the Master is hidden. Scroll quests already taken can be finished only " +
+            "while it is on."),
         Absolute(RecipePercentKey, "Oriental Cuisine: Greek Cuisine Recipe drop chance", "%", 4m, 100m, 51,
-            "Each monster killed anywhere drops a Greek Cuisine Recipe (3919) this often while the season is open " +
-            "(GENERATED; the 2010 Artemis Treasure Chest monsters do not exist)."),
+            "Chance that any monster kill drops a Greek Cuisine Recipe while Oriental Cuisine is " +
+            "open. Our own value: the original is unknown."),
         Absolute(AllScrollPercentKey, "Oriental Cuisine: chance of the 2-mooncake scroll", "%", 10m, 100m, 52,
-            "Each scroll exchange gives the 'all players' Mysterious Oriental Scroll VII (2 Delicate Mooncakes) this " +
-            "often, otherwise one of the two scrolls of the player's level band (GENERATED)."),
+            "Chance that a scroll exchange gives Mysterious Oriental Scroll VII, which pays 2 " +
+            "Delicate Mooncakes. Otherwise the player gets one of the two scrolls for their level " +
+            "range. Our own value: the original is unknown."),
         Absolute(CarnivalSwitchKey, "Carnival: Carnival Envoy wish-making and mall credits", "0/1", 1m, 1m, 53,
-            "1 = while the Carnival season is open the Carnival Envoy stands in both capitals and takes wish-making " +
-            "credits for mounts, recipes, pet skills and forging materials, and Item Mall purchases (Gold) earn " +
-            "credits. 0 = none of it (the envoy is hidden). Credits are kept between seasons."),
+            "Runs the Carnival event while its season is open. On: the Carnival Envoy stands in " +
+            "both capitals and grants wishes for mounts, recipes, pet skills and forging " +
+            "materials in return for credits, and Item Mall purchases paid in Gold earn credits. " +
+            "Off: none of it; the envoy is hidden. Credits are kept between seasons."),
         Absolute(CreditsPer100GoldKey, "Carnival: wish-making credits per 100 Gold spent in the Item Mall", "credits",
             10m, 10_000m, 54,
-            "Credits = Gold spent x this / 100, rounded down, for every Item Mall purchase paid in Gold while the " +
-            "season is open (GENERATED: the envoy text says 'selected items'; every Gold item counts here)."),
+            "Carnival credits earned for every 100 Gold spent in the Item Mall while Carnival is " +
+            "open. Every item paid in Gold counts. Rounded down."),
         Absolute(RarePercentKey, "Carnival: wish odds for mounts, Wing Race jade, pet skills, Quartz Plate 3", "%",
             25m, 100m, 55,
-            "Chance a 500-credit wish comes true. The credits are spent either way (GENERATED; 'certain odds')."),
+            "Chance that a 500-credit wish (mounts, Wing Race jade, pet skills, Quartz Plate 3) " +
+            "comes true. The credits are spent either way. Our own value: the original is " +
+            "unknown."),
         Absolute(CommonPercentKey, "Carnival: wish odds for recipes, crystals, Quartz Plate 2", "%", 50m, 100m, 56,
-            "Chance a recipe or forging-material wish comes true. The credits are spent either way (GENERATED).")
+            "Chance that a recipe or forging-material wish comes true. The credits are spent " +
+            "either way. Our own value: the original is unknown.")
     ];
 }

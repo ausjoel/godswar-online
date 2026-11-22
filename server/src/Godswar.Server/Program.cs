@@ -42,9 +42,26 @@ try
         options.Secure.Phase4AcceptanceFaults);
     var postgres = options.Storage.PostgresConnectionString;
     await PostgresSchemaStartup.InitializeAsync(postgres);
+    // ROUND-SHAREDHANDOFF (issue #34): a shared handoff store lets a gateway in one process admit a game login in
+    // another. Refuses to start when asked for it and the table is not there.
+    LegacyGameLoginHandoff.ProcessRealmId = options.Game.WorldInstances.ProcessRealmId.Value;
+    if (LegacyGameLoginHandoff.ReadWantsSharedStore(
+            Environment.GetEnvironmentVariable("GODSWAR_LEGACY_GAME_LOGIN_HANDOFF_STORE")))
+    {
+        var handoffStore = new Godswar.Server.Infrastructure.Networking.PostgresLegacyGameLoginHandoffStore(
+            Npgsql.NpgsqlDataSource.Create(postgres));
+        await handoffStore.VerifyAsync(CancellationToken.None);
+        LegacyGameLoginHandoff.UseSharedStore(handoffStore);
+    }
+
+    Console.WriteLine(
+        $"[security] legacy game login handoff store={LegacyGameLoginHandoff.StoreName} " +
+        $"enabled={LegacyGameLoginHandoff.Enabled} process-realm={LegacyGameLoginHandoff.ProcessRealmId}");
     await PostgresRelationalContentBaselineBootstrapper.EnsureAsync(postgres);
     // RATES: server-wide multipliers/limits table; never fails start-up.
     await ServerRatesRuntime.InitializeAsync(postgres);
+    // W5B: which GM powers this server allows (public.gm_power_policy, hot); never fails start-up.
+    await Godswar.Server.Infrastructure.Operators.GmPowerPolicyRuntime.InitializeAsync(postgres);
     // EXPIRY (b03): real-time item expiry; off unless the migration is applied.
     await Godswar.Server.Infrastructure.Inventory.ItemExpiryRuntime.InitializeAsync(postgres);
     // TRADE: player trade / stall store (player_trade_log); never fails start-up.
@@ -56,8 +73,13 @@ try
     await Godswar.Server.Infrastructure.Arena.AfkRevivalWallet.InitializeAsync(postgres); // ARENA
     await Godswar.Server.Infrastructure.Relations.RelationStore.InitializeAsync(postgres);
     Godswar.Server.Application.Operators.OperatorControls.UsesCharacterGmFlags = options.Game.DeveloperCommands.UseCharacterGmFlags;
+    Godswar.Server.Application.Operators.OperatorControls.CommandsEnabled = options.Game.DeveloperCommands.Enabled; // W5B
     // ROUND2: operator (GM) command store (operator_log); never fails start-up.
     await Godswar.Server.Infrastructure.Operators.OperatorRuntime.InitializeAsync(postgres);
+    // W6A: per-connection login health records (public.session_health); never fails start-up.
+    await Godswar.Server.Operations.Health.SessionHealthRecorder.InitializeAsync(postgres);
+    // RANK-DISPLAY: chosen armour/weapon rank effect caps (public.character_rank_display); never fails start-up.
+    await Godswar.Server.Infrastructure.Appearance.RankDisplayStore.InitializeAsync(postgres);
     var (realmCalendars, realmCalendar) =
         await ServerRealmCalendarStartup.LoadForProcessAsync(options);
     NpcContentRuntime.Calendar = realmCalendar;
@@ -156,6 +178,11 @@ try
             request,
             itemContent.Templates,
             token);
+    // W6A: the editor's "Login check" (POST /admin/character/entry-check), a read-only dry run of a login.
+    Godswar.Server.Game.CharacterEntryCheck.Configure(
+        gameplayPersistence.CharacterSnapshots,
+        options.Game.WorldInstances.ProcessRealmId,
+        petContent);
     var gameHandlerFactory = new GameClientHandlerFactory(
         store,
         accountPersistence.Directory,
@@ -179,6 +206,9 @@ try
         options.Network.MaxUnauthenticatedConnections,
         options.Network.MaxUnauthenticatedConnectionsPerIp,
         options.Network.MaxUnauthenticatedConnectionsPerPrefix));
+    // W5A: background polls may slow down while no client holds a connection.
+    Godswar.Server.Operations.ServerIdleSignal.Bind(
+        () => admission.GetSnapshot().ActiveConnections == 0);
     using var workerBackhaulRuntime =
         WorkerBackhaulRuntime.TryCreate(
             options,
@@ -381,6 +411,7 @@ try
         criticalTasks.Start(CriticalTaskKind.PopulationNotices, token => registry.RunPopulationNoticesAsync(realmCalendar, token));
         auxiliaryTasks.Add(registry.RunEventBoardAsync(realmCalendar, shutdown.Token)); // EVENTSBOARD: off unless event.board = 1
         auxiliaryTasks.Add(registry.RunHeraLabyrinthAnnouncementAsync(realmCalendar, shutdown.Token)); // HERA: off unless GODSWAR_HERA_LABYRINTH=1
+        auxiliaryTasks.Add(registry.RunEventOpeningNoticesAsync(realmCalendar, shutdown.Token)); // W4F: off unless board.event_open_notices = 1
         // The altar drain has to be applied whether or not the member is online, so
         // it runs on the server's own clock rather than on a read.
         criticalTasks.Start(
@@ -457,6 +488,7 @@ try
         // failing poll keeps the last good rates and never stops the server).
         auxiliaryTasks.Add(ServerRatesRuntime.RunAsync(shutdown.Token));
         auxiliaryTasks.Add(NpcContentRuntime.RunAsync(shutdown.Token));
+        auxiliaryTasks.Add(Godswar.Server.Infrastructure.Operators.GmPowerPolicyRuntime.RunAsync(shutdown.Token)); // W5B
         auxiliaryTasks.Add(Godswar.Server.Infrastructure.Rates.EventDropWindowRuntime.RunAsync(shutdown.Token));
         taskSupervisor.SealRegistrations();
 

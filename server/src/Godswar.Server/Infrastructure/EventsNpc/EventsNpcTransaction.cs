@@ -168,6 +168,11 @@ internal sealed class EventsNpcTransaction
         {
             return true;
         }
+        if (Godswar.Server.State.PetItemCatalog.CannotBeGrantedReason(itemId) is { } refused) // W6A
+        {
+            Console.WriteLine($"[grant] item {itemId} refused: {refused}");
+            return false;
+        }
 
         var cap = DefaultStackCap;
         var templateBound = false;
@@ -454,6 +459,153 @@ internal sealed class EventsNpcTransaction
         write.Parameters.AddWithValue("id", rowId);
         if (await write.ExecuteNonQueryAsync(_token) != 1) throw new InvalidOperationException("item row changed");
     }
+
+    // W4-B (login awards / Prize Chest) ------------------------------------------------------------------------
+
+    /// <summary>
+    /// W4-B: adds <paramref name="count"/> of an item with an explicit quality, grade and binding, topping up stacks
+    /// of exactly that item, binding, quality and grade first. The stack cap is the template's Overlap, never above 99
+    /// (the admin's rule). False when the bag cannot take all of it (the caller rolls back to a savepoint: some of it may
+    /// already be written).
+    /// </summary>
+    public async Task<bool> GrantVariantAsync(int itemId, int count, bool bound, short quality, short grade)
+    {
+        if (count <= 0)
+        {
+            return true;
+        }
+        if (Godswar.Server.State.PetItemCatalog.CannotBeGrantedReason(itemId) is { } refused) // W6A
+        {
+            Console.WriteLine($"[grant] item {itemId} refused: {refused}");
+            return false;
+        }
+
+        var cap = DefaultStackCap;
+        await using (var capCommand = Command("SELECT stats ->> 'Overlap' FROM public.item_templates WHERE id = @i;"))
+        {
+            capCommand.Parameters.AddWithValue("i", itemId);
+            var raw = await capCommand.ExecuteScalarAsync(_token);
+            if (raw is null)
+            {
+                return false; // no such template: never write an orphan row
+            }
+
+            if (raw is string text && int.TryParse(text, out var parsed) && parsed > 0)
+            {
+                cap = Math.Min(parsed, DefaultStackCap);
+            }
+        }
+
+        var binding = bound ? (short)1 : (short)0;
+        var occupied = new HashSet<short>();
+        var same = new List<(short Slot, short Stack)>();
+        await using (var read = Command(
+            "SELECT slot_index, prop_id, stack, bound, item_quality, item_grade FROM public.character_items " +
+            "WHERE user_id = @c AND item_location = @l ORDER BY slot_index FOR UPDATE;"))
+        {
+            read.Parameters.AddWithValue("l", KitBagLocation);
+            await using var reader = await read.ExecuteReaderAsync(_token);
+            while (await reader.ReadAsync(_token))
+            {
+                var slot = reader.GetInt16(0);
+                occupied.Add(slot);
+                if (reader.GetInt32(1) == itemId && Convert.ToInt32(reader.GetValue(3)) == binding &&
+                    Convert.ToInt32(reader.GetValue(4)) == quality && Convert.ToInt32(reader.GetValue(5)) == grade)
+                {
+                    same.Add((slot, reader.GetInt16(2)));
+                }
+            }
+        }
+
+        var remaining = count;
+        foreach (var (slot, stack) in same)
+        {
+            if (remaining <= 0 || stack >= cap)
+            {
+                continue;
+            }
+
+            var added = Math.Min(remaining, cap - stack);
+            remaining -= added;
+            await using var update = Command(
+                "UPDATE public.character_items SET stack = stack + @a WHERE user_id = @c AND item_location = @l " +
+                "AND slot_index = @s;");
+            update.Parameters.AddWithValue("a", (short)added);
+            update.Parameters.AddWithValue("l", KitBagLocation);
+            update.Parameters.AddWithValue("s", slot);
+            await update.ExecuteNonQueryAsync(_token);
+        }
+
+        for (short slot = 0; remaining > 0 && slot < KitBagSlotCount; slot++)
+        {
+            if (!occupied.Add(slot))
+            {
+                continue;
+            }
+
+            var stack = Math.Min(remaining, cap);
+            remaining -= stack;
+            await using var insert = Command("""
+                INSERT INTO public.character_items (user_id, item_location, slot_index, prop_id, item_quality,
+                    item_grade, bound, stack, item_exp, holy_suit_code)
+                VALUES (@c, @l, @s, @i, @q, @g, @b, @n, 0, 0);
+                """);
+            insert.Parameters.AddWithValue("l", KitBagLocation);
+            insert.Parameters.AddWithValue("s", slot);
+            insert.Parameters.AddWithValue("i", itemId);
+            insert.Parameters.AddWithValue("q", quality);
+            insert.Parameters.AddWithValue("g", grade);
+            insert.Parameters.AddWithValue("b", binding);
+            insert.Parameters.AddWithValue("n", (short)stack);
+            await insert.ExecuteNonQueryAsync(_token);
+        }
+
+        return remaining <= 0;
+    }
+
+    /// <summary>W4-B: credits Gold ("Stone"), capped at int.MaxValue. Returns the new balance.</summary>
+    public async Task<int> AddGoldAsync(int amount)
+    {
+        await using var command = Command("""
+            UPDATE public.character_base
+            SET "Stone" = LEAST("Stone"::bigint + @n, 2147483647)::integer, wallet_revision = wallet_revision + 1
+            WHERE id = @c RETURNING "Stone";
+            """);
+        command.Parameters.AddWithValue("n", (long)amount);
+        return (int)(await command.ExecuteScalarAsync(_token))!;
+    }
+
+    /// <summary>W4-B: every row of one parameterised query on this transaction (@c = the character id).</summary>
+    public async Task<List<object?[]>> RowsAsync(string sql, params (string Name, object Value)[] parameters)
+    {
+        await using var command = Command(sql);
+        foreach (var (name, value) in parameters)
+        {
+            command.Parameters.AddWithValue(name, value);
+        }
+
+        var rows = new List<object?[]>();
+        await using var reader = await command.ExecuteReaderAsync(_token);
+        while (await reader.ReadAsync(_token))
+        {
+            var row = new object?[reader.FieldCount];
+            for (var i = 0; i < row.Length; i++)
+            {
+                row[i] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+            }
+
+            rows.Add(row);
+        }
+
+        return rows;
+    }
+
+    /// <summary>W4-B: a savepoint, so one award or chest entry that does not fit can be undone alone.</summary>
+    public Task SavepointAsync(string name) => _transaction.SaveAsync(name, _token);
+
+    public Task RollbackToSavepointAsync(string name) => _transaction.RollbackAsync(name, _token);
+
+    public Task ReleaseSavepointAsync(string name) => _transaction.ReleaseAsync(name, _token);
 
     private NpgsqlCommand Command(string sql)
     {

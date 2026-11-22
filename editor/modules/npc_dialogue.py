@@ -3,12 +3,13 @@ Every change uses rows_write for database guard/backup/transaction/audit. No row
 restore by selecting an immutable historical release and previewing publication again.
 """
 import json
+import os
 from . import common
 from .common import Bad, Conflict, Refused, lit
 from . import _npc_dialogue_release as R
 
 M=common.module('npc_dialogue','NPC greetings',icon={'sprite':1063},order=56,status='ready',
- description='Draft NPC greeting text and publish a complete revision. Takes effect after the next game restart.',needs_character=False)
+ description='Draft NPC greeting text and publish it as a new version. Takes effect after the next server restart.',needs_character=False)
 NO_UNDO='Dialogue releases are immutable. Use NPC greetings → History → Load into draft, then preview and publish again.'
 
 def query(ctx,sql):return ctx.need_rb().pg.json(sql)
@@ -104,3 +105,49 @@ def publish(ctx):
   applies='after_restart',target='NPC greetings',no_undo=NO_UNDO)
  result.update(revision=new,reused=p['reuse'],changed=len(p['changes']))
  return result
+
+COLOURS=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),'data','colour_codes.json')
+
+@M.get('colours')
+def colours(ctx):
+ """The |cAARRGGBB colours the client's English text uses, most used first (built by build_colour_codes.py)."""
+ try:
+  with open(COLOURS,encoding='utf-8') as f:return json.load(f)
+ except (OSError,ValueError):
+  return {'colours':[],'total_uses':0,'error':'data/colour_codes.json is missing; run build_colour_codes.py on the Mac'}
+
+# ---- B21 item 20: the whole dialogue (greeting + function page text + yellow option lines). Helpers: _npc_menu.py
+from . import _npc_menu as MENU
+
+
+@M.get('menus')
+def menus(ctx):
+ """Every published route resolved to the words the client shows, plus the option-text draft (client-side words)."""
+ doc=MENU.menu_data()
+ if not doc:return {'available':False,'error':'data/npc_menu_text.json is missing; run build_npc_menu_text.py on the Mac'}
+ out={}
+ for key,rs in MENU.routes(ctx).items():
+  out[key]=[dict(r,page=MENU.page(doc,r['dialog_index'],r['subs'],extra=MENU.extensions(key,r['behavior']))) for r in rs]
+ draft,version=MENU.read_draft(ctx)
+ used={}
+ for rs in out.values():
+  for r in rs:
+   for el in r['page']['texts']+[o['label'] for o in r['page']['options'] if o['label']]+[t for o in r['page']['options'] for t in o['texts']]:
+    for k in el.get('keys') or []:used.setdefault(k,set()).add(r['npc_key'])
+ strings=doc.get('strings') or {}
+ return {'available':True,'client':doc.get('client'),'built':doc.get('generated'),'routes':out,
+  'strings':{k:dict(strings[k],npcs=sorted(v)) for k,v in used.items() if k in strings},
+  'draft':draft,'draft_version':version,'applies':'next_client_update','quests':MENU.quests_by_npc(ctx.catalog)}
+
+
+@M.post('menus/draft')
+def menus_draft(ctx):
+ b=ctx.body or {}
+ draft,version=MENU.save_draft(ctx,b.get('labels'),b.get('version'))
+ return {'draft':draft,'draft_version':version,'applies':'next_client_update'}
+
+
+@M.get('menus/export')
+def menus_export(ctx):
+ doc=MENU.menu_data() or {};draft,version=MENU.read_draft(ctx)
+ return {'lua':MENU.export_lua(draft,doc.get('strings') or {}),'draft':draft,'draft_version':version}

@@ -41,8 +41,11 @@ internal sealed partial class GameSessionRegistry
         {"method":"POST","path":"/admin/money","body":{"actor":"string","character":"string","silver":"int (optional)","gold":"int (optional)","bindGold":"int (optional)"}},
         {"method":"POST","path":"/admin/teleport","body":{"actor":"string","character":"string","map":"int 0-255","x":"number","z":"number"}},
         {"method":"POST","path":"/admin/quest/chain","body":{"actor":"string","character":"string","operation":"complete_main | reset","level":"int 1-200 (complete_main)","scope":"main | all (reset)","expected":"int[] the quest ids the preview showed; any other plan is refused"}},
+        {"method":"POST","path":"/admin/character/entry-check","body":{"actor":"string","accountIds":"int[] 1-500: dry run of each account's login (snapshot load + world-entry packets); writes nothing. Per account: canEnter, findings[{severity blocks|hidden, stage, code, message, container, slot, itemId}]"}},
         {"method":"POST","path":"/admin/kick","body":{"actor":"string","character":"string","reason":"string (optional)"}},
-        {"method":"POST","path":"/admin/board/post","body":{"actor":"string","text":"string 1-106"}}
+        {"method":"POST","path":"/admin/board/post","body":{"actor":"string","text":"string 1-106"}},
+        {"method":"POST","path":"/admin/buff/broadcast","body":{"actor":"string","statusId":"int (or skillId)","durationSeconds":"uint32 seconds (optional)","camp":"0 Sparta | 1 Athens (optional)","minLevel":"int 1-200 (optional)","maxLevel":"int 1-200 (optional)","queueOffline":"bool (optional): also queue for every active character not in the world","allowHostile":"bool (optional)"}},
+        {"method":"POST","path":"/admin/prize-chest/notify","body":{"actor":"string","characterIds":"int[] 1-500: characters whose Prize Chest just received rows; each one in the world gets a chat line (and an award-tab repaint)"}}
         ]}
         """;
 
@@ -52,6 +55,18 @@ internal sealed partial class GameSessionRegistry
         doc["gmAuthority"] = OperatorControls.UsesCharacterGmFlags ? "character_flag" : "account_allowlist";
         // Editors must require this capability as well as the additive schema:
         // an older running binary must never be given grant data it cannot load.
+        // ROUND-SHAREDHANDOFF (issue #34): a gateway and a target worker of another process can only hand logins
+        // over when both report store "postgres"; #20 must check this before advertising an additional realm.
+        doc["legacyLoginHandoff"] = new JsonObject
+        {
+            ["version"] = Godswar.Server.Networking.LegacyGameLoginHandoff.CapabilityVersion,
+            ["store"] = Godswar.Server.Networking.LegacyGameLoginHandoff.StoreName,
+            ["enabled"] = Godswar.Server.Networking.LegacyGameLoginHandoff.Enabled,
+            ["processRealm"] = Godswar.Server.Networking.LegacyGameLoginHandoff.ProcessRealmId
+        };
+        // W5B: the GM power catalogue and what this server allows now (the editor's GM powers page reads only this).
+        doc["gmPowers"] = GmPowerPolicy.Describe();
+        doc["gmCommandsEnabled"] = OperatorControls.CommandsEnabled;
         doc["titleGrants"] = new JsonObject { ["version"] = 1,
             ["ownedLimit"] = Godswar.Server.Application.Characters.CharacterSnapshotLimits.OwnedTitleCount };
         return doc.ToJsonString();
@@ -98,6 +113,18 @@ internal sealed partial class GameSessionRegistry
             }
             return new(200, $"{{\"ok\":true,\"delivered\":{delivered}}}");
         }
+        if (request.Path == BuffBroadcastPath) // W4-B: server-wide buff (no character field)
+        {
+            return await HandleBuffBroadcastAsync(body, actor, cancellationToken);
+        }
+        if (request.Path == EntryCheckPath) // W6A: login check (account ids, no character field, read-only)
+        {
+            return await HandleEntryCheckAsync(body, actor, cancellationToken);
+        }
+        if (request.Path == PrizeChestNotifyPath) // W5-F: prizes sent to online players (ids, no character field)
+        {
+            return await HandlePrizeChestNotifyAsync(body, actor, cancellationToken);
+        }
         var name = Text(body, "character");
         if (string.IsNullOrWhiteSpace(actor) || actor.Length > 64 ||
             string.IsNullOrWhiteSpace(name) || name.Length > 32)
@@ -134,6 +161,41 @@ internal sealed partial class GameSessionRegistry
         }
 
         return response;
+    }
+
+    internal const string EntryCheckPath = "/admin/character/entry-check";
+
+    private static async Task<OperatorAdminResponse> HandleEntryCheckAsync(
+        JsonObject body, string actor, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(actor) || actor.Length > 64 || body["accountIds"] is not JsonArray ids ||
+            ids.Count is < 1 or > CharacterEntryCheck.MaximumAccountsPerCall)
+        {
+            return Error(400, "actor (1-64 characters) and accountIds (1-500 account ids) are required");
+        }
+        if (!CharacterEntryCheck.Available)
+        {
+            return Error(503, "login check unavailable");
+        }
+        var results = new JsonArray();
+        foreach (var node in ids)
+        {
+            int accountId;
+            try
+            {
+                accountId = node!.GetValue<int>();
+            }
+            catch (Exception error) when (error is InvalidOperationException or FormatException or NullReferenceException)
+            {
+                return Error(400, "accountIds must be whole numbers");
+            }
+            if (accountId <= 0)
+            {
+                return Error(400, "accountIds must be positive");
+            }
+            results.Add(await CharacterEntryCheck.RunAsync(accountId, cancellationToken));
+        }
+        return new(200, new JsonObject { ["ok"] = true, ["results"] = results }.ToJsonString());
     }
 
     private async Task<OperatorAdminResponse> HandleOperatorAdminCoreAsync(
@@ -205,6 +267,7 @@ internal sealed partial class GameSessionRegistry
                     Console.WriteLine($"[admin] kick notice failed: {error.Message}");
                 }
 
+                online.Session.EndHint ??= "kicked"; // W6A
                 online.Session.Disconnect();
                 return Ok(online.CharacterName, "disconnected");
             }
@@ -225,6 +288,10 @@ internal sealed partial class GameSessionRegistry
                     !templates.TryGet((uint)itemId, out var template))
                 {
                     return Error(400, "itemId must be an item template of this server");
+                }
+                if (Godswar.Server.State.PetItemCatalog.CannotBeGrantedReason(itemId) is { } cannotGrant) // W6A
+                {
+                    return Error(400, cannotGrant);
                 }
 
                 var quantity = Int(body, "quantity") ?? 1;

@@ -66,7 +66,8 @@ internal enum CommandFamily : ushort
     OnlineAward = 57,
     WarehouseTransfer = 58,
     WarehouseExpansion = 59,
-    FighterLevelSeal = 60
+    FighterLevelSeal = 60,
+    ClassSuitUpgradeTierBeyond = 61 // B22 G2 (d36)
 }
 
 internal enum CommandIdentityStrength : byte

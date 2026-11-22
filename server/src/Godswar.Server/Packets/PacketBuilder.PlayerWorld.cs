@@ -242,9 +242,21 @@ internal static partial class PacketBuilder
         return packet;
     }
 
+    // RANK-DISPLAY: 'GWRK' tail after the native 80 bytes: marker @80, armour cap @84, weapon cap @85, character id @88. A patched client (rank-display stub in its 10199 handler)
+    // stores the two caps on the player object and recomputes that player's weapon and armour rank effects; an
+    // unpatched client reads only the first 80 bytes.
+    public const uint PlayerTitleRankDisplayMarker = 0x4B525747; // "GWRK"
+
     public static byte[] PlayerTitleInfo(GameCharacter character, uint objectId)
     {
-        var packet = new byte[80];
+        var packet = new byte[92];
+        var (armourCap, weaponCap) =
+            Godswar.Server.Infrastructure.Appearance.RankDisplayStore.Get(character.Id);
+        BinaryPrimitives.WriteUInt32LittleEndian(packet.AsSpan(80, 4), PlayerTitleRankDisplayMarker);
+        packet[84] = armourCap;
+        packet[85] = weaponCap;
+        // The client's own avatar is not in its other-players list; the stub matches it by character id (+0x7fa4).
+        BinaryPrimitives.WriteInt32LittleEndian(packet.AsSpan(88, 4), character.Id);
         BinaryPrimitives.WriteUInt16LittleEndian(packet.AsSpan(0, 2), (ushort)packet.Length);
         BinaryPrimitives.WriteUInt16LittleEndian(packet.AsSpan(2, 2), 0x27D7);
         BinaryPrimitives.WriteUInt32LittleEndian(packet.AsSpan(4, 4), objectId);
@@ -268,7 +280,7 @@ internal static partial class PacketBuilder
         PacketText.WriteFixedAscii(packet.AsSpan(8, 64), guildPanel.GuildName);
         packet[72] = hasGuild ? (byte)1 : (byte)0;
         packet[74] = guildPanel.Duty;
-        // The selected title ID is the final dword in this 80-byte packet.
+        // The selected title ID is the final dword of the native 80-byte packet.
         BinaryPrimitives.WriteUInt32LittleEndian(
             packet.AsSpan(76, sizeof(uint)),
             character.SelectedTitleId);

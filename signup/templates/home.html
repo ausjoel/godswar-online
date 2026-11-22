@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% from "_signup_form.html" import signup_form %}
+{% import "_downloads.html" as dl %}
+{% import "_news.html" as news %}
+{% block title %}Free revival server{% endblock %}
+{% block main %}
+<section class="hero">
+  <div class="container">
+    <div>
+      <h1>The gods are back at war. <em>Come and play.</em></h1>
+      <p class="pitch">A fan-run revival of GodsWar Online, the colourful Greek-myth MMORPG. Pick Athens or Sparta, level a Warrior, Champion, Mage or Priest, and take on Medusa, Atlantis and Wonderland with friends.</p>
+      <ul class="facts">
+        <li>Free</li><li>Mac and Windows</li><li>English</li><li>Updates itself</li>
+      </ul>
+      {{ dl.hero_buttons() }}
+    </div>
+    <aside class="signup-panel" aria-labelledby="signup-title">
+      <h2 id="signup-title">Create a free account</h2>
+      <p class="sub">One account holds all your characters. Already have one? Just download and log in.</p>
+      {% if closed %}
+      <div class="notice" role="status">New accounts cannot be made right now. Please come back later.</div>
+      {% else %}
+      {{ signup_form(form, v, field, error, compact=True) }}
+      {% endif %}
+      {% if mail_enabled %}<p class="after"><a href="/forgot">Forgot password</a> · <a href="/forgot-username">Forgot username</a></p>{% endif %}
+    </aside>
+  </div>
+</section>
+
+<section class="band">
+  <div class="container">
+    <h2 class="title">Start playing in three steps</h2>
+    <div class="grid3">
+      <div class="panel"><span class="step-n">1</span><h3>Make an account</h3><p>Use the form above. Your username is lowercase letters and numbers, and you type it to log in.</p></div>
+      <div class="panel"><span class="step-n">2</span><h3>Get the launcher</h3><p>Download it for <a href="/downloads/files/GodsWar-Launcher-mac.zip">Mac</a> or <a href="/downloads/files/GodsWar-Launcher-windows.exe">Windows</a>. It installs the game and keeps it up to date. <a href="/static/player-guide.html">Install help</a>.</p></div>
+      <div class="panel"><span class="step-n">3</span><h3>Create your hero</h3><p>Log in, choose your faction and class, and follow the Newbie Guide in your capital. <a href="/guides/getting-started">Getting started</a>.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="band alt">
+  <div class="container">
+    <h2 class="title">Instances</h2>
+    <div class="grid4">
+      <a class="tile" href="/instances/bay-under-attack"><div class="art"><img src="/static/art-skeleton.png" width="121" height="261" alt=""></div><div class="body"><span class="tag">Level 50-90 · party of 3-5</span><h3>Bay Under Attack</h3><p>Fight raiders through a captured harbour and bring down Christina.</p></div></a>
+      <a class="tile" href="/instances/medusa"><div class="art"><img src="/static/art-medusa.png" width="238" height="273" alt=""></div><div class="body"><span class="tag">Level 90+ · party of 1-5</span><h3>Medusa's Island</h3><p>Score 3,000 points and face the Gorgon sisters before time runs out.</p></div></a>
+      <a class="tile" href="/instances/atlantis"><div class="art"><img src="/static/art-mermaid.png" width="229" height="252" alt=""></div><div class="body"><span class="tag">Level 90+ · party of 1-5</span><h3>Atlantis</h3><p>Hold back waves from the deep and net a Mermaid or two.</p></div></a>
+      <a class="tile" href="/instances/wonderland"><div class="art"><img src="/static/art-dragon.png" width="242" height="162" alt=""></div><div class="body"><span class="tag">Level 120+ · party of 1-5</span><h3>Wonderland</h3><p>Eight islands of bosses, chests and Medals in Atlas's citadel.</p></div></a>
+    </div>
+  </div>
+</section>
+
+<section class="band">
+  <div class="container grid2">
+    <div>
+      <h2 class="title">Latest news</h2>
+      <ul class="news-list">
+        {% for n in news['items'][:3] %}
+        <li><time>{{ n.date }}</time><h3>{% if n.link %}<a href="{{ n.link }}">{{ n.title }}</a>{% else %}{{ n.title }}{% endif %}</h3><p>{{ n.text }}</p></li>
+        {% endfor %}
+      </ul>
+      <p><a href="/news">All news</a></p>
+    </div>
+    <div>
+      <h2 class="title">Choose your path</h2>
+      <div class="grid2">
+        <a class="panel" href="/guides/classes#warrior"><h3>Warrior</h3><p class="small">Sword and shield. Holds the front line.</p></a>
+        <a class="panel" href="/guides/classes#champion"><h3>Champion</h3><p class="small">Spear and fury. All attack.</p></a>
+        <a class="panel" href="/guides/classes#mage"><h3>Mage</h3><p class="small">Fire from afar, on one foe or many.</p></a>
+        <a class="panel" href="/guides/classes#priest"><h3>Priest</h3><p class="small">Ice magic, healing and cleansing.</p></a>
+      </div>
+      <p class="small">Every character also chooses a side: <a href="/guides/factions">Athens or Sparta</a>.</p>
+    </div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}<script src="/static/signup.js?v=1" defer></script>{% endblock %}

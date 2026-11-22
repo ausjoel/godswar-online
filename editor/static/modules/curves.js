@@ -31,6 +31,7 @@
       let sel = new Set(), D = null, group = "hp", anchor = "middle";
       let curves = { hp: [[1, 1], [200, 1]], attack: [[1, 1], [200, 1]], defence: [[1, 1], [200, 1]], rating: [[1, 1], [200, 1]] };
       const mapBox = h("div", { class: "gw-cv-maps" }), presetBox = h("div", { class: "gw-cv-presets" });
+      const calcBox = h("section", { class: "gw-cv-calc" });
       const curveEl = h("div", { class: "gw-cv-curve" }), plotEl = h("div", { class: "gw-cv-plot" }), info = h("div", { class: "gw-cv-info" });
       const groupSel = h("select", { "aria-label": "Curve", onchange: e => { group = e.target.value; drawCurve(); drawPlot(); } }, Object.entries(GROUPS).map(([k, v]) => h("option", { value: k }, v)));
       const anchorSel = h("select", { "aria-label": "Level used for a template with several levels", onchange: e => { anchor = e.target.value; } },
@@ -40,15 +41,50 @@
         h("h3", null, "Presets"), presetBox, h("h3", null, "Maps"), mapBox,
         h("div", { class: "gw-cv-bar" }, h("label", null, "Curve ", groupSel), h("label", { "data-help": "One monster type can spawn at several levels on one map; its attack/defence row is computed at this level." }, "Several levels: use the ", anchorSel),
           h("button", { class: "gw-btnx", type: "button", onclick: previewNow }, "Preview"), h("button", { class: "gw-btnx", type: "button", onclick: write }, "Write")),
-        h("div", { class: "gw-cv-graphs" }, curveEl, plotEl), info);
+        h("div", { class: "gw-cv-graphs" }, curveEl, plotEl), info, calcBox);
 
-      for (const p of M.presets) presetBox.append(h("div", { class: "gw-cv-preset" + (p.generated ? " gen" : "") }, h("b", null, p.title), p.generated ? h("span", { class: "gw-chip never" }, "GENERATED") : null,
+      for (const p of M.presets) presetBox.append(h("div", { class: "gw-cv-preset" + (p.generated ? " gen" : "") }, h("b", null, p.title), p.generated ? h("span", { class: "gw-chip never", "data-help": "Made up for this server; not from the original game." }, "Our own") : null,
         h("p", { class: "gw-dim" }, p.why), h("button", { class: "gw-btnx small", type: "button", onclick: async () => {
           curves = JSON.parse(JSON.stringify(p.curves)); if (p.maps.length) sel = new Set(p.maps); drawMaps(); await reload(); } }, "Load")));
+      // Wave 4 D item 5: a clickable map picker. Maps are tiles (client minimap, name, level range, spawns) grouped by section:
+      // regular maps in game order, then instances, events, battlefields. Click a tile (or its box) to tick it.
+      let mapQ = "", mapSec = "all";
+      async function toggle(id, on) { if (on) sel.add(id); else sel.delete(id); drawMaps(); await reload(); }
       function drawMaps() {
         GW.clear(mapBox);
-        for (const m of M.maps) mapBox.append(h("label", { class: "gw-cv-map" }, h("input", { type: "checkbox", checked: sel.has(m.map_id) || null, onchange: async e => { if (e.target.checked) sel.add(m.map_id); else sel.delete(m.map_id); await reload(); } }),
-          " " + m.name + " ", h("span", { class: "gw-dim" }, "(" + m.map_id + ", " + (m.published + m.gm) + ")")));
+        const secs = M.sections || [{ section: "all", title: "Maps", maps: M.maps }];
+        const bar = h("div", { class: "gw-cv-mapbar" },
+          h("input", { type: "search", placeholder: "Filter maps", value: mapQ, "aria-label": "Filter maps", oninput: e => { mapQ = e.target.value.toLowerCase(); drawMaps(); const f = mapBox.querySelector("input[type=search]"); if (f) { f.focus(); f.setSelectionRange(f.value.length, f.value.length); } } }),
+          ...[{ section: "all", title: "All" }].concat(secs).map(g => h("button", { type: "button", class: "gw-btnx small" + (mapSec === g.section ? " on" : ""), onclick: () => { mapSec = g.section; drawMaps(); } }, g.title)),
+          h("button", { type: "button", class: "gw-btnx small", onclick: async () => { sel = new Set(); drawMaps(); await reload(); } }, "Clear (" + sel.size + ")"));
+        mapBox.append(bar);
+        for (const g of secs) {
+          if (mapSec !== "all" && g.section !== mapSec) continue;
+          const maps = g.maps.filter(m => !mapQ || (m.name + " " + m.map_id + " " + (m.scene || "")).toLowerCase().includes(mapQ));
+          if (!maps.length) continue;
+          const tickable = maps.filter(m => !m.view_only), allOn = tickable.length > 0 && tickable.every(m => sel.has(m.map_id));
+          mapBox.append(h("div", { class: "gw-cv-sechead" }, h("b", null, g.title), h("span", { class: "gw-dim" }, " " + maps.length + " maps "),
+            h("button", { type: "button", class: "gw-btnx small", onclick: async () => { for (const m of tickable) { if (allOn) sel.delete(m.map_id); else sel.add(m.map_id); } drawMaps(); await reload(); } }, allOn ? "Untick all" : "Tick all")));
+          const grid = h("div", { class: "gw-cv-tiles" });
+          for (const m of maps) {
+            const on = sel.has(m.map_id), lv = m.levels;
+            const meta = h("div", { class: "gw-dim" }, (lv ? "Lv ~" + lv[2] + (lv[0] === lv[1] ? "" : " (" + lv[0] + "-" + lv[1] + ")") + " · " : "") +
+              (m.view_only ? (m.templates || 0) + " monster types" : (m.spawns != null ? m.spawns : m.published + m.gm) + (m.medusa && !(m.published + m.gm) ? " monsters" : " spawns")));
+            if (m.view_only) {      // Atlantis / Wonderland: the server makes these monsters in code (modules/curves.py VIEW_ONLY)
+              grid.append(h("div", { class: "gw-cv-tile locked", role: "button", tabindex: 0, title: m.name + " (map " + m.map_id + "): view only. " + m.why,
+                onclick: () => GW.alert(m.why, m.name + ": view only"), onkeydown: e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); GW.alert(m.why, m.name + ": view only"); } } },
+                m.thumb ? h("img", { src: m.thumb, alt: "", loading: "lazy" }) : h("div", { class: "gw-cv-nothumb" }, "#" + m.map_id),
+                h("div", { class: "gw-cv-tname" }, h("span", { class: "gw-chip never" }, "View only"), " " + m.name), meta));
+              continue;
+            }
+            const box = h("input", { type: "checkbox", checked: on || null, "aria-label": "Use " + m.name, onclick: e => e.stopPropagation(), onchange: e => toggle(m.map_id, e.target.checked) });
+            grid.append(h("div", { class: "gw-cv-tile" + (on ? " on" : ""), role: "button", tabindex: 0, title: m.name + " (map " + m.map_id + ")",
+              onclick: () => toggle(m.map_id, !sel.has(m.map_id)), onkeydown: e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(m.map_id, !sel.has(m.map_id)); } } },
+              m.thumb ? h("img", { src: m.thumb, alt: "", loading: "lazy" }) : h("div", { class: "gw-cv-nothumb" }, "#" + m.map_id),
+              h("div", { class: "gw-cv-tname" }, box, " " + m.name, m.edits && m.edits.length === 1 ? h("span", { class: "gw-chip", "data-help": m.why }, " HP only") : null), meta));
+          }
+          mapBox.append(grid);
+        }
       }
       async function reload() {
         if (!sel.size) { D = null; drawCurve(); drawPlot(); return; }
@@ -88,6 +124,7 @@
       }
       // ---- level vs stat: grey = now (base), gold = after the curve
       function drawPlot() {
+        refreshCalc();
         GW.clear(plotEl);
         if (!D) { plotEl.append(h("p", { class: "gw-dim" }, "Tick a map to plot its monsters.")); return; }
         const W = 520, H = 300, pad = 46;
@@ -95,6 +132,7 @@
         const tmpl = {}; for (const t of D.templates) tmpl[t.map + "|" + t.template] = t;
         for (const s of D.spawns) {
           let before, after;
+          if (group !== "hp" && s.source === "medusa") continue;   // Medusa attack/defence are server code: not drawn as editable
           if (group === "hp") { before = s.base_hp; after = Math.round(s.base_hp * cv(curves.hp, s.level)); }
           else { const f = formula(s.level, s.elite, s.boss)[STAT_OF[group]]; before = f; after = Math.round(f * cv(curves[group], s.level)); }
           pts.push({ L: s.level, before, after, s });
@@ -123,20 +161,117 @@
         try {
           const r = await ctx.api("preview", { maps: Array.from(sel), curves, anchor });
           GW.clear(info).append(...[h("p", null, h("b", null, r.hp_rows + " spawn HP values and " + r.attr_rows + " combat-stat rows would be written.")),
+            r.medusa_hp_rows ? h("p", null, r.medusa_hp_rows + " of the HP values are Medusa's Island monsters (medusa_monster_rules, stock HP x the curve; attack / defence / ratings stay as the server code sets them).") : null,
+            r.medusa_off_stock && r.medusa_off_stock.length ? h("p", { class: "tt-bad" }, "Medusa HP not at stock now (set on World > Medusa or by an earlier curve); writing replaces it with stock x the curve: " + r.medusa_off_stock.slice(0, 20).map(x => x.name + " " + GW.fmt(x.hp) + " (stock " + GW.fmt(x.stock) + ")").join(", ") + (r.medusa_off_stock.length > 20 ? " ..." : "")) : null,
             r.kept_foreign.length ? h("p", { class: "tt-bad" }, "Kept (written by someone else): " + r.kept_foreign.map(k => k.name + " map " + k.map + " (" + k.by + ")").join(", ")) : null,
             h("table", { class: "gw-w-table" }, h("tr", null, ["Map", "Monster", "Level used", "Phys att", "Mag att", "Phys def", "Mag def"].map(x => h("th", null, x))),
-              r.sample.map(x => h("tr", null, h("td", null, x.map), h("td", null, x.name + (x.boss ? " (boss)" : x.elite ? " (elite)" : "")), h("td", null, x.level + (x.levels.length > 1 ? " of " + x.levels.join("/") : "")),
+              r.sample.map(x => h("tr", null, h("td", null, x.map), h("td", null, GW.monsterLabel ? GW.monsterLabel(x.template, { name: x.name, map: x.map, compact: true }) : x.name, x.boss ? " (boss)" : x.elite ? " (elite)" : ""), h("td", null, x.level + (x.levels.length > 1 ? " of " + x.levels.join("/") : "")),
                 ...["physical_attack", "magic_attack", "physical_defense", "magic_defense"].map(c => h("td", null, GW.fmt(x.base[c]) + (x.values && x.values[c] !== null ? " → " + GW.fmt(x.values[c]) : ""))))))].filter(Boolean));
           return r;
         } catch (e) { await GW.writeError(e); return null; }
       }
       async function write() {
         const r = await previewNow(); if (!r) return;
-        if (!await GW.confirm({ title: "Write the curve?", message: r.hp_rows + " HP values and " + r.attr_rows + " combat-stat rows on " + sel.size + " map(s). Monster levels do not change. It applies after the next gw251 restart; Undo is in the change log.", ok: "Write" })) return;
+        if (!await GW.confirm({ title: "Write the curve?", message: r.hp_rows + " HP values and " + r.attr_rows + " combat-stat rows on " + sel.size + " map(s). Monster levels do not change. It applies after the next server restart; Undo is in the change log.", ok: "Write" })) return;
         try { GW.writeDone(await ctx.api("apply", { maps: Array.from(sel), curves, anchor, version: D.version }), "Monster curve written (after restart)"); await reload(); }
         catch (e) { if (await GW.writeError(e) === "conflict") await reload(); }
       }
+      // ---- Damage to a character (static/shared/damage_calc.js): what each monster's hit does, today and with the curve.
+      let calc = null, panel = null, calcSrc = "maps", wl = { island: 0, camp: "athens", hp: 100, dmg: 100, allied: false };
+      const bankers = v => { const f = Math.floor(v), d = v - f; return d > 0.5 || (d === 0.5 && f % 2) ? f + 1 : f; };   // Python round()
+      const ANCHOR = (lv) => { const l = lv.slice().sort((a, b) => a - b); return anchor === "lowest" ? l[0] : anchor === "highest" ? l[l.length - 1] : l[(l.length - 1) >> 1]; };
+      const OVER = { pa: "physical_attack", ma: "magic_attack", hit: "hit", crit: "critical" };
+      const CURVE_OF = { pa: "attack", ma: "attack", hit: "rating", crit: "rating" };
+      function mapRows() {
+        if (!D) return [];
+        return D.templates.map(t => {
+          const L = ANCHOR(t.level_list), base = formula(L, t.elite, t.boss), ov = t.override, own = ov && t.override_by === "gwadmin-curve";
+          const now = { level: L, magic: !!t.magic, interval: GW.combat.MAP_ATTACK_INTERVAL }, after = Object.assign({}, now);
+          for (const [k, c] of Object.entries(OVER)) {
+            now[k] = ov && ov[c] !== null && ov[c] !== undefined ? ov[c] : base[c];
+            after[k] = ov && !own ? now[k] : Math.max(0, Math.min(INT_MAX, bankers(base[c] * cv(curves[CURVE_OF[k]], L))));
+          }
+          const sp = D.spawns.filter(s => s.map === t.map && s.template === t.template);
+          const hpNow = Math.max(...sp.map(s => s.hp)), hpAfter = Math.max(...sp.map(s => Math.max(1, bankers(s.base_hp * cv(curves.hp, s.level)))));
+          return { label: GW.monsterLabel ? GW.monsterLabel(t.template, { name: t.name, map: t.map, compact: true }) : t.name, hp: hpNow,
+            sub: "map " + t.map + (t.boss ? " · boss" : t.elite ? " · elite" : "") + (t.level_list.length > 1 ? " · levels " + t.level_list.join("/") + " (uses " + L + ")" : "") +
+              (hpAfter !== hpNow ? " · HP with curve " + GW.fmt(hpAfter) : "") + (ov && !own ? " · stats set by " + t.override_by + " (kept)" : ""),
+            cls: t.boss ? "boss" : "", groups: { now, after } };
+        }).sort((a, b) => a.groups.now.level - b.groups.now.level);
+      }
+      function wonderRows() {
+        const W8 = calc && calc.wonderland; if (!W8) return [];
+        const list = W8.roster[wl.camp].filter(r => (!wl.island || r.island === wl.island) && (wl.allied || !r.allied) && r.role !== "FiringHoop");
+        const seen = new Map();
+        for (const r of list) { const k = r.island + "|" + r.key + "|" + r.hp + "|" + r.allied; const x = seen.get(k); if (x) x.n++; else seen.set(k, { r, n: 1 }); }
+        const what = wl.dmg !== 100 || wl.hp !== 100, hpOf = hp => Math.max(1, Math.round(hp * wl.hp / 100));
+        // Live sliders (Server rates > Wonderland islands): "Today" already includes them; the what-if boxes multiply on top.
+        const SL = (calc && calc.wonderland_sliders) || {}, sl = i => SL[String(i)] || { hp: 100, damage: 100 };
+        const row = (r0, n, label, m) => {
+          const s = sl(r0.island), r = Object.assign({}, r0, { hp: r0.allied || !r0.hp ? r0.hp : Math.max(1, Math.round(r0.hp * s.hp / 100)) });
+          const now = Object.assign({ level: r.level, magic: r.magic, pa: r.pa, ma: r.ma, hit: r.hit, crit: r.crit, interval: r.interval,
+            damagePct: s.damage }, m || {});
+          const ability = !!(m && m.mult);
+          return { label: h("span", null, label || r.name, n > 1 ? h("b", null, " ×" + n) : null),
+            sub: ability ? "island " + r.island + " · special attack (not a normal hit)" :
+              "island " + r.island + (r.boss ? " · boss" : "") + (r.required ? " · must die" : "") + (r.allied ? " · ON YOUR SIDE" : "") +
+              (r.stationary ? " · tower, range " + r.range : "") + (r.area ? " · hits everyone within " + r.area : "") + (what && wl.hp !== 100 ? " · HP now " + GW.fmt(r.hp) : "") +
+              (s.hp !== 100 || s.damage !== 100 ? " · island sliders: HP " + s.hp + "%, damage " + s.damage + "%" : ""),
+            hp: ability ? null : what ? hpOf(r.hp) : r.hp, cls: r.allied ? "ally" : r.boss && !ability ? "boss" : "",
+            sliders: s.hp !== 100 || s.damage !== 100 ? "sliders: HP " + s.hp + "%, damage " + s.damage + "%" : "",
+            groups: what ? { now, after: Object.assign({}, now, { damagePct: s.damage * wl.dmg / 100 }) } : { now } };
+        };
+        const out = [];
+        for (const { r, n } of seen.values()) {
+          out.push(row(r, n));
+          const ab = k => W8.abilities.find(a => a.key === k);
+          if (r.mechanic === "rooster") { const a = ab("rooster"); out.push(row(r, 1, a.name + " (" + r.name + ")", { magic: true, ma: r.authored_ma, mult: Number(a.multiplier), interval: a.cooldown_s })); }
+          if (r.mechanic === "atlas" && !out.some(x => x.atlas)) { const a = ab("atlas_death_blast"); const x = row(r, 1, a.name + " (when a Follower dies)", { magic: true, ma: r.authored_ma, mult: Number(a.multiplier), interval: 0 }); x.atlas = true; out.push(x); }
+          if (r.mechanic === "platinum") { const a = ab("ground_fire"); const hoop = W8.roster[wl.camp].find(x => x.role === "FiringHoop") || r;
+            out.push(row(Object.assign({}, hoop, { island: 6, boss: false, required: false, hp: 0 }), 1, a.name + " (fire on the ground)", { level: hoop.level, magic: true, ma: 22000, hit: hoop.hit, crit: hoop.crit, mult: Number(a.multiplier), interval: a.cooldown_s })); }
+        }
+        return out;
+      }
+      function refreshCalc() {
+        if (!panel) return;
+        if (calcSrc === "maps") panel.setRows(mapRows(), { columns: ["now", "after"], titles: { now: "Today", after: "With this curve" } });
+        else panel.setRows(wonderRows(), wl.dmg !== 100 || wl.hp !== 100 ? { columns: ["now", "after"], titles: { now: "Today (in the server code)", after: "What-if: damage " + wl.dmg + "%" } } : { columns: ["now"], titles: { now: "Today (in the server code)" } });
+      }
+      async function mountCalc() {
+        await new Promise(res => { if (GW.damagePanel) return res(); const sc = document.createElement("script"); sc.src = "/static/shared/damage_calc.js?v=20261119"; sc.onload = res; sc.onerror = res; document.head.append(sc); });
+        if (!GW.damagePanel) { calcBox.append(h("p", { class: "tt-bad" }, "The damage calculator did not load.")); return; }
+        try { calc = await ctx.api("calc"); } catch (e) { calc = { characters: [], wonderland: null }; }
+        panel = GW.damagePanel({ characters: calc.characters,
+          note: "Normal hits use the server's own formula (hit chance, crit chance, defence, absorb, damage reduction). Skills and buffs other than the listed Wonderland abilities are not included." });
+        const srcBtns = h("div", { class: "gw-cv-bar" });
+        const wlBar = h("div", { class: "gw-cv-bar gw-dc-wl" });
+        function drawSrc() {
+          GW.clear(srcBtns).append(...[["maps", "Ticked maps (today vs this curve)"], ["wonderland", "Wonderland (stats in the server code)"]].map(([k, l]) =>
+            h("button", { type: "button", class: "gw-btnx small" + (calcSrc === k ? " on" : ""), onclick: () => { calcSrc = k; drawSrc(); refreshCalc(); } }, l)));
+          GW.clear(wlBar); wlBar.hidden = calcSrc !== "wonderland";
+          if (calcSrc !== "wonderland") return;
+          const W8 = calc.wonderland;
+          if (!W8) { wlBar.append(h("p", { class: "tt-bad" }, "data/wonderland-roster.json is missing on this editor.")); return; }
+          wlBar.append(
+            h("label", null, "Island ", h("select", { "aria-label": "Island", onchange: e => { wl.island = Number(e.target.value); refreshCalc(); } },
+              [0, 1, 2, 3, 4, 5, 6, 7, 8].map(i => h("option", { value: i, selected: wl.island === i || null }, i ? "Island " + i : "All 8 islands")))),
+            h("label", null, "Party is ", h("select", { "aria-label": "Party faction", onchange: e => { wl.camp = e.target.value; refreshCalc(); } },
+              h("option", { value: "athens" }, "Athenian"), h("option", { value: "sparta", selected: wl.camp === "sparta" || null }, "Spartan"))),
+            h("label", null, h("input", { type: "checkbox", checked: wl.allied || null, onchange: e => { wl.allied = e.target.checked; refreshCalc(); } }), " show monsters on your side (island 5)"),
+            GW.numberField({ label: "What-if HP %", value: wl.hp, min: 10, max: 300, onChange: (v, ok) => { if (ok && v !== null) { wl.hp = v; refreshCalc(); } } }),
+            GW.numberField({ label: "What-if damage %", value: wl.dmg, min: 10, max: 300, onChange: (v, ok) => { if (ok && v !== null) { wl.dmg = v; refreshCalc(); } } }),
+            h("p", { class: "gw-dim" }, "Wonderland monsters are not in the database: their stats are in the server code, so the curve and World > GM monsters do not change them. " +
+              "To change them for real, use Server rates > Wonderland islands (HP % and damage % per island); 'Today' already includes those sliders. " +
+              "The what-if boxes here only preview, on top of them. Monster HP is the same for every party size. Source: " + W8.source + "."));
+        }
+        drawSrc();
+        GW.clear(calcBox).append(h("h3", null, "Damage to a character"),
+          h("p", { class: "gw-dim" }, "Pick a character (or type its defences) to see what each monster does to it: chance to hit, damage per hit, damage per second and how fast it goes down. Updates as you drag the curve."),
+          srcBtns, wlBar, panel);
+        refreshCalc();
+      }
       drawMaps(); drawCurve(); drawPlot();
+      mountCalc();
     }
   });
 })();

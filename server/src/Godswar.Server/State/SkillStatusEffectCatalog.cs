@@ -127,6 +127,16 @@ internal static class SkillStatusEffectCatalog
     // ROUND2: the operator /buff list.
     public static IEnumerable<SkillStatusEffectDefinition> All => Definitions.Values;
 
-    public static bool TryGet(int skillId, out SkillStatusEffectDefinition definition) =>
-        Definitions.TryGetValue(skillId, out definition);
+    public static bool TryGet(int skillId, out SkillStatusEffectDefinition definition)
+    {
+        if (Definitions.TryGetValue(skillId, out definition)) return true;
+        // B22: levels 6-10 = the family's level-5 status, scaled
+        if (SkillLevelExtension.TryGetLevelFive(skillId, out var five, out var steps) &&
+            Definitions.TryGetValue(five, out var basis))
+        {
+            definition = SkillLevelExtension.Scale(basis, skillId, steps);
+            return true;
+        }
+        return false;
+    }
 }

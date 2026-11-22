@@ -15,13 +15,15 @@ internal sealed partial class PostgresOutboxDispatcher
     private readonly string _leaseOwner;
     private readonly int _commandTimeoutSeconds;
     private readonly IPostgresOutboxDispatcherProbe? _probe;
+    private readonly Func<bool> _noClientsConnected;
 
     public PostgresOutboxDispatcher(
         NpgsqlDataSource dataSource,
         IEnumerable<IOutboxEventConsumer> consumers,
         PostgresOutboxDispatcherOptions options,
         string? leaseOwner = null,
-        IPostgresOutboxDispatcherProbe? probe = null)
+        IPostgresOutboxDispatcherProbe? probe = null,
+        Func<bool>? noClientsConnected = null)
     {
         _dataSource = dataSource ??
             throw new ArgumentNullException(nameof(dataSource));
@@ -42,6 +44,8 @@ internal sealed partial class PostgresOutboxDispatcher
             1,
             (int)Math.Ceiling(options.CommandTimeout.TotalSeconds));
         _probe = probe;
+        _noClientsConnected = noClientsConnected ??
+            (static () => Operations.ServerIdleSignal.NoClientsConnected);
     }
 
     public Task RunAsync(
@@ -82,9 +86,19 @@ internal sealed partial class PostgresOutboxDispatcher
                 var nextDelay = _options.PollInterval;
                 try
                 {
-                    await dispatchPass(cancellationToken);
+                    var processed = await dispatchPass(cancellationToken);
                     consecutiveTransientFailures = 0;
                     PostgresCommandMetrics.MarkOutboxPassCompleted();
+                    // W5A: an empty pass with nobody connected cannot be
+                    // holding anyone's projection back, so poll more slowly.
+                    // Any work, or any connected client, restores the normal
+                    // interval on the very next pass.
+                    if (processed == 0 &&
+                        _options.IdlePollIntervalMilliseconds > 0 &&
+                        _noClientsConnected())
+                    {
+                        nextDelay = _options.IdlePollInterval;
+                    }
                 }
                 catch (NpgsqlException error)
                     when (!cancellationToken.IsCancellationRequested)

@@ -196,6 +196,7 @@ internal sealed partial class GameClientHandler
             _registry.ForgetMemberEntryJoinInFlight(
                 _session,
                 join.TargetInstanceId);
+            _registry.ForgetWonderlandLateReservation(reservationId);
             await ReleaseLegacyInstanceDailyEntryAsync(reservationId);
             Console.Error.WriteLine(
                 "[instance-entry] member join refused character=" +

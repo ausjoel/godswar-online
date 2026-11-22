@@ -201,15 +201,17 @@ internal static class SpringFestivalRules
     [
         new(GoodsDropPercent, Finalise2Rates.SeasonCategory, "Spring Festival: festival goods drop chance", "%",
             ServerRateKind.Absolute, 10m, 0m, 100m, 1m, 20, "Application/Seasons/SpringFestivalRules.cs",
-            "While the Spring Festival is open, each monster killed in the suburbs of Athens or Sparta drops one gold " +
-            "plate, Greetings Card, Preserved Ham, Rice Cake, Chocolate or Perfect Rose this often (the client has no Snow " +
-            "Demon monster; GENERATED). Hand them to the Spring Festival Envoy."),
+            "Chance that a monster killed in the Athens or Sparta suburbs drops a festival item " +
+            "(gold plate, Greetings Card, Preserved Ham, Rice Cake, Chocolate or Perfect Rose) " +
+            "while the Spring Festival is open. Players hand them to the Spring Festival Envoy. " +
+            "Our own value: the original is unknown."),
         new(FirecrackerDropPercent, Finalise2Rates.SeasonCategory, "Spring Festival: firecracker drop chance", "%",
             ServerRateKind.Absolute, 2m, 0m, 100m, 1m, 21, "Application/Seasons/SpringFestivalRules.cs",
-            "Chance of a Spring Festival Firecracker from the same monsters (GENERATED: the Spring Merrymaker's swap has no " +
-            "client script). The Lunar Beast Slayer takes 10 a day."),
+            "Chance that the same monsters drop a Spring Festival Firecracker. The Lunar Beast " +
+            "Slayer takes 10 a day. Our own value: the original is unknown."),
         new(ExpPillsPerFirecracker, Finalise2Rates.SeasonCategory, "Spring Festival: Exp Pills per firecracker", "pills",
             ServerRateKind.Absolute, 40m, 0m, 99m, 1m, 22, "Game/GameClientHandler.SpringFestival.cs",
-            "Bound Exp Pills the Lunar Beast Slayer gives for each firecracker. The client's line says 40.")
+            "Bound Exp Pills the Lunar Beast Slayer gives for each firecracker. The game's own " +
+            "text says 40.")
     ];
 }

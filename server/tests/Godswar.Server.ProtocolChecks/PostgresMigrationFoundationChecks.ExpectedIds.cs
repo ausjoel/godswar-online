@@ -203,6 +203,12 @@ internal static partial class PostgresMigrationFoundationChecks
         "20261030_235_active_character_names",
         "20261103_236_lelantine_farm_rounds",
         "20261103_237_lelantine_farm_tools",
-        "20261106_238_npc_dialogue_successors"
+        "20261106_238_npc_dialogue_successors",
+        "20261106_239_legacy_game_login_handoffs", // ROUND-SHAREDHANDOFF (PR 37)
+        "20261112_240_account_name_holds", // W4A
+        "20261112_241_login_awards", // W4-B login-window awards, Prize Chest, queued buffs
+        "20261113_242_session_health", // W6A per-connection login and session health
+        "20261122_243_clear_stale_login_status", // W14 one-off clear of stale token-less login flags
+        "20261122_244_medusa_title_order" // MEDUSA-TITLES fastest Advanced clear = Executioners (+3%)
     ];
 }

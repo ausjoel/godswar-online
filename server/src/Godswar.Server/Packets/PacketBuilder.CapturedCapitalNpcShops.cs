@@ -23,21 +23,26 @@ internal static partial class PacketBuilder
             expectedPacketCount: 7,
             expectedCapturedNpcId: 5_459)));
 
+    // B22 W11 d58 (the admin 2026-11-21: Athens Skill Vendor and Props shop like Sparta's): the captured skill shelf (Athens_036
+    // and both Newbie_004 vendors) and the Athens props shelf (Athens_021) carried B-Gold (0x04) at the item's silver
+    // price; Sparta's identical shelves charge silver. Their frames are rewritten to silver with Sparta's own rewrite.
+    // Prices stay as captured (the skill shelf is item-for-item Sparta's); the props shelf's prices come from
+    // npc_shop_overrides service PropsVendor (W11 sql/07-d58-athens-props-shelf.sql = Sparta's shelf).
     private static readonly Lazy<byte[]> SkillVendorCatalog = new(
-        () => InflateCatalog(
+        () => ApplySpartaMerchantCurrency(InflateCatalog( // B22
             SkillVendorCatalogGzip,
             expectedLength: 11_392,
             expectedPacketCount: 8,
-            expectedCapturedNpcId: 5_509));
+            expectedCapturedNpcId: 5_509)));
 
     private static readonly Lazy<byte[]> PropsVendorCatalog = new(
-        () => FilterUnsupportedCatalogItems(
+        () => ApplySpartaMerchantCurrency(FilterUnsupportedCatalogItems( // B22
             InflateCatalog(
                 PropsVendorCatalogGzip,
                 expectedLength: 7_120,
                 expectedPacketCount: 5,
                 expectedCapturedNpcId: 5_457),
-            [14_085]));
+            [14_085])));
 
     /// <summary>
     /// The Lelantine Farm quartermaster's net stock.

@@ -35,8 +35,8 @@ internal static class BattlefieldRewardChecks
     private static void CheckDefaults()
     {
         var rates = ServerRates.Current;
-        Check.Equal(0L, rates.Absolute(ServerRateKeys.BattlefieldAwarder), "RELEASE: the Awarder is off by default");
-        Check.Equal(0L, rates.Absolute(ServerRateKeys.BattlefieldScoring), "RELEASE: scoring is off by default");
+        Check.Equal(1L, rates.Absolute(ServerRateKeys.BattlefieldAwarder), "B21: the Awarder is on by default (live is on)");
+        Check.Equal(1L, rates.Absolute(ServerRateKeys.BattlefieldScoring), "B21: scoring is on by default (live is on)");
         Check.Equal(0L, rates.Absolute(ServerRateKeys.BattlefieldClaimHours), "claim on the battle day by default (IGG)");
         Check.Equal(7L, rates.Absolute(ServerRateKeys.BattlefieldTitleDays), "titles last a week by default");
         Check.Equal(5L, rates.Absolute(ServerRateKeys.BattlefieldPindusKillPoints), "a Pindus kill is 5 points (IGG)");
@@ -47,7 +47,7 @@ internal static class BattlefieldRewardChecks
         // BATTLEFIELD2
         Check.Equal(1L, rates.Absolute(ServerRateKeys.BattlefieldPindusIggTimes), "Pindus at the IGG times by default");
         Check.Equal(1L, rates.Absolute(ServerRateKeys.BattlefieldPindusBand), "Pindus level 60-200 by default");
-        Check.Equal(0L, rates.Absolute(ServerRateKeys.BattlefieldShowPaidAmounts), "RELEASE: the Awarder shows the base amounts by default");
+        Check.Equal(1L, rates.Absolute(ServerRateKeys.BattlefieldShowPaidAmounts), "B21: the Awarder shows the paid amounts by default (live is on)");
     }
 
     private static void CheckRounds()

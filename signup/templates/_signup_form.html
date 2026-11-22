@@ -1,0 +1,62 @@
+{# The sign-up form, shared by the home page panel (compact) and /register (full).
+   Field names, ids and the "Quick check:" label are what signup.js and test/e2e_signup.py rely on. #}
+{% macro signup_form(form, v, field, error, compact=False) %}
+{% if error %}
+<div class="alert" role="alert" id="form-error">{{ error }}</div>
+{% endif %}
+<form method="post" action="/signup" novalidate autocomplete="on">
+  <input type="hidden" name="ts" value="{{ form.ts }}">
+  <input type="hidden" name="n" value="{{ form.n }}">
+  <input type="hidden" name="tok" value="{{ form.tok }}">
+  <input type="hidden" name="chk" value="{{ form.chk }}">
+
+  <div class="field{% if field == 'username' %} bad{% endif %}">
+    <label for="username">Username</label>
+    <input id="username" name="username" type="text" value="{{ v.username }}" required
+           minlength="4" maxlength="16" pattern="[a-z0-9]{4,16}" autocapitalize="none" autocorrect="off"
+           spellcheck="false" autocomplete="username" aria-describedby="username-help"
+           {% if not compact and (field == 'username' or not field) %}autofocus{% endif %}>
+    <p class="help" id="username-help">{% if compact %}4-16 lowercase letters and numbers. You log in with it.{% else %}4 to 16 lowercase letters (a-z) and numbers. You type this name to log in to the game.{% endif %}</p>
+  </div>
+
+  {% if compact %}<div class="pair">{% endif %}
+  <div class="field{% if field == 'password' %} bad{% endif %}">
+    <label for="password">Password</label>
+    <div class="pw">
+      <input id="password" name="password" type="password" required minlength="8" maxlength="32"
+             autocomplete="new-password" aria-describedby="password-help" {% if field == 'password' %}autofocus{% endif %}>
+      <button type="button" class="show" data-for="password" hidden>Show</button>
+    </div>
+    <p class="help" id="password-help">{% if compact %}8-32 characters, no spaces.{% else %}8 to 32 characters, no spaces. Use a password you don't use anywhere else.{% endif %}</p>
+  </div>
+
+  <div class="field{% if field == 'password' %} bad{% endif %}">
+    <label for="confirm">{% if compact %}Again{% else %}Password again{% endif %}</label>
+    <input id="confirm" name="confirm" type="password" required minlength="8" maxlength="32"
+           autocomplete="new-password" aria-describedby="confirm-help">
+    <p class="help" id="confirm-help" aria-live="polite"></p>
+  </div>
+  {% if compact %}</div>{% endif %}
+
+  <div class="field{% if field == 'email' %} bad{% endif %}">
+    <label for="email">Email</label>
+    <input id="email" name="email" type="email" value="{{ v.email }}" required maxlength="254"
+           autocomplete="email" inputmode="email" aria-describedby="email-help" {% if field == 'email' %}autofocus{% endif %}>
+    <p class="help" id="email-help">{% if compact %}Kept private. Used to reset a forgotten password.{% else %}Kept private. It will be used to help you if you forget your password.{% endif %}</p>
+  </div>
+
+  <div class="hp" aria-hidden="true">
+    <label for="website">Leave this empty</label>
+    <input id="website" name="website" type="text" tabindex="-1" autocomplete="off">
+  </div>
+
+  <div class="field challenge{% if field == 'answer' %} bad{% endif %}">
+    <label for="answer">Quick check: {{ form.question }}</label>
+    <input id="answer" name="answer" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" required
+           autocomplete="off" aria-describedby="answer-help" {% if field == 'answer' %}autofocus{% endif %}>
+    <p class="help" id="answer-help">{% if compact %}A number. It keeps robots out.{% else %}Answer with a number. This keeps robots out.{% endif %}</p>
+  </div>
+
+  <button class="go" type="submit">Create account</button>
+</form>
+{% endmacro %}

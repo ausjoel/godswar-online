@@ -127,6 +127,25 @@ internal static class CorpseLootLimit
     }
 
     /// <summary>
+    /// Adds one fixed code drop (quantity as given, no rate multipliers) at the highest loot index the list does not use.
+    /// Used for the Atlantis Mermaid's EXP Stone 4 (the admin 2026-11-11). Returns the list unchanged when every index is used.
+    /// </summary>
+    public static IReadOnlyList<RolledMonsterLoot> AddFixed(
+        IReadOnlyList<RolledMonsterLoot> drops, uint itemId, int quantity)
+    {
+        ArgumentNullException.ThrowIfNull(drops);
+        var used = drops.Select(static drop => drop.LootIndex).ToHashSet();
+        for (var index = LootIndexCount - 1; index >= 0; index--)
+        {
+            if (!used.Contains(index))
+            {
+                return [.. drops, new RolledMonsterLoot(index, itemId, quantity, null, ChanceBasisPoints: 10_000)];
+            }
+        }
+        return drops;
+    }
+
+    /// <summary>
     /// Compares two drops by rarity: negative when <paramref name="a"/> is the better one. Quality (higher), then roll
     /// chance (lower), then value (higher). Ties are left to the caller's original order.
     /// </summary>

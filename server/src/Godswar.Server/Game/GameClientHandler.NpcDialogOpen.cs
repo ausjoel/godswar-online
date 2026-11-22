@@ -539,6 +539,19 @@ internal sealed partial class GameClientHandler
     private const int WishingPoolOrdinaryResultSubId = 103;
     private const int WishingPoolAdvancedResultSubId = 203;
 
+    /// <summary>
+    /// The script's tail-4 family: it shows the window's third fixed button with
+    /// <c>NF_L0_JN607</c> "Draw again". <c>JN103</c> asks "Do you want to spend 230
+    /// Gold in making another wish?" and this button is the client's only way to
+    /// say yes; without it the question had no answer but OK.
+    /// </summary>
+    /// <remarks>
+    /// GodsWar.exe 0x5a9900 (control 800022): the button re-sends the dialog's
+    /// 10069 with the click path it already holds, so the server sees the class
+    /// button again (301-601) with no 101/201 before it.
+    /// </remarks>
+    private const int WishingPoolDrawAgainSubId = 4;
+
     private static bool IsWishingPool(NpcSpawnDefinition npc) =>
         npc.NpcKey is "Athens_074" or "Sparta_074";
 
@@ -549,6 +562,8 @@ internal sealed partial class GameClientHandler
         NpcSpawnDefinition npc,
         CancellationToken cancellationToken)
     {
+        _wishingPoolPaidWishPending = false;
+        _wishingPoolDrawAgainOffered = false;
         await _session.SendAsync(
             PacketBuilder.NpcDialogOpenAck(
                 npc.InteractionId,
@@ -603,6 +618,7 @@ internal sealed partial class GameClientHandler
                 // both send the same 301-601 - so the paid entry is remembered until
                 // that click arrives.
                 _wishingPoolPaidWishPending = selection == 201;
+                _wishingPoolDrawAgainOffered = false;
                 await SendWishingPoolPageAsync(
                     npcId, page, [301, 401, 501, 601],
                     "WishingPoolClasses",
@@ -612,8 +628,12 @@ internal sealed partial class GameClientHandler
 
             if (selection is 301 or 401 or 501 or 601)
             {
-                var paid = _wishingPoolPaidWishPending;
+                // "Draw again" arrives as a bare class click: it is the paid wish
+                // the common-book result offered.
+                var paid = _wishingPoolPaidWishPending ||
+                    _wishingPoolDrawAgainOffered;
                 _wishingPoolPaidWishPending = false;
+                _wishingPoolDrawAgainOffered = false;
                 if (!WishingPoolCatalog.TryResolveClassButton(
                         selection,
                         out var characterClass))
@@ -631,6 +651,7 @@ internal sealed partial class GameClientHandler
             }
 
             _wishingPoolPaidWishPending = false;
+            _wishingPoolDrawAgainOffered = false;
             await SendWishingPoolPageAsync(
                 npcId, page, [101, 201], "WishingPoolWishPage",
                 cancellationToken);
@@ -682,7 +703,7 @@ internal sealed partial class GameClientHandler
     /// The outcome numbers are the client script's own: <c>JN100</c> is reported
     /// as <c>100</c> ("players below level 30 cannot make wishes"), <c>JN500</c> as
     /// <c>500</c> ("you have used up your free chances"), a wait is
-    /// <c>minutes * 100 + seconds</c> with tail <c>2</c>, and the three results are
+    /// <c>whole seconds * 100</c> with tail <c>2</c>, and the three results are
     /// <c>103</c> / <c>203</c> / <c>303</c> for common, advanced and ultimate.
     /// <para>
     /// The paid entry charges <see cref="WishingPoolPaidWishGoldCost"/> gold and does
@@ -737,11 +758,10 @@ internal sealed partial class GameClientHandler
                 var readyAt = lastUsedAt + WishingPoolUsage.Interval;
                 if (readyAt > now)
                 {
-                    var wait = readyAt - now;
-                    var encoded = checked(
-                        (int)wait.TotalMinutes * 100 + wait.Seconds);
                     await SendWishingPoolPageAsync(
-                        npcId, page, [encoded * 100 + 2], "WishingPoolWait",
+                        npcId, page,
+                        [EncodeWishingPoolWait(readyAt - now)],
+                        "WishingPoolWait",
                         cancellationToken);
                     return;
                 }
@@ -790,12 +810,16 @@ internal sealed partial class GameClientHandler
         }
 
         var advanced = WishingPoolCatalog.IsAdvancedTier(grant.SkillLevel);
+        // The common-book text asks whether to spend 230 Gold on another wish, so
+        // it is sent with the "Draw again" button that answers it. The advanced
+        // text asks nothing and stays a plain result.
+        _wishingPoolDrawAgainOffered = !advanced;
         await SendWishingPoolPageAsync(
             npcId,
             page,
-            [advanced
-                ? WishingPoolAdvancedResultSubId
-                : WishingPoolOrdinaryResultSubId],
+            advanced
+                ? [WishingPoolAdvancedResultSubId]
+                : WishingPoolCommonResultReply,
             "WishingPoolResult",
             cancellationToken);
         // Only the advanced tier (levels 3-4) is announced; ordinary books
@@ -807,6 +831,31 @@ internal sealed partial class GameClientHandler
                 grant.ItemId,
                 cancellationToken);
         }
+    }
+
+    /// <summary>
+    /// The common-book result: the "Draw again" button first, then the text.
+    /// </summary>
+    internal static readonly int[] WishingPoolCommonResultReply =
+        [WishingPoolDrawAgainSubId, WishingPoolOrdinaryResultSubId];
+
+    /// <summary>
+    /// Encodes the free-wish wait for the script's tail-2 family.
+    /// </summary>
+    /// <remarks>
+    /// <c>NpcFunSkillbook.lua</c> reads <c>(SubID - 2) / 100</c> as <b>whole
+    /// seconds</b> and splits it itself: minutes are <c>(s - s % 60) / 60</c> and
+    /// seconds are <c>s % 60</c>. Sending <c>minutes * 100 + seconds</c> made a
+    /// 59:59 wait read as 5,959 seconds, "99 minutes 19 seconds", although the
+    /// server only ever enforced one hour.
+    /// </remarks>
+    internal static int EncodeWishingPoolWait(TimeSpan wait)
+    {
+        var seconds = (int)Math.Clamp(
+            Math.Ceiling(wait.TotalSeconds),
+            1d,
+            WishingPoolUsage.Interval.TotalSeconds);
+        return seconds * 100 + 2;
     }
 
     /// <summary>

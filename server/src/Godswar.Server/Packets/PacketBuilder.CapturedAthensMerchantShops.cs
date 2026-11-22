@@ -76,67 +76,67 @@ internal static partial class PacketBuilder
         "H4sIAAAAAAACCrXWty/FURjG8d/vKpdBSFgleu/96r33evXeu6szCItYWEyMEovBwCrxD4jBbLOZrZfcuDG8yuD9nuEkb07O59mec068uqLPggzD8AgwP3YjJNMwnN8s0zRc53+tGIvTWWz9mt2XQiE3DHLDFVxLsHQjIDdSwS2NkG4U5EYruPvx0o2B3FgFNzFbunGQGw+5CZCbCLlJkJus4B6VS/fkq49dcwqUkwq5aQruY5t00yE3A3IzFVzbuHSzIDcbcnMg1wa5uQqudUu6eZCbr/HeHUu3AHILFdy7K+kWQa67j83P/3HxP3Nif8gpgdxSyC2D3HIF9+ZBuhWQWwm5VQpu4Jt0qyG3BnJrFdyLcFO4dZBbD7kNkNsIuU0KboPd/K2PXXMzlNMCua0Krv+pdNsgtx1yOxTc5xfpdkJuF+TaIbcbcnsgt1fBTaqwCLcPcvsV3NVb6Q5A7iDkuvvY8vk/HvpnTtwPOcMK7pHNQ7gjkDsKuWOQOw65E5A7CblTCu79k3SnIXdGwT1weAp3FnLnIHcechcU3PM9L+EuQu6hp7uP/VzzEpSzDLkrkOuA3FXIXYPcdQV38dJbuBsK7quPj3A3Fdyea1/hbkHuNuTuQO4u5L4Dw1+f8lggAAA=";
 
     private static readonly Lazy<byte[]> WarriorEquipmentVendorCatalog = new(
-        () => InflateCatalog(
+        () => ApplySpartaMerchantCurrency(InflateCatalog(
             WarriorEquipmentVendorCatalogGzip,
             expectedLength: 5624,
             expectedPacketCount: 5,
-            expectedCapturedNpcId: 5166));
+            expectedCapturedNpcId: 5166))); // B21: silver, like Sparta
 
     private static readonly Lazy<byte[]> ScholarEquipmentVendorCatalog = new(
-        () => InflateCatalog(
+        () => ApplySpartaMerchantCurrency(InflateCatalog(
             ScholarEquipmentVendorCatalogGzip,
             expectedLength: 5624,
             expectedPacketCount: 5,
-            expectedCapturedNpcId: 5167));
+            expectedCapturedNpcId: 5167))); // B21: silver, like Sparta
 
     private static readonly Lazy<byte[]> JewelryEquipmentVendorCatalog = new(
-        () => InflateCatalog(
+        () => ApplySpartaMerchantCurrency(InflateCatalog(
             JewelryEquipmentVendorCatalogGzip,
             expectedLength: 6784,
             expectedPacketCount: 6,
-            expectedCapturedNpcId: 5168));
+            expectedCapturedNpcId: 5168))); // B21: silver, like Sparta
 
     private static readonly Lazy<byte[]> ArmorEquipmentVendorCatalog = new(
-        () => InflateCatalog(
+        () => ApplySpartaMerchantCurrency(InflateCatalog(
             ArmorEquipmentVendorCatalogGzip,
             expectedLength: 8120,
             expectedPacketCount: 7,
-            expectedCapturedNpcId: 5169));
+            expectedCapturedNpcId: 5169))); // B21: silver, like Sparta
 
     private static readonly Lazy<byte[]> WarriorSupplierCatalog = new(
-        () => InflateCatalog(
+        () => ApplySpartaMerchantCurrency(InflateCatalog(
             WarriorSupplierCatalogGzip,
             expectedLength: 5624,
             expectedPacketCount: 5,
-            expectedCapturedNpcId: 5234));
+            expectedCapturedNpcId: 5234))); // B21: silver, like Sparta
 
     private static readonly Lazy<byte[]> SkillMerchantCatalog = new(
-        () => InflateCatalog(
+        () => ApplySpartaMerchantCurrency(InflateCatalog(
             SkillMerchantCatalogGzip,
             expectedLength: 7696,
             expectedPacketCount: 8,
-            expectedCapturedNpcId: 5237));
+            expectedCapturedNpcId: 5237))); // B21: silver, like Sparta
 
     private static readonly Lazy<byte[]> ArmorMerchantCatalog = new(
-        () => InflateCatalog(
+        () => ApplySpartaMerchantCurrency(InflateCatalog(
             ArmorMerchantCatalogGzip,
             expectedLength: 6960,
             expectedPacketCount: 6,
-            expectedCapturedNpcId: 5240));
+            expectedCapturedNpcId: 5240))); // B21: silver, like Sparta
 
     private static readonly Lazy<byte[]> ScholarSupplierCatalog = new(
-        () => InflateCatalog(
+        () => ApplySpartaMerchantCurrency(InflateCatalog(
             ScholarSupplierCatalogGzip,
             expectedLength: 5624,
             expectedPacketCount: 5,
-            expectedCapturedNpcId: 5245));
+            expectedCapturedNpcId: 5245))); // B21: silver, like Sparta
 
     private static readonly Lazy<byte[]> JewelryMerchantCatalog = new(
-        () => InflateCatalog(
+        () => ApplySpartaMerchantCurrency(InflateCatalog(
             JewelryMerchantCatalogGzip,
             expectedLength: 2144,
             expectedPacketCount: 2,
-            expectedCapturedNpcId: 5246));
+            expectedCapturedNpcId: 5246))); // B21: silver, like Sparta
 
     private static readonly Lazy<byte[]> AlchemyRecipeVendorCatalog = new(
         () => InflateCatalog(
@@ -146,11 +146,11 @@ internal static partial class PacketBuilder
             expectedCapturedNpcId: 5259));
 
     private static readonly Lazy<byte[]> IngredientsVendorCatalog = new(
-        () => InflateCatalog(
+        () => ApplySpartaMerchantCurrency(InflateCatalog(
             IngredientsVendorCatalogGzip,
             expectedLength: 8576,
             expectedPacketCount: 8,
-            expectedCapturedNpcId: 5260));
+            expectedCapturedNpcId: 5260))); // B21: silver, like Sparta
 
     private static readonly Lazy<byte[]> ForgingRecipeVendorCatalog = new(
         () => InflateCatalog(
@@ -172,6 +172,12 @@ internal static partial class PacketBuilder
             expectedLength: 8280,
             expectedPacketCount: 6,
             expectedCapturedNpcId: 5275));
+
+    // B21 (item 15, R1 audit): the captured Athens equipment, supplier, skill, armour, jewellery and ingredients
+    // shelves carried currency byte 0x04 (B-Gold; the Jewellery Merchant 0x02 Gold) at the item's SILVER price, so
+    // Athens charged 1,500x what Sparta charges for the same item (live ledger: 683 B-Gold for a 683-silver Sun Crown).
+    // Their frames are rewritten to silver (byte 9 = 3) with Sparta's own rewrite; prices stay as captured. The four
+    // recipe vendors were silver already.
 
     private static byte[] GetCapturedAthensMerchantCatalogSource(
         CapitalNpcServiceKind service) =>

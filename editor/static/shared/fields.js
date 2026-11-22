@@ -8,9 +8,10 @@
   "use strict";
   const GW = window.GW, h = GW.h;
   const TEXT = {
+    game_reload: "applies after game-data reload",
     now: "applies at the next use", per_use: "applies at the next use", hot_reload: "applies within 5 seconds",
-    next_login: "applies at the next login", login: "applies at the next login", after_restart: "applies after gw251 restart",
-    startup: "applies after gw251 restart", never: "the server does not read this", not_editable: "not editable",
+    next_login: "applies at the next login", login: "applies at the next login", after_restart: "applies after a server restart",
+    startup: "applies after a server restart", never: "the server does not read this", not_editable: "not editable",
     new_revision_and_restart: "not editable (published content)", live: "applied now (live)", unknown: "not established" };
 
   // ------------------------------------------------------------ applies chip
@@ -108,6 +109,29 @@
     return el;
   };
 
+  // ------------------------------------------------------------ login check banner
+  // GW.loginCheckBanner(cid) -> element: empty while the character can log in with nothing hidden; otherwise what
+  // would stop (red) or be hidden at (yellow) its next login, with a link to the page that fixes it. el.refresh().
+  GW.loginCheckBanner = function (cid) {
+    const el = h("div", { class: "gw-logincheck", role: "status", hidden: true });
+    el.refresh = async function () {
+      let r;
+      try { r = await GW.api("/api/m/player_health/character/" + cid); } catch (e) { el.hidden = true; return; }
+      GW.clear(el);
+      const found = (r && r.findings) || [];
+      el.hidden = !found.length;
+      if (!found.length) return;
+      const stops = found.some(f => f.severity === "blocks");
+      el.className = "gw-logincheck " + (stops ? "stops" : "hides");
+      el.append(h("strong", null, stops ? (r.character || "This character") + " cannot log in right now." : "Login check: something is hidden from " + (r.character || "this character") + " at login."),
+        h("ul", null, found.map(f => h("li", null, f.title + (f.where ? " (" + f.where + ")" : "") + ". " + (f.detail || "")))),
+        h("a", { href: "#/player_health" }, "Open Player health to fix it"));
+    };
+    el.refresh();
+    const off = GW.on ? GW.on("change", () => { if (el.isConnected === false) { off(); return; } el.refresh(); }) : null;
+    return el;
+  };
+
   // ------------------------------------------------------------ online banner
   // GW.onlineBanner(cid, {onState(state)}) -> element, refreshed every 15 s while on the page; el.refresh()
   GW.onlineBanner = function (cid, opts) {
@@ -162,6 +186,13 @@
     GW.status((label || (c && c.action) || "saved") + " - " + (live ? "applied now by the running server: the player sees it in game"
       : ((r && r.applies_text) || (c && c.applies_text) || "saved")), "ok");
     GW.emit("change", c);
+    // Login check: every character write is followed by "would this character still get into the world?".
+    const lc = r && r.login_check;
+    if (lc && lc.findings && lc.findings.length && !r.check) {
+      const stops = lc.findings.some(f => f.severity === "blocks");
+      GW.alert((stops ? "|cFFFF6B6B" : "|cFFFFFF00") + (lc.sentences || []).join("\n") + "|cFFFFFFFF\n\nOpen Player health to see it and fix it with one click.",
+        stops ? "This change would stop the login" : "Login check");
+    }
     return c;
   };
   // GW.writeError(e): explains 423 (online), 409 (changed since), 403 (read-only); returns the error kind

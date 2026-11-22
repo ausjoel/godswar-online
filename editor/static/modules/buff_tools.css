@@ -1,0 +1,23 @@
+.gw-mod-buff_tools .gw-bt-cols { display: grid; grid-template-columns: minmax(280px, 1.3fr) minmax(260px, 1fr) minmax(260px, 1fr); gap: 12px; align-items: start; }
+.gw-mod-buff_tools .gw-bt-col, .gw-mod-buff_tools .gw-bt-wide { padding: 10px; }
+.gw-mod-buff_tools .gw-bt-wide { margin-top: 12px; }
+.gw-mod-buff_tools h3 { margin: 0 0 .5rem; }
+.gw-mod-buff_tools .gw-bt-tools { display: flex; flex-wrap: wrap; gap: .4rem .6rem; align-items: center; margin-bottom: .5rem; }
+.gw-mod-buff_tools .gw-bt-groups { max-height: 60vh; overflow-y: auto; }
+.gw-mod-buff_tools .gw-bt-cat { margin: .6rem 0 .2rem; font-weight: bold; color: #e8c766; }
+.gw-mod-buff_tools .gw-bt-group { display: flex; gap: .5rem; align-items: center; width: 100%; text-align: left; background: none; border: 1px solid transparent; color: inherit; padding: 3px 4px; cursor: pointer; }
+.gw-mod-buff_tools .gw-bt-group:hover { border-color: #3e6a82; }
+.gw-mod-buff_tools .gw-bt-group.on { border-color: #e8c766; background: #1b3341; }
+.gw-mod-buff_tools .gw-bt-group.harm b { color: #ff9c9c; }
+.gw-mod-buff_tools .gw-bt-gname { flex: 1; }
+.gw-mod-buff_tools .gw-bt-head { display: flex; gap: .6rem; align-items: center; margin-bottom: .5rem; }
+.gw-mod-buff_tools .gw-bt-line { display: block; margin: .45rem 0; }
+.gw-mod-buff_tools .gw-bt-num { width: 5rem; }
+.gw-mod-buff_tools .gw-bt-effects { margin: .3rem 0 .3rem 1.2rem; padding: 0; }
+.gw-mod-buff_tools .gw-bt-go { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .8rem; }
+.gw-mod-buff_tools .gw-bt-names { max-height: 40vh; overflow-y: auto; border: 1px solid #1d3a4a; padding: 4px; margin-bottom: .5rem; }
+.gw-mod-buff_tools .gw-bt-name { display: block; padding: 2px 0; }
+.gw-mod-buff_tools .gw-bt-table { border-collapse: collapse; width: 100%; }
+.gw-mod-buff_tools .gw-bt-table th, .gw-mod-buff_tools .gw-bt-table td { padding: .3rem .5rem; border-bottom: 1px solid #1d3a4a; text-align: left; }
+.gw-mod-buff_tools .gw-bt-danger { margin-top: 12px; }
+@media (max-width: 1100px) { .gw-mod-buff_tools .gw-bt-cols { grid-template-columns: 1fr; } .gw-mod-buff_tools .gw-bt-table { display: block; overflow-x: auto; } }

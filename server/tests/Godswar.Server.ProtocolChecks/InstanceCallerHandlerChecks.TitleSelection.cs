@@ -122,7 +122,7 @@ internal static partial class InstanceCallerHandlerChecks
 
     private static uint ReadSelectedDisplay(byte[] packet)
     {
-        Check.Equal(80, packet.Length, "native 10199 title display retains its full stock layout");
+        Check.Equal(92, packet.Length, "10199 title display keeps its stock 80-byte layout plus the rank-display tail");
         return BinaryPrimitives.ReadUInt32LittleEndian(packet.AsSpan(76));
     }
 

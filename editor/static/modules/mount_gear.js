@@ -34,14 +34,32 @@
           checks.append(h('label',null,input,stat.name+' +'+stat.display));}
         status.textContent='Keeping current stats unless Set Epic G10 stats is selected. Percentages use the game’s one-decimal display.';
       }
-      source.addEventListener('change',select);mode.addEventListener('change',()=>{invalidate();if(current)targets();});target.addEventListener('change',invalidate);epic.addEventListener('change',invalidate);
+      source.addEventListener('change',()=>{select();drawSlots();});mode.addEventListener('change',()=>{invalidate();if(current)targets();});target.addEventListener('change',invalidate);epic.addEventListener('change',invalidate);
+      // B21 item 26: the mount slots and every mount-gear piece as in-game cells (hover = the game tooltip, click = choose it)
+      const slots=h('div',{class:'mg-slots'}),cells=h('div',{class:'mg-beforeafter'});
+      const loadGearUI=()=>GW.gearUI?Promise.resolve():new Promise((res,rej)=>{const s=document.createElement('script');s.src='/static/modules/_gear_ui.js';s.onload=res;s.onerror=()=>rej(new Error('cannot load the item slots'));document.body.append(s);});
+      const asRow=i=>Object.assign({prop_id:i.row.prop_id,sprite:i.sprite,name:i.name,slot_index:i.slot},i.row);
+      async function drawSlots(){
+        GW.clear(slots);
+        try{await loadGearUI();}catch(e){slots.append(h('p',{class:'tt-bad'},e.message));return;}
+        let worn={};
+        try{const st=await GW.gearUI.state(ctx.cid);for(const [s,r] of Object.entries(st.worn))if(Number(s)>=15)worn[s]=r;}catch(e){/* the mount-gear rows below still show */}
+        for(const i of D.items)if(i.location===0)worn[i.slot]=asRow(i);
+        const choose=(loc,s)=>{const i=D.items.find(x=>x.location===loc&&x.slot===s);if(!i)return;source.value=String(i.row.id);select();drawSlots();};
+        const mark=loc=>(s,row)=>row&&current&&current.location===loc&&current.slot===s?'gw-gearui-on':'';
+        const bag=D.items.filter(i=>i.location===1).map(asRow),wh=D.items.filter(i=>i.location===3).map(asRow);
+        slots.append(h('div',{class:'gw-gearui-row'},GW.gearUI.doll({tab:'mount',title:'Mount slots',rows:worn,mark:mark(0),onClick:s=>choose(0,s)}),
+          h('div',null,h('div',{class:'gw-gearui-dolltitle'},'Mount gear in the bag'),GW.gearUI.bag({rows:bag,mark:mark(1),onClick:s=>choose(1,s)})),
+          wh.length?h('div',null,h('div',{class:'gw-gearui-dolltitle'},'Mount gear in the warehouse'),GW.gearUI.bag({rows:wh,label:'Box',pages:9,mark:mark(3),onClick:s=>choose(3,s)})):null));
+      }
+      el.append(slots);
       el.append(h('div',{class:'mg-controls'},h('label',null,'Source ',source),h('label',null,'Operation ',mode),h('label',null,'Target ',target),h('label',null,epic,' Set Epic G10 stats (replace ordinary stats)')),
         checks,h('div',{class:'mg-controls'},previewButton,applyButton),status,result);
       async function load(){
         const ticket=++serial;const old=current&&String(current.row.id);lock(true);
         try{const data=await ctx.api('gear/'+ctx.cid);if(!alive||ticket!==serial)return;D=data;GW.clear(source);
           for(const i of D.items)source.append(h('option',{value:String(i.row.id)},LOC[i.location]+' '+(i.slot+1)+': '+i.name+' · Q'+i.row.item_quality+'/G'+i.row.item_grade));
-          if(old&&D.items.some(i=>String(i.row.id)===old))source.value=old;select();
+          if(old&&D.items.some(i=>String(i.row.id)===old))source.value=old;select();drawSlots();
         }catch(e){if(alive)status.textContent=e.message;}
         finally{if(alive)lock(false);if(D&&!D.items.length)previewButton.disabled=true;}
       }
@@ -49,6 +67,10 @@
         if(busy||!current)return;const ticket=++serial;view=null;lock(true);
         try{const p=await ctx.api('preview/'+ctx.cid,options());if(!alive||ticket!==serial)return;view=p;GW.clear(result);
           status.textContent=(p.changed?'Ready to apply.':'No changes.')+' Applies at next login.';
+          if(GW.gearUI){const src=D.items.find(i=>String(i.row.id)===source.value)||{};
+            result.append(h('div',{class:'mg-beforeafter'},h('span',null,'Now '),GW.gearUI.cell(Object.assign({sprite:src.sprite,name:p.source_name},p.before)),
+              h('span',null,' → '),GW.gearUI.cell(Object.assign({sprite:(GW.catalog.loadedRow('item',p.after.prop_id)||{}).sprite,name:p.name},p.after),{mark:'gw-gearui-changed'}),
+              h('span',{class:'gw-dim'},' (hover for the game tooltip)')));}
           result.append(h('h3',null,p.source_name+' → '+p.name),h('p',null,'Destination: '+LOC[p.destination.location]+' '+(p.destination.slot+1)+' · Q'+p.before.item_quality+'/G'+p.before.item_grade+' → Q'+p.after.item_quality+'/G'+p.after.item_grade),
             h('ul',null,p.attributes.map(s=>h('li',null,s.name+' +'+s.display))));
           if(!p.options.epic_g10)result.append(h('p',null,'All existing appended stat IDs and levels are retained. The target template’s own base bonuses may change.'));

@@ -326,7 +326,7 @@ internal sealed partial class GameClientHandler
     /// redrew the building page - and that page's numbers, taken one level deeper,
     /// are the client's worship prompts.
     /// </remarks>
-    private static int[] DialogPath(GamePacket packet)
+    internal static int[] DialogPath(GamePacket packet)
     {
         var payload = packet.Payload;
         var path = new List<int>(4);

@@ -289,9 +289,13 @@ internal static partial class Program
             "zero pet ID cannot create a presence packet");
 
         var title = PacketBuilder.PlayerTitleInfo(character, objectId);
-        Check.Equal(80, title.Length, "PlayerTitleInfo exact packet length");
+        // RANK-DISPLAY: native 80 bytes + 'GWRK' tail (marker, armour cap, weapon cap, 2 pad, character id).
+        Check.Equal(92, title.Length, "PlayerTitleInfo exact packet length");
+        Check.Equal(0x4B525747u, System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(title.AsSpan(80, 4)), "PlayerTitleInfo rank-display marker");
+        Check.Equal((byte)255, title[84], "PlayerTitleInfo default armour rank cap = none");
+        Check.Equal((byte)255, title[85], "PlayerTitleInfo default weapon rank cap = none");
         Check.Equal(
-            (ushort)80,
+            (ushort)92,
             ReadUInt16(title, 0),
             "PlayerTitleInfo exact length prefix");
         Check.Equal(

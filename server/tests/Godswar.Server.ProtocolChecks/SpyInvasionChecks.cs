@@ -123,10 +123,10 @@ internal static class SpyInvasionChecks
 
     private static void CheckDisabledKeepsSpiesPermanent()
     {
-        ServerRates.ResetToDefaults();
+        ServerRates.Install(ServerRatesSnapshot.Create([KeyValuePair.Create(ServerRateKeys.SpyInvasion, 0m)], 1, DateTimeOffset.UtcNow, "check", "test")); // B21: switch now defaults on; this part tests it off
         var runtime = new EcsMonsterMapRuntime(1, [CreateSpy()], Utc(1, 12, 0));
         runtime.Advance(Utc(1, 12, 5));
-        Check.True(runtime.Snapshot().Single().IsSpawned, "stock default leaves spies in the city all day");
+        Check.True(runtime.Snapshot().Single().IsSpawned, "switch off leaves spies in the city all day");
         Check.True(runtime.TryApplyDamage(SpyId, uint.MaxValue, 7, Utc(1, 12, 6), out _), "kill at stock");
         Check.True(
             runtime.Snapshot().Single().RespawnAt!.Value - Utc(1, 12, 6) == MonsterMapRuntime.DefaultRespawnDelay,

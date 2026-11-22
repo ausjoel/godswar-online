@@ -222,6 +222,10 @@ internal sealed partial class GameSessionRegistry
                     1,
                     BoundOnPickup: false)
                 : (RolledMonsterLoot?)null;
+        // the admin 2026-11-11: the Atlantis Mermaid's kill also drops one EXP Stone 4 (hot switch atlantis.mermaid_kill_exp_stone).
+        var mermaidStone = Godswar.Server.Application.WorldInstances.AtlantisPetSpawnPolicy.DropsMermaidKillStone(
+            damage.Monster.Definition.MapId,
+            damage.Monster.Definition.TemplateKey);
         // ROUND3 W3 Spring Festival: festival goods and firecrackers in the suburbs (maps 2 and 4) while it is open.
         var springDrops = Godswar.Server.Application.Seasons.SpringFestivalRules.Drops(
                 damage.Monster.Definition.MapId, deathEventId, diedAt,
@@ -261,10 +265,11 @@ internal sealed partial class GameSessionRegistry
         {
             lootKey = null;
             cerberusBook = null;
+            mermaidStone = false;
             seasonDrops = [];
             springDrops = [];
         }
-        if (lootKey is null && cerberusBook is null && seasonDrops.Length == 0 && springDrops.Length == 0 &&
+        if (lootKey is null && cerberusBook is null && !mermaidStone && seasonDrops.Length == 0 && springDrops.Length == 0 &&
             runtimeSpawnDrops is not { Count: > 0 })
         {
             return null;
@@ -301,6 +306,60 @@ internal sealed partial class GameSessionRegistry
                 : null,
             seasonDrops.Select(static drop => drop.Item1),
             springDrops.Select(static drop => drop.Item1)); // ROUND3 W3 Spring Festival
+        // B22 G1 (d38): world-boss god gems (code roll, outside the table, default off).
+        var godGem = lootKey is null ||
+            damage.Monster.Definition.MapId == Godswar.Server.Application.WorldInstances.AetherSanctumPolicy.MapId // B22 G2: Bahamut's Sanctum copy is no world boss
+            ? null
+            : Godswar.Server.Application.World.Content.GodGemLootRule.TryRoll(
+                damage.Monster.Definition.TemplateKey, deathEventId,
+                Godswar.Server.Application.Rates.ServerRates.Current);
+        if (godGem is { } godGemItem)
+        {
+            merged = Godswar.Server.Application.World.Content.CorpseLootLimit.AddFixed(merged, godGemItem, 1);
+        }
+        // B22 G2 (d36): Class Suit point medals (code roll, outside the table, medal.drops default on).
+        var medal = lootKey is null // runtime (summoned) spawns clear lootKey: no medals from them
+            ? null
+            : Godswar.Server.Application.World.Content.MedalLootRule.TryRoll(
+                damage.Monster.Definition, deathEventId, Godswar.Server.Application.Rates.ServerRates.Current);
+        if (medal is { } medalDrop && medalDrop.Quantity > 0)
+        {
+            merged = Godswar.Server.Application.World.Content.CorpseLootLimit.AddFixed(merged, medalDrop.ItemId, medalDrop.Quantity);
+        }
+        // B22 G2 (d38): Radiant / Primal gems from the Aether Sanctum (code roll, gem.sanctum_drops default on).
+        var sanctumGem = lootKey is null
+            ? null
+            : Godswar.Server.Application.World.Content.SanctumGemLootRule.TryRoll(
+                damage.Monster.Definition, deathEventId, Godswar.Server.Application.Rates.ServerRates.Current);
+        if (sanctumGem is { } gemDrop && gemDrop.Quantity > 0)
+        {
+            merged = Godswar.Server.Application.World.Content.CorpseLootLimit.AddFixed(merged, gemDrop.ItemId, gemDrop.Quantity);
+        }
+        if (mermaidStone)
+        {
+            merged = Godswar.Server.Application.World.Content.CorpseLootLimit.AddFixed(
+                merged,
+                Godswar.Server.Application.WorldInstances.AtlantisPetSpawnPolicy.MermaidKillStoneItemId,
+                1);
+        }
+        // B22 K1 (d43): world-boss skill-book chest, 5% per kill (code rule, outside the table like the Magic Bell).
+        uint skillBookChestId = 0;
+        var skillBookChest = lootKey is not null &&
+            Godswar.Server.Application.World.Content.SkillBookChestLootRule.TryRoll(
+                damage.Monster.Definition.TemplateKey, (short)damage.Monster.Definition.MapId, deathEventId,
+                Godswar.Server.Application.Rates.ServerRates.Current, out skillBookChestId);
+        if (skillBookChest)
+        {
+            merged = Godswar.Server.Application.World.Content.SkillBookChestLootRule.Add(merged, skillBookChestId,
+                Godswar.Server.Application.World.Content.SkillBookChestLootRule.ChanceBasisPoints(
+                    Godswar.Server.Application.Rates.ServerRates.Current));
+        }
+        // B22 B23-F (d86): a Flame Blast book from the table brings the killer's own class field book of that rank.
+        if (lootKey is not null)
+        {
+            merged = Godswar.Server.Application.World.Content.ClassFieldBookLootRule.Add(merged, tableDrops,
+                context.Character.Profession, Godswar.Server.Application.Rates.ServerRates.Current);
+        }
         // F-166 (b): at most CorpseLootLimit.Maximum drops (8: the client's 10029 window overflows at 9).
         // F-128 first: the Atlantis Mermaid's kill never drops a Morning Dew (only a net capture pays). It is removed
         // BEFORE the cap, so a withheld dew never takes a slot; then the best of what can drop is kept and the
@@ -335,6 +394,11 @@ internal sealed partial class GameSessionRegistry
         {
             var tag = cerberusBook is { } book && extra.LootIndex == book.LootIndex && extra.ItemId == book.ItemId ? "farm"
                 : magicBell && extra.ItemId == Godswar.Server.Application.World.Content.MagicBellLootRule.ItemId ? "magic-bell"
+                : mermaidStone && extra.ItemId == Godswar.Server.Application.WorldInstances.AtlantisPetSpawnPolicy.MermaidKillStoneItemId ? "mermaid"
+                : skillBookChest && extra.ItemId == skillBookChestId ? "skill-book-chest" // B22
+                : godGem is { } gg && extra.ItemId == gg ? "god-gem"
+                : medal is { } md && extra.ItemId == md.ItemId ? "medal" // B22 G2
+                : sanctumGem is { } sg && extra.ItemId == sg.ItemId ? "sanctum-gem" // B22 G2
                 : "season";
             Console.WriteLine(
                 $"[{tag}] {tag} drop monster={damage.ObjectId} template={damage.Monster.Definition.TemplateKey} item={extra.ItemId} death={deathEventId:N}");

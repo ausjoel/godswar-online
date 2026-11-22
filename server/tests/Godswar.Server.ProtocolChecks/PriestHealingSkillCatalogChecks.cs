@@ -148,13 +148,13 @@ internal static class PriestHealingSkillCatalogChecks
             retuned.HealAmount,
             "Priest healing amount is sourced from Power2");
 
-        CheckRejected(single with { SkillId = 755 }, "unknown family gap");
+        CheckRejected(single with { SkillId = 745 }, "unknown family gap"); // B22: 755-759 are now Heal 6-10
         CheckRejected(single with { Target = 1 }, "single target mask");
         CheckRejected(single with { AffectObj = 28 }, "single affect mask");
         CheckRejected(single with { Distance = 10f }, "single distance");
         CheckRejected(single with { Range = 12f }, "single range");
 
-        CheckRejected(area with { SkillId = 765 }, "unknown area rank");
+        CheckRejected(area with { SkillId = 770 }, "unknown area rank"); // B22: 765-769 are now Area Heal 6-10
         CheckRejected(area with { Target = 3 }, "area target mask");
         CheckRejected(area with { AffectObj = 1 }, "area affect mask");
         CheckRejected(area with { Distance = 11f }, "area distance");

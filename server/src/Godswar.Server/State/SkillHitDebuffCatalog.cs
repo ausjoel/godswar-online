@@ -38,6 +38,16 @@ internal static class SkillHitDebuffCatalog
 
     public static int Count => Definitions.Count;
 
-    public static bool TryGet(int skillId, out SkillHitDebuffDefinition definition) =>
-        Definitions.TryGetValue(skillId, out definition);
+    public static bool TryGet(int skillId, out SkillHitDebuffDefinition definition)
+    {
+        if (Definitions.TryGetValue(skillId, out definition)) return true;
+        // B22: levels 6-10 = the family's level-5 debuff, amount scaled
+        if (SkillLevelExtension.TryGetLevelFive(skillId, out var five, out var steps) &&
+            Definitions.TryGetValue(five, out var basis))
+        {
+            definition = basis with { SkillId = skillId, Amount = SkillLevelExtension.Scale(basis.Amount, steps) };
+            return true;
+        }
+        return false;
+    }
 }

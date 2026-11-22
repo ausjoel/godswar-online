@@ -7,12 +7,13 @@
 
   GW.module("awards", {
     async mount(el, ctx) {
-      let D = null, draft = [], checkTimer = null;
+      let D = null, draft = [], checkTimer = null, X = { templates: [], hidden: [], online_minutes: {} }, showHidden = false, showRemoved = false;   // X: B21 item 29
       const top = h("div"), editor = h("div", { class: "gw-aw-editor" }), side = h("div", { class: "gw-aw-side" });
       el.append(top, h("div", { class: "gw-aw-body" }, editor, side));
 
       async function load() {
         [D] = await Promise.all([ctx.api("overview"), GW.catalog.load("item").catch(() => null)]);
+        try { X = await ctx.api("extras" + (showRemoved ? "?archived=1" : "")); } catch (e) { X = { templates: [], hidden: [], online_minutes: { supported: false, reason: e.message } }; }
         const cur = (D.revisions || []).find(r => r.revision === (D.publication || {}).revision) || { entries: [] };
         draft = cur.entries.map(e => ({ item_id: e.item_id, quantity: e.quantity, item_quality: e.item_quality, bound: e.bound }));
         drawTop(); drawEditor(); drawSide();
@@ -24,7 +25,7 @@
             "Published revision ", h("b", null, String(p.revision)), " by ", String(p.updated_by || "?"), ". Claims in the last 24 hours: ", String(D.claims_today), ". ",
             GW.appliesChip("after_restart")),
           h("p", { class: "gw-dim" }, "Each save publishes a NEW revision (the old ones stay in the history and can be published again; that is the undo). " +
-            "The running server keeps the award it read at start-up, so players get the new list after the next gw251 restart. " +
+            "The running server keeps the award it read when it started, so players get the new list after the next server restart. " +
             "Everything the server checks at start-up is checked here first: 1-" + D.limits.rows + " rows, " + D.limits.total + " items in total, quality 1-16, stack size from the item, eggs only with a pet profile for that quality."));
       }
       function row(r, i) {
@@ -54,7 +55,8 @@
           h("div", { class: "gw-inv-btns" },
             h("button", { class: "gw-btnx", type: "button", onclick: add }, "+ Add items"),
             h("button", { class: "gw-btnx", type: "button", disabled: !D.writable || null, onclick: publish }, "Publish as revision " + ((D.publication || {}).revision + 1)),
-            h("button", { class: "gw-btnx", type: "button", onclick: load }, "Discard draft")),
+            h("button", { class: "gw-btnx", type: "button", onclick: load }, "Discard draft"),
+            h("button", { class: "gw-btnx", type: "button", "data-help": "Keep this item list as a named template (it is checked like a publish). Load it into the draft later and Publish.", onclick: saveTemplate }, "Save as template")),
           status);
         check();
       }
@@ -91,7 +93,7 @@
         const p = D.publication || {};
         const list = r.rows.map(x => "  " + x.name + " x" + x.quantity + (x.item_quality !== 1 ? " (quality " + x.item_quality + ")" : "") + (x.bound ? ", bound" : "")).join("\n");
         if (!await GW.confirm({ title: "Publish revision " + (p.revision + 1) + "?", message: "Every character's daily Online Award becomes:\n\n" + list +
-          "\n\nIt reaches players after the next gw251 restart. The old revision stays in the history (Publish this again = undo).", ok: "Publish" })) return;
+          "\n\nIt reaches players after the next server restart. The old version stays in the history (Publish this again = undo).", ok: "Publish" })) return;
         try {
           const res = await ctx.api("publish", { expected_revision: p.revision, rows: draft });
           GW.writeDone(res, "Online Award revision " + res.revision + " published (after restart)");
@@ -102,22 +104,53 @@
         return h("div", { class: "gw-aw-mini" }, entries.map(e => { const it = irow(e.item_id); return GW.cell({ sprite: it.sprite, name: it.name || e.name, count: e.quantity, tipType: "item", tipId: e.item_id,
           help: (it.name || e.name || "#" + e.item_id) + " x" + e.quantity + (e.item_quality !== 1 ? " · quality " + e.item_quality : "") + (e.bound ? " · bound" : "") }); }));
       }
+      // ---- B21 item 29: required online time, templates, hiding old revisions
+      async function saveTemplate() {
+        const name = h("input", { type: "text", maxlength: 60, "aria-label": "Template name", placeholder: "e.g. Weekend award" });
+        if (!await GW.confirm({ title: "Save the draft as a template", ok: "Save", el: h("div", null, h("p", null, "Name:"), name) })) return;
+        try { await ctx.api("templates/save", { name: name.value, rows: draft }); GW.status("template saved", "ok"); await load(); }
+        catch (e) { await GW.alert(e.message, "Not saved"); }
+      }
+      function onlineBox() {
+        const m = X.online_minutes || {};
+        if (!m.supported) return h("div", { class: "gw-aw-preset" }, h("b", null, "Minutes online first"), h("p", { class: "gw-dim" }, m.reason || "Unavailable."));
+        const inp = h("input", { type: "number", min: m.min, max: m.max, value: m.value, class: "gw-aw-num", "aria-label": "Minutes online before the award" });
+        return h("div", { class: "gw-aw-preset" }, h("b", { "data-help": "How long a character must be in the world (this session) before the Online Award can be collected. 0 = at once, as in the original game. Applies to the next claim; no restart." }, "Minutes online first"),
+          h("p", null, inp, " minutes ", h("button", { class: "gw-btnx small", type: "button", onclick: async () => {
+            try { const r = await ctx.api("online-minutes", { minutes: Number(inp.value), expected: m.value }); GW.writeDone(r, "Online Award: " + r.value + " minutes online first"); await load(); }
+            catch (e) { if (await GW.writeError(e) === "conflict") await load(); } } }, "Save")),
+          h("p", { class: "gw-dim" }, m.value ? "Players must stay online " + m.value + " minute(s) after logging in; earlier they get one chat line saying how long is left." : "Now: at once (the original game)."));
+      }
       function drawSide() {
-        GW.clear(side).append(h("h3", null, "Presets"));
+        GW.clear(side).append(h("h3", null, "Online time"), onlineBox(), h("h3", null, "Templates"),
+          h("label", { class: "gw-dim" }, h("input", { type: "checkbox", checked: showRemoved || null, onchange: async e => { showRemoved = e.target.checked; await load(); } }), " show removed"));
+        for (const t of X.templates) {
+          side.append(h("div", { class: "gw-aw-preset" + (t.archived ? " gen" : "") },
+            h("b", null, t.name), h("span", { class: "gw-dim" }, " " + (t.created_by || "") + " · " + new Date(t.created * 1000).toLocaleDateString()),
+            entriesView(t.rows),
+            h("button", { class: "gw-btnx small", type: "button", onclick: () => { draft = t.rows.map(x => ({ item_id: x.item_id, quantity: x.quantity, item_quality: x.item_quality, bound: x.bound })); changed(true); GW.status("Template loaded into the draft. Nothing is saved until you press Publish.", "ok"); } }, "Load into draft"),
+            " ",
+            h("button", { class: "gw-btnx small" + (t.archived ? "" : " danger"), type: "button", onclick: async () => { await ctx.api("templates/" + t.id + "/remove", { restore: !!t.archived }); await load(); } }, t.archived ? "Restore" : "Remove")));
+        }
+        if (!X.templates.length) side.append(h("p", { class: "gw-dim" }, "No saved templates yet: build a draft and press Save as template."));
+        side.append(h("h3", null, "Presets"));
         for (const p of D.presets) {
           side.append(h("div", { class: "gw-aw-preset" + (p.generated ? " gen" : "") },
-            h("b", null, p.title), p.generated ? h("span", { class: "gw-chip never", "data-help": "Invented by the editor build, not from IGG, the wiki or the client." }, "GENERATED") : null,
+            h("b", null, p.title), p.generated ? h("span", { class: "gw-chip never", "data-help": "Made up for this server; not from the original game." }, "Our own") : null,
             entriesView(p.rows), h("p", { class: "gw-dim" }, p.why),
             h("button", { class: "gw-btnx small", type: "button", onclick: () => { draft = p.rows.map(x => ({ item_id: x.item_id, quantity: x.quantity, item_quality: x.item_quality, bound: x.bound })); changed(true); GW.status("Preset loaded into the draft. Nothing is saved until you press Publish.", "ok"); } }, "Load into draft")));
         }
-        side.append(h("h3", null, "History"));
+        side.append(h("h3", null, "History"), h("label", { class: "gw-dim" }, h("input", { type: "checkbox", checked: showHidden || null, onchange: e => { showHidden = e.target.checked; drawSide(); } }), " show hidden (" + X.hidden.length + ")"));
         for (const r of D.revisions) {
           const live = r.revision === (D.publication || {}).revision;
+          const hidden = X.hidden.includes(r.revision);
+          if (hidden && !showHidden) continue;
           side.append(h("div", { class: "gw-aw-preset" + (live ? " live" : "") },
             h("b", null, "Revision " + r.revision), live ? h("span", { class: "gw-chip now" }, "published") : null,
             h("span", { class: "gw-dim" }, " " + (r.created_by || "") + " · " + String(r.created_at || "").slice(0, 16).replace("T", " ")),
             entriesView(r.entries),
-            live ? null : h("button", { class: "gw-btnx small", type: "button", onclick: () => { draft = r.entries.map(e => ({ item_id: e.item_id, quantity: e.quantity, item_quality: e.item_quality, bound: e.bound })); changed(true); GW.status("Revision " + r.revision + " loaded into the draft: press Publish to make it the award again (that is the undo).", "ok"); } }, "Publish this again")));
+            live ? null : h("button", { class: "gw-btnx small", type: "button", onclick: () => { draft = r.entries.map(e => ({ item_id: e.item_id, quantity: e.quantity, item_quality: e.item_quality, bound: e.bound })); changed(true); GW.status("Revision " + r.revision + " loaded into the draft: press Publish to make it the award again (that is the undo).", "ok"); } }, "Publish this again"),
+            live ? null : h("button", { class: "gw-btnx small", type: "button", "data-help": "Old revisions stay in the database (they cannot be deleted); this hides it from this list.", onclick: async () => { await ctx.api("revisions/" + r.revision + "/hide", { hide: !hidden }); await load(); } }, hidden ? "Unhide" : "Hide")));
         }
       }
       try { await load(); } catch (e) { GW.clear(editor).append(h("p", { class: "tt-bad" }, e.message)); }

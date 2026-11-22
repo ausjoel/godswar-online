@@ -1,0 +1,16 @@
+.gw-mod-legality .gw-leg-head p { margin: .3rem 0; }
+.gw-mod-legality .gw-leg-totals, .gw-mod-legality .gw-leg-tools { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; margin: .6rem 0; }
+.gw-mod-legality .gw-leg-search { min-width: 16rem; }
+.gw-mod-legality .gw-leg-chip { display: inline-block; padding: .1rem .5rem; border-radius: 3px; border: 1px solid #2e4a5c; margin-left: .3rem; white-space: nowrap; }
+.gw-mod-legality .gw-leg-breaks_login { background: #5c1616; border-color: #c43c3c; color: #ffd6d6; }
+.gw-mod-legality .gw-leg-hidden { background: #4f3d0c; border-color: #c9a227; color: #ffefc0; }
+.gw-mod-legality .gw-leg-harmless { background: #1b3341; border-color: #3e6a82; color: #cfe6f2; }
+.gw-mod-legality .gw-leg-char { border-bottom: 1px solid #2e4a5c; padding: 6px 0; }
+.gw-mod-legality .gw-leg-char summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; }
+.gw-mod-legality .gw-leg-char summary button { margin-left: auto; }
+.gw-mod-legality .gw-leg-table { border-collapse: collapse; width: 100%; margin-top: .4rem; }
+.gw-mod-legality .gw-leg-table th, .gw-mod-legality .gw-leg-table td { padding: .3rem .5rem; border-bottom: 1px solid #1d3a4a; text-align: left; vertical-align: middle; }
+.gw-mod-legality .gw-leg-fix { white-space: nowrap; }
+.gw-mod-legality .gw-leg-fix select { margin-right: .3rem; max-width: 16rem; }
+.gw-mod-legality .gw-leg-line { display: block; margin: .25rem 0; }
+@media (max-width: 760px) { .gw-mod-legality .gw-leg-table { display: block; overflow-x: auto; } }

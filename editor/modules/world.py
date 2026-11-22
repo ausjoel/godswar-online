@@ -303,6 +303,7 @@ def _item(ctx, pid, what="item"):
     meta = _rb(ctx).item_meta(pid)
     if not meta["server"]:
         raise Bad("%s %d is not an item template of this server" % (what, pid))
+    common.refuse_ungrantable(pid)
     if not meta["client"]:
         raise Bad("%s %s (#%d) is not in the Origin client: players would see an empty or broken item" % (
             what, meta["name"], pid))

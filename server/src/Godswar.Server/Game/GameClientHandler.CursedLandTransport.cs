@@ -111,7 +111,7 @@ internal sealed partial class GameClientHandler
         // FINALISE2: Gates table (band, opening mode, GM rule) for Cursed Zone 2; compiled = 20+ always (the admin F-69).
         var gateKey = Godswar.Server.Application.Gates.GateKeys.CursedZone2;
         var band = Godswar.Server.Application.Gates.GateRules.Band(gateKey, CursedLandTransportProtocol.MinimumLevel, Godswar.Server.Application.Gates.GateCatalog.LevelCap);
-        var gmSkips = Godswar.Server.Application.Gates.GateRules.GmMaySkip(gateKey) && await HasOperatorAuthorityAsync(cancellationToken);
+        var gmSkips = Godswar.Server.Application.Gates.GateRules.GmMaySkip(gateKey) && await HasOperatorPowerAsync(Godswar.Server.Application.Operators.GmPowerPolicy.GateBypass, cancellationToken);
         if (!gmSkips && !Godswar.Server.Application.Gates.GateSchedules.IsOpen(gateKey, _realmCalendar, DateTimeOffset.UtcNow))
         {
             await _session.SendAsync(PacketBuilder.ServerNote("Cursed Zone 2 is closed now."), cancellationToken, "CursedLandClosed");

@@ -230,7 +230,7 @@ internal sealed partial class GameClientHandler
         }
 
         var notice = new GamePacket(PacketBuilder.GmPanelCommandFrame(_character.Id, "/mall"));
-        if (!await HasOperatorAuthorityAsync(cancellationToken))
+        if (!await HasOperatorPowerAsync("cmd.mall", cancellationToken)) // W5B: also refused when /mall is switched off
         {
             _gmMall = null;
             Console.WriteLine(

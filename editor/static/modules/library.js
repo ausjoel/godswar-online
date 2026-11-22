@@ -251,6 +251,8 @@
           /\bnoserver\b/.test(fl) || e.in_server === false ? h("span", { class: "gw-chip never", "data-help": "Your client has it but the server's templates do not, so the server cannot create it." }, "server cannot create it") : null,
           /\bcn\b/.test(fl) ? h("span", { class: "gw-chip restart", "data-help": "The client's own name for it is Chinese." }, "Chinese name in client") : null,
           h("button", { class: "gw-btnx small", type: "button", "data-help": "Copy the id to the clipboard.", onclick: () => { try { navigator.clipboard.writeText(String(d.id)); GW.status("copied " + d.id, "ok"); } catch (x) { GW.status(String(d.id)); } } }, "Copy id")))));
+    // ---- picture / 3D model (package E: static/graphics/gw-art.js)
+    if (["monster", "npc", "pet"].includes(type)) det.append(artBox(type, d));
     // ---- use in editor
     det.append(useBox(d));
     // ---- the game tooltip (items: with quality / grade sliders)
@@ -303,12 +305,12 @@
     const writable = S.info && S.info.writable;
     if (d.type === "item" && d.entry.in_server !== false) {
       btns.append(h("button", { class: "gw-btnx", type: "button", disabled: writable ? null : true,
-        "data-help": writable ? "Put this item into a character's bag (quality, grade, bound, quantity). Offline: database write with Undo, applies at the next login. Online with the round-2 server: the player gets it at once." : "This editor is read-only for this database.",
+        "data-help": writable ? "Put this item into a character's bag (quality, grade, bound, quantity). Offline: saved with Undo, applies at the next login. Online: the player gets it at once, when the game server supports it." : "This editor is read-only for this database.",
         onclick: () => giveDialog(d) }, "Give to a character ..."));
     }
     if (d.type === "map") {
       btns.append(h("button", { class: "gw-btnx", type: "button", disabled: writable ? null : true,
-        "data-help": writable ? "Move a character to a named place on this map. Online with the round-2 server: an instant teleport. Offline: applies at the next login." : "This editor is read-only for this database.",
+        "data-help": writable ? "Move a character to a named place on this map. Online: an instant teleport, when the game server supports it. Offline: applies at the next login." : "This editor is read-only for this database.",
         onclick: () => moveDialog(d) }, "Move a character here ..."));
     }
     if (d.use) {
@@ -377,7 +379,7 @@
       const fg = d.forge;
       if (fg && (fg.cost_quality || fg.cost_grade)) {
         const row = (lab, arr, hl) => arr ? h("tr", null, h("th", { "data-help": hl }, lab), arr.map(v => h("td", null, fmt(v)))) : null;
-        out.append(h("h3", { class: "lib-h", "data-help": "The client's forge table for this item (EquipForge.xml): what each quality and grade step costs, and the chance modifier per step." }, "Forging (client table)"),
+        out.append(h("h3", { class: "lib-h", "data-help": "The game's forge table for this item: what each quality and grade step costs, and the chance modifier per step." }, "Forging (client table)"),
           h("div", { class: "lib-scroll" }, h("table", { class: "lib-qtab" },
             h("tr", null, h("th", null, "Step"), Array.from({ length: Math.max((fg.cost_quality || []).length, (fg.cost_grade || []).length) }, (_, i) => h("th", null, "+" + (i + 1)))),
             row("Quality cost", fg.cost_quality, "Forge points / materials per quality step (client value)."),
@@ -424,7 +426,7 @@
       const lv = d.levels || [];
       if (!lv.length) return null;
       const mx = Math.max(...lv.map(x => Number(x.value) || 0)) || 1;
-      return h("div", null, h("h3", { class: "lib-h", "data-help": "The value this attribute adds at each level (ItemAppendAttribute.xml)." }, (d.stat_label || "Value") + " per level"),
+      return h("div", null, h("h3", { class: "lib-h", "data-help": "The value this attribute adds at each level." }, (d.stat_label || "Value") + " per level"),
         h("div", { class: "lib-bars" }, lv.map(x => h("div", { class: "lib-bar", "data-help": "Level " + x.level + ": +" + fmt(x.value) },
           h("span", { class: "lv" }, x.level), h("span", { class: "b", style: "width:" + Math.max(2, Math.round(Number(x.value) / mx * 100)) + "%" }), h("span", { class: "v" }, "+" + fmt(x.value))))));
     },
@@ -453,7 +455,7 @@
     async monster(d) {
       const st = d.server_stats;
       if (!st) return h("div", { class: "gw-dim" }, "The client has no monster stats; the server database has none for this key.");
-      return h("div", null, h("h3", { class: "lib-h", "data-help": "monster_templates.stats on the server (read-only)." }, "Server stats"),
+      return h("div", null, h("h3", { class: "lib-h", "data-help": "The monster's stats on the server (read-only)." }, "Server stats"),
         h("table", { class: "lib-attrs" }, Object.entries(st).slice(0, 80).map(([k, v]) => h("tr", null, h("th", null, k), h("td", { class: "gw-value" }, typeof v === "object" ? JSON.stringify(v) : fmt(v))))));
     },
     async suit(d) {
@@ -473,6 +475,23 @@
   }
 
   // map: an SVG plot of places, gates, monster and NPC spawn points (x right, z up)
+  // package E: pictures of monsters / NPCs / pets and world-aligned map underlays (static/graphics/gw-art.js)
+  function withArt(fn) {
+    const go = () => { try { fn(window.GWArt); } catch (e) { console.error(e); } };
+    if (window.GWArt) return go();
+    const s = document.createElement("script"); s.src = "/static/graphics/gw-art.js"; s.onload = go; document.head.append(s);
+  }
+  function artBox(type, d) {
+    const box = h("div", { class: "lib-art" });
+    withArt(A => {
+      if (type === "pet") {
+        const models = d.models || (d.entry && d.entry.models) || {};
+        const stems = [...new Set(Object.values(models).flat().map(m => String(m.model || "").replace(/\.jcs$/i, "")).filter(Boolean))];
+        A.load().then(() => stems.forEach(st => { if (A.has("pet", st)) box.append(A.portrait("pet", st, { height: 120 })); }));
+      } else box.append(A.portrait(type, String(d.id), { height: 180 }));
+    });
+    return box;
+  }
   function mapPlot(d) {
     const pts = [];
     const add = (x, z) => { if (isFinite(Number(x)) && isFinite(Number(z))) pts.push([Number(x), Number(z)]); };
@@ -496,6 +515,14 @@
       if (click) { c.style.cursor = "pointer"; c.addEventListener("click", click); }
       svg.append(c);
     };
+    withArt(A => A.underlay(d.id).then(u => {
+      if (!u) return;
+      const im = document.createElementNS(NS, "image"), ax = X(-256), ay = Y(256);
+      im.setAttribute("href", u.src); im.setAttribute("x", ax.toFixed(1)); im.setAttribute("y", ay.toFixed(1));
+      im.setAttribute("width", (X(256) - ax).toFixed(1)); im.setAttribute("height", (Y(-256) - ay).toFixed(1));
+      im.setAttribute("opacity", "0.7"); im.setAttribute("preserveAspectRatio", "none");
+      svg.insertBefore(im, svg.firstChild);
+    }));
     plot.monsters.forEach(p => dot(p.x, p.z, "mon", 1.6, null));
     plot.npcs.forEach(p => dot(p.x, p.z, "npc", 2.4, "NPC " + p.npc_key + " (" + p.x + ", " + p.z + ")"));
     (d.gates || []).forEach(g => dot(g.x, g.z, "gate", 5, "Gate to map " + g.to + " (" + g.x + ", " + g.z + ")", () => jump("map", g.to)));
@@ -703,7 +730,7 @@
       S.detail = h("div", { class: "lib-detail", "aria-live": "polite" });
       const cat = info.catalog || {};
       el.append(h("div", { class: "lib-top" }, searchBox(),
-        h("span", { class: "gw-chip now", "data-help": "Everything here is read from the client files (catalog-origin, built by build_origin_catalog.py) and, read-only, from the server database. Nothing on this page changes the game by itself." }, "read-only"),
+        h("span", { class: "gw-chip now", "data-help": "Everything here is read from the game's own files and, read-only, from the server database. Nothing on this page changes the game by itself." }, "read-only"),
         h("span", { class: "gw-dim", "data-help": "Client folder the catalogue was built from, and the database snapshot it was checked against." },
           "from " + (cat.client || "the Origin client") + (info.database ? " · database " + info.database : ""))),
         h("div", { class: "lib-cols" }, rail, S.center, h("section", { class: "gw-frame-normalwindow gw-win lib-detailwin" }, h("div", { class: "gw-wtitle" }, "Details"), S.detail)));

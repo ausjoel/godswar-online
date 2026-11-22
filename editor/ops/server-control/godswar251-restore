@@ -1,0 +1,44 @@
+#!/bin/bash
+# godswar251-restore FILE  - restore the reborn database "godswar" from one dump, the safe way.
+# Run ONLY by godswar251-restore@FILE.service (root, oneshot), started by the editor's helper after a typed
+# confirmation. FILE is a basename; it must be a regular file in /opt/godswar251/backup{,/nightly,/pre-restore}.
+#  1. refuse while anyone is online (MASTER rule: never restore over player activity)
+#  2. dump the current database to backup/pre-restore/ (kept: newest 10)
+#  3. stop godswar251, verify the dump, drop godswar WITH (FORCE) (the editor and sign-up site reconnect),
+#     recreate it owned by godswar, restore, start godswar251
+#  4. on any failure after the drop: restore the pre-restore dump and start the game again
+set -euo pipefail
+BACKUP=/opt/godswar251/backup
+UNIT=godswar251.service
+NAME="${1:-}"
+[[ "$NAME" =~ ^godswar251-(pre-restore-)?[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}\.sql\.gz$ ]] || { echo "refused: bad file name" >&2; exit 2; }
+FILE=""
+for d in "$BACKUP" "$BACKUP/nightly" "$BACKUP/pre-restore"; do
+  if [ -f "$d/$NAME" ] && [ ! -L "$d/$NAME" ]; then FILE="$d/$NAME"; break; fi
+done
+[ -n "$FILE" ] || { echo "refused: $NAME not found in the backup folders" >&2; exit 2; }
+gzip -t "$FILE" || { echo "refused: $NAME is not a valid gzip file" >&2; exit 2; }
+PSQL=(runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -q)
+ONLINE=$("${PSQL[@]}" -tA -d godswar -c "SELECT count(*) FROM accounts a WHERE a.login_status <> 0 OR a.login_presence_token IS NOT NULL OR EXISTS (SELECT 1 FROM character_base c WHERE c.account_id = a.id AND c.checkpoint_owner_id IS NOT NULL)")
+[ "$ONLINE" = "0" ] || { echo "refused: $ONLINE account(s) online or signing in; restore only at zero players" >&2; exit 3; }
+mkdir -p "$BACKUP/pre-restore"; chmod 700 "$BACKUP/pre-restore"
+PRE="$BACKUP/pre-restore/godswar251-pre-restore-$(date -u +%F-%H%M%S).sql.gz"
+runuser -u postgres -- pg_dump godswar | gzip > "$PRE.part"
+gzip -t "$PRE.part"; [ "$(stat -c %s "$PRE.part")" -gt 10000 ] || { echo "pre-restore dump too small; nothing changed" >&2; rm -f "$PRE.part"; exit 4; }
+mv "$PRE.part" "$PRE"
+ls -1t "$BACKUP/pre-restore"/godswar251-pre-restore-*.sql.gz | tail -n +11 | xargs -r rm -f
+echo "pre-restore dump: $PRE"
+systemctl stop "$UNIT"
+load() {   # load DUMP into a fresh godswar database
+  "${PSQL[@]}" -d postgres -c "DROP DATABASE IF EXISTS godswar WITH (FORCE);" -c "CREATE DATABASE godswar OWNER godswar;" || return 1
+  zcat "$1" | "${PSQL[@]}" -d godswar
+}
+if load "$FILE"; then
+  echo "restored $FILE"
+  systemctl start "$UNIT"
+  exit 0
+fi
+echo "RESTORE FAILED; putting the pre-restore data back from $PRE" >&2
+load "$PRE"
+systemctl start "$UNIT"
+exit 5

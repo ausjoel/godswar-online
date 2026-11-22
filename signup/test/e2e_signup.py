@@ -106,8 +106,8 @@ main_email = "%s.main@example.test" % pre
 # --- 1. a normal sign-up
 b = Browser("10.0.0.1")
 f, page = b.get_form()
-check("page has the logo, the form and a CSRF cookie",
-      'src="/static/logo.png"' in page and 'name="website"' in page and b.cookie is not None, b.cookie and b.cookie.split("=")[0])
+check("page has the emblem, the form and a CSRF cookie",
+      'src="/static/emblem.svg"' in page and 'name="website"' in page and b.cookie is not None, b.cookie and b.cookie.split("=")[0])
 st, hd, html = b.submit({"username": main_name, "password": P, "confirm": P, "email": main_email}, form=f)
 check("valid sign-up creates the account", st == 200 and "Welcome, %s" % main_name in html, "%d %s" % (st, text_of(html)))
 check("success page says: download the client and log in", "Next: download the client and log in" in html)

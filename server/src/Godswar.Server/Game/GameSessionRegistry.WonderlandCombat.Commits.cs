@@ -96,7 +96,8 @@ internal sealed partial class GameSessionRegistry
                 _playerLifeRevisions.TryGetValue(directAttacker.Session, out var life) &&
                 IsCurrentWonderlandPlayerLocked(directAttacker, life))
             {
-                CommitWonderlandReflectionLocked(runtime, state, directAttacker, life, current, reflected, now);
+                CommitWonderlandReflectionLocked(runtime, state, directAttacker, life, current,
+                    WonderlandIslandScale.ScaleDamage(policy.Stage, reflected), now); // WL-SLIDERS
             }
             if (damage.Killed && policy.MechanicKey == "atlas")
             {

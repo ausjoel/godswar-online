@@ -150,13 +150,18 @@ internal sealed class PostgresAccountStore(
                 last_login_time, last_logout_time, last_login_ip,
                 last_login_mac, total_online_time, status
             )
-            VALUES (
+            SELECT
                 '', '', @username, @verifier, 0, now(), now(),
                 '', '', 0, 0
-            )
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM public.account_username_holds hold
+                WHERE hold.username_key = lower(@username))
             ON CONFLICT (username) DO NOTHING
             RETURNING id, username;
             """);
+        // W4A: a held user name (renamed or deleted account, migration 240) is never re-created by first-login
+        // registration. No row comes back, the caller finds no account either and rejects the login.
         command.Parameters.AddWithValue("username", username);
         command.Parameters.AddWithValue("verifier", versionedVerifier);
         await using var reader =

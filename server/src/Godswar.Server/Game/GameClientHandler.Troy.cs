@@ -109,7 +109,7 @@ internal sealed partial class GameClientHandler
     private async Task HandleTroyEntryAsync(NpcSpawnDefinition npc, CancellationToken cancellationToken)
     {
         var character = _character!;
-        var gmSkips = GateRules.GmMaySkip(TroyEvent.GateKey) && await HasOperatorAuthorityAsync(cancellationToken);
+        var gmSkips = GateRules.GmMaySkip(TroyEvent.GateKey) && await HasOperatorPowerAsync(Godswar.Server.Application.Operators.GmPowerPolicy.GateBypass, cancellationToken);
         var band = GateRules.Band(TroyEvent.GateKey, TroyEvent.MinimumLevel, GateCatalog.LevelCap);
         int? refusal = !gmSkips && !TroyEvent.IsOpen(_realmCalendar, DateTimeOffset.UtcNow) ? TroyEvent.TransporterClosed
             : !gmSkips && (character.Level < band.Minimum || character.Level > band.Maximum) ? TroyEvent.TransporterLevel
@@ -141,7 +141,7 @@ internal sealed partial class GameClientHandler
             return;
         }
 
-        if (GateRules.GmMaySkip(TroyEvent.GateKey) && await HasOperatorAuthorityAsync(cancellationToken))
+        if (GateRules.GmMaySkip(TroyEvent.GateKey) && await HasOperatorPowerAsync(Godswar.Server.Application.Operators.GmPowerPolicy.GateBypass, cancellationToken))
         {
             return;
         }

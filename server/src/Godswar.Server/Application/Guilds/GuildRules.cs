@@ -31,73 +31,59 @@ internal static class GuildRateKeys
         Switch(
             BuildingRules, 10, "Guild building rules",
             "Infrastructure/Guilds/PostgresGuildStore.BuildingRules.cs",
-            "1 = building, upgrading and demolishing a guild building follow " +
-            "the IGG guide: each level costs the guild purse the Gold and " +
-            "Silver of the guide's table (Consortia.xml), no building may go " +
-            "above the Guild Footstone's level (the guild level follows the " +
-            "Footstone), and only the ranks below may build or demolish. " +
-            "0 = free and open to every member, as before."),
+            "Makes guild buildings follow the original game's rules. On: each level costs the " +
+            "guild Gold and Silver, no building may pass the Guild Footstone's level, and only " +
+            "the ranks set below may build or demolish. Off: building is free and open to every " +
+            "member.", defaultValue: 1m), // B21 item 17: default on (live is on)
         Duty(
             BuildDuty, 20, "Guild rank that may build/upgrade", 5m,
             "Infrastructure/Guilds/PostgresGuildStore.BuildingRules.cs",
-            "Lowest guild duty that may build or upgrade a guild building: " +
-            "6 Lord, 5 Deputy, 4 Director, 3 Elite, 2 Insider, 1 Member. " +
-            "Default 5 (Lord and Deputies)."),
+            "Lowest guild rank that may build or upgrade a guild building. 6 Lord, 5 Deputy, 4 " +
+            "Director, 3 Elite, 2 Insider, 1 Member. Used while 'Guild building rules' is on."),
         Duty(
             DeleteDuty, 30, "Guild rank that may demolish", 6m,
             "Infrastructure/Guilds/PostgresGuildStore.BuildingRules.cs",
-            "Lowest guild duty that may demolish a guild building. Default 6 " +
-            "(Lord only). The Footstone can never be demolished."),
+            "Lowest guild rank that may demolish a guild building. 6 Lord, 5 Deputy, 4 Director, " +
+            "3 Elite, 2 Insider, 1 Member. The Footstone can never be demolished."),
         Switch(
             AltarCurve, 40, "Altar offering bonus from the first point",
             "Application/Guilds/GuildAltarWorshipBonus.cs",
-            "1 = the IGG guide's offering curve: every 1,000 points held on " +
-            "an altar pays +1% of its base value, up to 150% at 150,000 " +
-            "points. 0 = the old curve (nothing below 50,000, then 7.5% per " +
-            "50,000 up to 150% at 1,000,000)."),
+            "Chooses how the altar offering bonus grows. On: every 1,000 points held on an altar " +
+            "add 1%, up to 150% at 150,000 points, as in the original game. Off: nothing below " +
+            "50,000 points, then 7.5% per 50,000 up to 150% at 1,000,000.", defaultValue: 1m), // B21 item 17
         Switch(
             LordRules, 50, "Guild Lord hand-over",
             "Game/GameClientHandler.GuildMembers.cs, GuildExit.cs",
-            "1 = the Lord can pass the lordship to a member (the guild " +
-            "window's Change Lord button) and cannot leave the guild while " +
-            "holding it. 0 = as before (no hand-over; the Lord may leave)."),
+            "Lets a guild Lord hand over the guild. On: the Change Lord button works, and the " +
+            "Lord cannot leave the guild while holding the title. Off: no hand-over, and the Lord " +
+            "may leave.", defaultValue: 1m), // B21 item 17
         Switch(
             DoubleClaims, 60, "Member Advisor double EXP/TP claims",
             "Game/GameClientHandler.GuildWelfare.cs",
-            "1 = guild members claim double EXP and double TP hours from the " +
-            "[Guild] Member Advisor out of a weekly allowance (resets on " +
-            "Saturday). 0 = the advisor only answers 'insufficient time', " +
-            "as before."),
+            "Lets guild members claim double EXP and double Talent hours from the Member Advisor. " +
+            "On: claims come out of a weekly allowance that resets on Saturday. Off: the advisor " +
+            "always answers 'insufficient time'.", defaultValue: 1m), // B21 item 17
         new ServerRateDefinition(
             DoubleLevel, Category,
             "Guild double EXP/TP level (hours per week = level + 2)",
             "level", ServerRateKind.Absolute, 2m, 0m, 22m, 1m, 70,
             "Game/GameClientHandler.GuildWelfare.cs",
-            "The double EXP and double TP level every guild has. The client " +
-            "text says the weekly hours are the level plus two and the level " +
-            "goes up to 22. Retail let the Lord buy levels with guild funds; " +
-            "those prices are not in the guide, so the level is set here for " +
-            "every guild. Default 2 = 4 hours a week of each (the guide's " +
-            "1-4 hour claims)."),
+            "The double EXP and double Talent level every guild has. Hours per week = this level " +
+            "+ 2, so 2 = 4 hours a week of each. The game's highest level is 22."),
         Switch(
             QuestRules, 80, "Guild quests",
             "Game/GameClientHandler.GuildWelfare.cs, GameClientHandler.Quests.cs",
-            "1 = the guild quests of the [Guild] Quest Supervisor (Sparta_039 " +
-            "/ Athens_038) must be released for the day by an officer, need " +
-            "a guild, and pay their Guild Gold and Guild Fund to the guild " +
-            "and their Contribution to the member, as the client's quest " +
-            "text lists. 0 = as before (anyone may take them and the 'Guild " +
-            "Gold' is paid to the player as personal gold). Default 0 " +
-            "(review fix): turn it on only after the Guild Stone (economy " +
-            "r09) is live and guilds exist, or every player loses these " +
-            "dailies.",
-            defaultValue: 0m),
+            "Makes guild quests work as guild quests. On: an officer must release them each day, " +
+            "the player needs a guild, and the rewards go to the guild (Guild Gold, Guild Fund) " +
+            "and the member (Contribution). Off: anyone may take them and the 'Guild Gold' is " +
+            "paid to the player. Turn it on only once guilds exist, or players lose these daily " +
+            "quests.",
+            defaultValue: 1m), // B21 item 17: default on (live is on)
         Duty(
             QuestReleaseDuty, 90, "Guild rank that may release guild quests", 4m,
             "Game/GameClientHandler.GuildWelfare.cs",
-            "Lowest guild duty that may release the day's guild quests. " +
-            "Default 4 (Director; the guide gives Lord, Deputy and Director " +
-            "the right).")
+            "Lowest guild rank that may release the day's guild quests. 6 Lord, 5 Deputy, 4 " +
+            "Director, 3 Elite, 2 Insider, 1 Member. Used while 'Guild quests' is on.")
     ];
 
     public static bool On(string key) => ServerRates.Current.Absolute(key) != 0;

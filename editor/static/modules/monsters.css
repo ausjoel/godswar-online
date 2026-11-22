@@ -1,0 +1,26 @@
+.gw-mod-monsters .gw-mp-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.gw-mod-monsters .gw-mp-tabs .on { outline: 2px solid var(--gw-accent, #f6c64f); }
+.gw-mod-monsters .gw-mp-bar { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-bottom: 8px; }
+.gw-mod-monsters .gw-mp-bar input[type=search] { min-width: 240px; }
+.gw-mod-monsters .gw-mp-cols { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 14px; align-items: start; }
+@media (max-width: 900px) { .gw-mod-monsters .gw-mp-cols { grid-template-columns: 1fr; } }
+.gw-mod-monsters .gw-mp-svg { width: 100%; height: auto; background: #0b1820; border-radius: 6px; }
+.gw-mod-monsters .gw-mp-svg .grid { stroke: #1d3644; stroke-width: 1; }
+.gw-mod-monsters .gw-mp-svg .lbl { fill: #8aa3b0; font-size: 11px; }
+.gw-mod-monsters .gw-mp-svg .sec { fill: #f6c64f; font-size: 13px; font-weight: bold; }
+.gw-mod-monsters .gw-mp-svg .secline { stroke: #3a5566; }
+.gw-mod-monsters .gw-mp-svg .map { fill: #cfe3ee; font-size: 11px; }
+.gw-mod-monsters .gw-mp-svg .band { stroke: #2b4a5a; stroke-width: 6; stroke-linecap: round; }
+.gw-mod-monsters .gw-mp-svg .mon { fill: #8fd3ff; stroke: #0b1820; stroke-width: 1; cursor: pointer; }
+.gw-mod-monsters .gw-mp-svg .mon.elite { fill: #f6b596; }
+.gw-mod-monsters .gw-mp-svg .mon.boss { fill: #ff5a4f; }
+.gw-mod-monsters .gw-mp-svg .mon.noloot { fill: none; stroke: currentColor; stroke-width: 1.5; color: #ffd166; }
+.gw-mod-monsters .gw-mp-card { position: sticky; top: 8px; padding: 10px; background: #12222c; border-radius: 6px; }
+.gw-mod-monsters .gw-mp-big { width: 128px; height: 128px; border-radius: 8px; object-fit: cover; background: #2f343e; display: block; }
+.gw-mod-monsters .gw-mp-big.none { display: flex; align-items: center; justify-content: center; color: #8aa3b0; font-size: 12px; }
+.gw-mod-monsters .gw-mp-mons { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.gw-mod-monsters .gw-mp-mon { background: #12222c; border: 1px solid #23404f; border-radius: 6px; padding: 3px 8px; color: inherit; cursor: pointer; }
+.gw-mod-monsters .gw-mp-mon.elite { border-color: #a2715b; }
+.gw-mod-monsters .gw-mp-mon.boss { border-color: #c4463e; }
+.gw-mod-monsters .gw-mp-mon.noloot { border-style: dashed; }
+.gw-mod-monsters .gw-mp-svg .mon.guessed { stroke: #f6c64f; stroke-width: 1.5; stroke-dasharray: 2 2; }

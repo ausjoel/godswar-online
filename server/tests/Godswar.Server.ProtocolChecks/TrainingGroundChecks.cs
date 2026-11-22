@@ -25,6 +25,7 @@ internal static class TrainingGroundChecks
         CheckScoring();
         CheckRewards();
         CheckContent();
+        CheckOneClearTarget(); // B21
         CheckIsolation();
         return Task.CompletedTask;
     }
@@ -167,9 +168,24 @@ internal static class TrainingGroundChecks
             TrainingGroundPolicy.ResolveTimeLimit("120") == TimeSpan.FromMinutes(2),
             "the admin's numbers: 300 points, elite 10, normal 1, 30 minutes");
 
-        Check.True(
-            GameSessionRegistry.MonsterRespawnPolicyForMap(210) == MonsterRespawnPolicy.Timed,
-            "map 210 keeps the timed respawn (normals come back)");
+        // B21: instance.training_one_clear (default 1) = nothing respawns in a run; 0 = the old timed respawn.
+        Check.True(ServerRatesSnapshot.Default.Absolute(ServerRateKeys.TrainingGroundOneClear) == 1,
+            "B21: one clear per run is the default");
+        using (OneClear(1))
+        {
+            Check.True(
+                GameSessionRegistry.MonsterRespawnPolicyForMap(210) == MonsterRespawnPolicy.Never &&
+                GameSessionRegistry.MonsterRespawnPolicyForMap(208) == MonsterRespawnPolicy.Never &&
+                GameSessionRegistry.MonsterRespawnPolicyForMap(2) == MonsterRespawnPolicy.Timed &&
+                GameSessionRegistry.MonsterRespawnPolicyForMap(13) == MonsterRespawnPolicy.Timed,
+                "B21 on: map 210 never respawns; Bay stays Never, field maps stay timed");
+        }
+        using (OneClear(0))
+        {
+            Check.True(
+                GameSessionRegistry.MonsterRespawnPolicyForMap(210) == MonsterRespawnPolicy.Timed,
+                "B21 off: map 210 keeps the timed respawn (normals come back)");
+        }
         var ordinary = TimeSpan.FromSeconds(10);
         foreach (var template in templates.Values)
         {
@@ -181,6 +197,62 @@ internal static class TrainingGroundChecks
                     WorldBossCatalog.Empty, template.SourceMapId, template.TemplateKey, ordinary) == ordinary,
                 $"{template.TemplateKey} on its own map {template.SourceMapId} is unchanged");
         }
+    }
+
+    /// <summary>B21: one full clear as the target, rewards scaled to the original table.</summary>
+    private static void CheckOneClearTarget()
+    {
+        static bool Is(TrainingGroundReward reward, int exp, int tp) =>
+            reward.Experience == exp && reward.TalentPoints == tp;
+        var heracles = TrainingGroundPolicy.Heracles;
+        // The live layout: 66 normals (1) + 9 elites (10) = 156.
+        var spawns = Enumerable.Repeat("A_normal_spider_006", 66).Concat(Enumerable.Repeat("A_elite_spider_006", 9));
+        var full = spawns.Sum(heracles.Score);
+        Check.Equal(156, full, "B21: the live Hercules layout is worth 156 points");
+        var run = heracles.WithFullClearTarget(full);
+        Check.True(run.TargetScore == 156 && run.MapId == 210 && run.TimeLimit == heracles.TimeLimit &&
+                ReferenceEquals(heracles.WithFullClearTarget(0), heracles) &&
+                ReferenceEquals(heracles.WithFullClearTarget(300), heracles) &&
+                ReferenceEquals(heracles.WithFullClearTarget(400), heracles),
+            "B21: target lowered to one clear; 0 or >= 300 keeps the ground");
+        Check.True(Is(run.Reward(156, TimeSpan.FromMinutes(22)), 384_000, 16) &&
+                Is(run.Reward(156, TimeSpan.FromMinutes(29)), 360_000, 12) &&
+                Is(run.Reward(125, null), 312_000, 9) &&   // 80.1 %
+                Is(run.Reward(124, null), 288_000, 6) &&   // 79.5 %
+                Is(run.Reward(94, null), 288_000, 6) &&    // 60.3 %
+                Is(run.Reward(62, null), 60_000, 2) &&     // 39.7 %
+                Is(run.Reward(63, null), 240_000, 3),      // 40.4 %
+            "B21: a full clear pays the clear tiers; partial tiers keep their share");
+        Check.True(TrainingGroundDefinition.ScaleScore(62, 156, 300) == 119 &&
+                TrainingGroundDefinition.ScaleScore(63, 156, 300) == 121 &&
+                TrainingGroundDefinition.ScaleScore(0, 156, 300) == 0 &&
+                TrainingGroundDefinition.ScaleScore(200, 156, 300) == 300,
+            "B21: score scaling rounds down and caps at the original target");
+        var at = new DateTimeOffset(2026, 11, 21, 12, 0, 0, TimeSpan.Zero);
+        var progress = new TrainingGroundRunProgress(run);
+        var last = TrainingGroundKillOutcome.Ignored;
+        var id = 46001u;
+        foreach (var key in spawns)
+        {
+            last = progress.Record(id++, 1, key, at);
+        }
+        Check.True(last == TrainingGroundKillOutcome.Completed && progress.Score == 156 &&
+                progress.CompletedAt == at && progress.Normals == 66 && progress.Elites == 9,
+            "B21: killing every monster once completes the run");
+    }
+
+    private static IDisposable OneClear(decimal value)
+    {
+        var previous = ServerRates.Current;
+        var merged = previous.Values.ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.Ordinal);
+        merged[ServerRateKeys.TrainingGroundOneClear] = value;
+        ServerRates.Install(ServerRatesSnapshot.Create(merged, previous.Revision + 1, DateTimeOffset.UtcNow, "b21-check", "test"));
+        return new RestoreRates(previous);
+    }
+
+    private sealed class RestoreRates(ServerRatesSnapshot previous) : IDisposable
+    {
+        public void Dispose() => ServerRates.Install(previous);
     }
 
     private static void CheckIsolation()

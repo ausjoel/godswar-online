@@ -441,7 +441,7 @@ class Reborn:
         return {"id": pid, "name": name, "icon": icon, "atlas": atlas, "kind": (srv or {}).get("kind") or (cli or {}).get("type", ""),
                 "slot": slot, "minlv": (srv or {}).get("minlv"), "classes": (srv or {}).get("classes") or [],
                 "overlap": overlap, "desc": (cli or {}).get("desc", ""), "server": bool(srv), "client": bool(cli),
-                "defaults": defaults, "pet_egg":egg}
+                "defaults": defaults, "pet_egg":egg, "ungrantable": ungrantable_reason(pid)}
 
     def item_search(self, q, limit=40, kind=None, slot=None):
         """slot: an equipment slot - only templates whose equipment_slot fits it (rings 8 <-> 9)."""
@@ -1569,8 +1569,27 @@ def check_place(rb, d, loc, slot, meta, force, moving_row=None):
         raise RebornError("location %s cannot be edited here" % loc)
 
 
+# Items that only exist together with other rows, so no editor path may create them by id (the server has the
+# same rule: PetItemCatalog.CannotBeGrantedReason). 10109 = packed Seal Jade: it holds a pet (sealed_pet_items).
+# One added by hand has no pet inside; before the server fix that stopped its owner logging in (seen live 2026-11-13).
+UNGRANTABLE = {
+    10109: "A packed Seal Jade holds a pet and is only made by sealing a pet in the game. "
+           "Added by hand it has no pet inside, so it cannot be given.",
+}
+
+
+def ungrantable_reason(pid):
+    """None when the item can be handed out by id; otherwise why not, in plain words."""
+    try:
+        return UNGRANTABLE.get(int(pid))
+    except (TypeError, ValueError):
+        return None
+
+
 def item_values(rb, p, old, force):
     pid = to_int(p.get("prop_id"), 1, I32, "item id")
+    if ungrantable_reason(pid) and not (old and old.get("prop_id") == pid):
+        raise RebornError(ungrantable_reason(pid))
     meta = rb.item_meta(pid)
     if not meta["server"] and not force:
         raise RebornError("item %d is not in item_templates (the server would not load it); tick force (needs --allow-force)" % pid)

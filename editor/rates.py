@@ -28,40 +28,53 @@ CATEGORY_ORDER = ["Character EXP & Talent", "Pets", "Zodiac", "Instances", "Mons
                   "Upgrade costs", "Daily and weekly limits", "Event times"]  # ROUND2: categories of the round-2 keys
 
 # the stock server's own settings rows (table, key column, key value, column) -> metadata
+# "help" is hover text: one plain sentence, then short facts (the page draws "• " lines as a list). Where each value
+# is read in the server is noted here, not in the text: global_exp and level_gap = MonsterRewardPolicySnapshot (read
+# once at start-up); medusa_daily = PostgresMedusaDailyEntryClaimStore and the legacy_instance_settings rows =
+# PostgresLegacyInstanceDailyEntryClaimStore (read at every entry). A NULL paid_retry_limit = unlimited (reborn
+# migration 215 made Wonderland unlimited that way).
+# "scale": the column stores value x scale (basis points: 10000 = x1). The API keeps speaking stored units (min, max,
+# step, value, change records); pages show and edit value / scale with "shown" (prefix, decimals) and convert on save.
+_PAID = ("Paid retries (1 Opal each) a character may buy each day after the free entries.\n"
+         "\u2022 Empty = unlimited; 0 = none.\n\u2022 Applies at once.")
+_FREE = "Free entries a character gets each day.\n\u2022 Applies at once."
 STOCK_SETTINGS = [
     {"id": "global_exp", "table": "monster_reward_settings", "where": "setting_id = 1",
-     "column": "global_experience_multiplier_basis_points", "label": "Global monster EXP multiplier (stock setting)",
+     "column": "global_experience_multiplier_basis_points", "label": "Global monster EXP multiplier",
      "unit": "basis points (10000 = 1x)", "min": 10000, "max": 50000, "step": 500, "applies": "restart",
-     "help": "Stock reborn setting, read once at start-up (MonsterRewardPolicySnapshot): multiplies Fighter, Talent "
-             "and pet monster-kill EXP together with the patch's own multipliers. Applies after gw251 restart."},
+     "scale": 10000, "shown": {"prefix": "x", "decimals": 2},
+     "help": "Multiplies the EXP of every monster kill for everyone: character EXP, Talent EXP and pet EXP together.\n"
+             "\u2022 x1 to x5; x1 is normal.\n"
+             "\u2022 For a separate or bigger change use the sliders 'Monster kill EXP', 'Monster kill Talent EXP' and "
+             "'Pet EXP from monster kills'; this multiplier works on top of them.\n"
+             "\u2022 Applies after a server restart."},
     {"id": "level_gap", "table": "monster_reward_settings", "where": "setting_id = 1",
-     "column": "maximum_lower_level_gap", "label": "Kill EXP level gap (stock setting)", "unit": "levels",
+     "column": "maximum_lower_level_gap", "label": "Kill EXP level gap", "unit": "levels",
      "min": 0, "max": 199, "step": 1, "applies": "restart",
-     "help": "A monster more than this many levels below the player pays no EXP (stock 20). Applies after "
-             "gw251 restart."},
+     "help": "A monster more than this many levels below the player gives no EXP.\n"
+             "\u2022 Normal value: 20.\n\u2022 Applies after a server restart."},
     {"id": "medusa_daily", "table": "medusa_instance_settings", "where": "instance_key = 'medusa'",
      "column": "daily_entry_limit", "label": "Medusa Island entries per day", "unit": "entries", "min": 1,
      "max": 99, "step": 1, "applies": "live",
-     "help": "Read on every Medusa entry (PostgresMedusaDailyEntryClaimStore). Applies immediately."},
+     "help": "How often a character may enter Medusa Island each day.\n\u2022 Applies at once."},
     {"id": "atlantis_free", "table": "legacy_instance_settings", "where": "instance_kind = 1",
      "column": "free_entry_limit", "label": "Atlantis free entries per day", "unit": "entries", "min": 0, "max": 99,
-     "step": 1, "applies": "live", "help": "Read on every entry (PostgresLegacyInstanceDailyEntryClaimStore)."},
+     "step": 1, "applies": "live", "help": _FREE},
     {"id": "atlantis_paid", "table": "legacy_instance_settings", "where": "instance_kind = 1",
-     "column": "paid_retry_limit", "label": "Atlantis paid (Opal) retries per day", "unit": "retries", "min": 0,
-     "max": 99, "step": 1, "applies": "live", "nullable": True,
-     "help": "Empty = no paid retries for this instance."},
+     "column": "paid_retry_limit", "label": "Atlantis paid retries per day", "unit": "retries", "min": 0,
+     "max": 99, "step": 1, "applies": "live", "nullable": True, "help": _PAID},
     {"id": "wonderland_free", "table": "legacy_instance_settings", "where": "instance_kind = 2",
      "column": "free_entry_limit", "label": "Wonderland free entries per day", "unit": "entries", "min": 0,
-     "max": 99, "step": 1, "applies": "live", "help": "Read on every entry."},
+     "max": 99, "step": 1, "applies": "live", "help": _FREE},
     {"id": "wonderland_paid", "table": "legacy_instance_settings", "where": "instance_kind = 2",
      "column": "paid_retry_limit", "label": "Wonderland paid retries per day", "unit": "retries", "min": 0,
-     "max": 99, "step": 1, "applies": "live", "nullable": True, "help": "Empty = no paid retries."},
+     "max": 99, "step": 1, "applies": "live", "nullable": True, "help": _PAID},
     {"id": "harbor_free", "table": "legacy_instance_settings", "where": "instance_kind = 3",
      "column": "free_entry_limit", "label": "Harbor Attack free entries per day", "unit": "entries", "min": 0,
-     "max": 99, "step": 1, "applies": "live", "help": "Read on every entry."},
+     "max": 99, "step": 1, "applies": "live", "help": _FREE},
     {"id": "harbor_paid", "table": "legacy_instance_settings", "where": "instance_kind = 3",
      "column": "paid_retry_limit", "label": "Harbor Attack paid retries per day", "unit": "retries", "min": 0,
-     "max": 99, "step": 1, "applies": "live", "nullable": True, "help": "Empty = no paid retries."},
+     "max": 99, "step": 1, "applies": "live", "nullable": True, "help": _PAID},
 ]
 STOCK_BY_ID = {s["id"]: s for s in STOCK_SETTINGS}
 
@@ -148,9 +161,8 @@ class Rates:
         srv = out["server"]
         checks = []
         if not exists:
-            checks.append({"severity": "warn", "msg": "public.server_rates does not exist in %s: this database is used "
-                                                      "by the STOCK reborn server (no rates patch) - see Polish/RATES.md "
-                                                      "to deploy the patched server" % self.rb.db})
+            checks.append({"severity": "warn", "msg": "Database %s has no rates table: its game server is an older "
+                                                      "build without server rates." % self.rb.db})
         else:
             for r in out["rows"]:
                 if not (D(str(r["min_value"])) <= D(str(r["value"])) <= D(str(r["max_value"]))):

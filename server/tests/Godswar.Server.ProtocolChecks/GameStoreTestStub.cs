@@ -174,10 +174,12 @@ internal abstract class GameStoreTestStub :
         CancellationToken cancellationToken = default) =>
         throw Unsupported();
 
+    // W14: every game login now sets the legacy login flag (it moved from the login server), so the
+    // shared stub accepts it; checks that care override it.
     public virtual Task MarkAccountOnlineAsync(
         int accountId,
         CancellationToken cancellationToken = default) =>
-        throw Unsupported();
+        Task.CompletedTask;
 
     public virtual Task MarkAccountOfflineAsync(
         int accountId,

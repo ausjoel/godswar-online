@@ -149,9 +149,9 @@
         ["checks", "Checks" + (n ? " (" + n + ")" : ""), "Guild rows that break the rules the game keeps, with one-click repairs."]];
       for (const [k, label, help] of T) this.tabs.append(h("button", { class: "gw-tabx" + (this.tab === k ? " on" : "") + (k === "checks" && n ? " gwg-warn" : ""), type: "button", role: "tab",
         "aria-selected": this.tab === k ? "true" : "false", "data-help": help, onclick: () => this.show(k) }, label));
-      this.tabs.append(h("span", { class: "gwg-topinfo" }, this.ov.round2 ? (this.ov.kick ? h("span", { class: "gw-chip now", "data-help": "The game server answers /admin/capabilities: it can kick a player, so a guild edit never has to wait for a logout." }, "round-2 server: Kick available")
-        : h("span", { class: "gw-chip login", "data-help": "The game server answers /admin/capabilities but offers no kick. Guild edits need every member of the guild logged out." }, "round-2 server: members must log out"))
-        : h("span", { class: "gw-chip login", "data-help": "The server running now has no management endpoints. Guild edits need every member of the guild logged out." }, "stock server: members must log out"),
+      this.tabs.append(h("span", { class: "gwg-topinfo" }, this.ov.round2 ? (this.ov.kick ? h("span", { class: "gw-chip now", "data-help": "The game server can kick a player, so a guild edit never has to wait for a logout." }, "round-2 server: Kick available")
+        : h("span", { class: "gw-chip login", "data-help": "The game server cannot kick players. Guild edits need every member of the guild logged out." }, "round-2 server: members must log out"))
+        : h("span", { class: "gw-chip login", "data-help": "The game server running now cannot be asked to kick players. Guild edits need every member of the guild logged out." }, "stock server: members must log out"),
         " ", h("button", { class: "gw-btnx small", type: "button", "data-help": "Every change made in this editor, with Undo.", onclick: () => GW.changes.open() }, "Change log")));
     },
     async refresh() {
@@ -351,7 +351,7 @@
           h("div", { class: "gwg-kv" }, h("span", { class: "gw-label", "data-field": "guilds.online_count" }, "Online last time:"), h("span", { class: "gw-value" }, g.online_count + " (the window's own count)"))),
         h("div", { class: "gw-frame-simplewindow gwg-panel" },
           nf("level", "Level", lim.level),
-          h("div", { class: "gw-dim gwg-note", "data-help": "In the official game the guild level followed the Guild Footstone; reborn never raises it (it stays 1). Consortia.xml lists what each level cost." },
+          h("div", { class: "gw-dim gwg-note", "data-help": "In the official game the guild level followed the Guild Footstone; this server never raises it (it stays 1). The game's own table lists what each level cost." },
             next ? "Next level in the official game: " + fmt(next.funds) + " guild Silver + " + fmt(next.gems) + " gems" : "Top level."),
           GW.numberField({ field: "guilds.member_limit", label: "Max Mem", value: g.member_limit, min: 1, max: lim.member_limit, disabled: !this.ov.writable,
             onChange: (v, ok) => { if (ok && v !== null) set("member_limit", "Max Mem", v, "guilds.member_limit");
@@ -361,10 +361,37 @@
           nf("silver", "Silver", lim.money), nf("gold", "Gold", lim.money), nf("bijou", "Gems", lim.money), capWarn)),
         h("div", { class: "gw-frame-simplewindow gwg-panel gwg-wide" }, h("div", { class: "gw-label", "data-field": "guilds.proclamation" }, "Slogan:"), slogan, cnt),
         bar.el,
+        h("div", { class: "gwg-memtools" },   // B21 item 21
+          h("button", { class: "gw-btnx", type: "button", disabled: !this.ov.writable || null, "data-help": "Raise the level, every building, the funds, the member limit, the members' contributions and their altar offerings to the maximum in one save. Nothing already higher is lowered. Undo in the Change log.", onclick: () => this.maxGuild(d) }, "Max guild ...")),
         h("div", { class: "gwg-danger" },
           h("button", { class: "gw-btnx danger", type: "button", disabled: !this.ov.writable || null, "data-help": "Delete the guild, its members' memberships, buildings and altar offerings; each member's guild duty and contribution go to 0 (as leaving does). Undo in the Change log brings everything back.",
             onclick: () => this.disband(d) }, "Disband guild"),
           h("span", { class: "gw-dim" }, "The game has no disband; the editor can. Undo restores it.")));
+    },
+    // B21 item 21: everything a guild can reach, in one write (every member offline; Undo in the Change log)
+    async maxGuild(d, only) {
+      const g = d.guild, dv = this.ov.defaults || {};
+      const PARTS = [["level", "Guild level 12"], ["buildings", "Every building at its top level"], ["funds", "Silver, Gold and gems"],
+        ["member_limit", "Member limit"], ["contributions", "Every member's contributions and contribution points"],
+        ["altars", "Every member's offering points on every built altar (1,000,000 each, the most that pays)"]];   // B22 d50
+      const boxes = {};
+      const list = h("div", { class: "gwg-maxlist" }, PARTS.map(([k, label]) => { boxes[k] = h("input", { type: "checkbox", checked: !only || only.includes(k) || null, "aria-label": label });
+        return h("label", { class: "gwg-kv" }, boxes[k], " " + label); }));
+      const mode = h("select", { class: "gwg-input", "aria-label": "Which maximum" },
+        h("option", { value: "game" }, "The game's own limits (recommended)"), h("option", { value: "server" }, "The largest safe number (2,000,000,000)"));
+      const note = h("p", { class: "gw-dim" });
+      const draw = () => { note.textContent = mode.value === "game"
+        ? "Silver and Gold " + fmt(dv.MaxMoney || 900000000) + ", gems " + fmt(dv.MaxBijou || 90000000) + ", contribution points " + fmt(dv.MaxContribute || 900000) + ", member limit " + fmt(dv.MaxMember || 10000) + ": the numbers the game client was made for."
+        : "2,000,000,000 each, member limit 10,000. The guild window was made for smaller numbers; check it in game. Kept below the database limit so donations still work."; };
+      mode.addEventListener("change", draw); draw();
+      if (!await GW.confirm({ title: "Max " + g.name + "?", ok: "Max it", el: h("div", null, list, h("div", { class: "gwg-kv" }, h("span", { class: "gw-label" }, "Maximum:"), mode), note,
+        h("p", null, "Only raises: anything already higher stays. Every member must be offline. Undo in the Change log puts it all back."),
+        h("p", { class: "gw-dim" }, "Altar offerings drain every hour in game (8,000 an hour above 800,000), so a full altar falls back over time.")) })) return;
+      const parts = PARTS.map(p => p[0]).filter(k => boxes[k].checked);
+      if (!parts.length) { GW.status("nothing chosen", "err"); return; }
+      const r = await write(this, "g/" + g.id + "/max", { parts, mode: mode.value, expected: { level: g.level, member_limit: g.member_limit, silver: g.silver, gold: g.gold, bijou: g.bijou } },
+        g.name + " maxed (" + parts.join(", ").replace(/_/g, " ") + ")", { reload: () => this.openGuild(g.id, this.sub) });
+      if (r) this.openGuild(g.id, this.sub);
     },
     async makeLeader(d) {
       const g = d.guild;
@@ -417,6 +444,7 @@
       tbl.append(tb);
       page.append(h("div", { class: "gwg-memtools" },
         h("button", { class: "gw-btnx", type: "button", disabled: !this.ov.writable || null, "data-help": "Seat any character that is in no guild (pick from every character).", onclick: () => this.addMember(d) }, "+ Add member"),
+        h("button", { class: "gw-btnx", type: "button", disabled: !this.ov.writable || !d.members.length || null, "data-help": "Raise every member's Silver and Gold contribution and contribution points to the maximum (nothing already higher is lowered).", onclick: () => this.maxGuild(d, ["contributions"]) }, "Max contributions"),   // B21 item 21
         h("span", { class: "gw-dim" }, d.members.length + " / " + g.member_limit + " members"), GW.appliesChip("next_login")), h("div", { class: "gwg-scroll" }, tbl),
         h("p", { class: "gw-dim" }, "Points = guild contribution points the member still holds (donating 1 Silver gives 1, 1 Gold gives 100; offering at an altar spends them). SilvrCtrb / GoldCtrb = what they donated."));
     },
@@ -469,7 +497,7 @@
           h("div", null, h("div", { class: "gw-value" }, b.name), h("div", { class: "gw-dim" }, "type " + b.type + " · levels 1-" + b.max))),
           h("p", null, b.desc || ""),
           b.altar ? h("p", { class: "gwg-note" }, "Altar: pays ", h("b", { class: "gw-good" }, b.attribute), b.level ? " - base value " + fmt(b.base_value) + " at level " + b.level + " (offering points buy 0-150% of it)." : " once built.") : null,
-          impact ? h("p", { class: "gw-dim", "data-help": "The client's own Consortia.xml effect numbers for this level (warehouse capacity, member cap, ...). Reborn does not apply building effects other than the altars." }, "Client effect at this level: " + impact) : null,
+          impact ? h("p", { class: "gw-dim", "data-help": "The game's own effect numbers for this level (warehouse capacity, member limit, ...). This server applies no building effects other than the altars." }, "Client effect at this level: " + impact) : null,
           lvl, h("p", { class: "gw-dim" }, "0 = not built. ", b.next_cost ? "Official cost of the next level: " + fmt(b.next_cost.silver) + " guild Silver + " + fmt(b.next_cost.gems) + " gems (reborn builds for free)." : "", " "), save, " ", GW.appliesChip("next_login")].filter(x => x !== null && x !== undefined));
       };
       for (const b of d.buildings) {
@@ -623,7 +651,7 @@
         tb.append(h("tr", null, h("td", null, KIND[i.kind] || i.kind), h("td", { class: "gw-value" }, i.who), h("td", null, i.what),
           h("td", { class: "gwg-acts" },
             (i.kind === "desync" || i.kind === "orphan") ? h("button", { class: "gw-btnx small", type: "button", disabled: !this.ov.writable || null,
-              "data-help": "Write the character's consortia / consortia_job / guild_duty from its membership (or 0 when it has none). The character must be logged out.",
+              "data-help": "Rewrites the guild, guild job and guild rank stored on the character from its membership (or clears them when it has none). The character must be logged out.",
               onclick: async () => { const r = await write(this, "repair/" + i.cid, {}, "repaired " + i.who); if (r) this.refresh(); } }, "Repair") : null,
             i.guild && this.ov.guilds.find(g => g.id === i.guild) ? h("button", { class: "gw-btnx small", type: "button", onclick: () => { this.gid = i.guild; this.sub = i.kind === "building" ? "buildings" : i.kind === "lord" ? "info" : "members"; this.show("guilds"); } }, "Open guild") : null)));
       }

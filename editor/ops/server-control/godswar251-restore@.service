@@ -1,0 +1,12 @@
+[Unit]
+Description=Restore the GodsWar 2.51 database from backup %i (started only by gweditor-control)
+After=postgresql.service
+Requires=postgresql.service
+# the helper's lock keeps editor operations one at a time; wait for a running nightly dump
+After=godswar251-backup.service
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/godswar251-restore %i
+TimeoutStartSec=3600
+User=root
+PrivateTmp=true

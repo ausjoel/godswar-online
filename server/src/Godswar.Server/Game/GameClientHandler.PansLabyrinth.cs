@@ -127,7 +127,7 @@ internal sealed partial class GameClientHandler
         // FINALISE2: Gates table (band, opening mode, GM rule) for Pan's Labyrinth.
         var gateKey = Godswar.Server.Application.Gates.GateKeys.PansLabyrinth;
         var band = Godswar.Server.Application.Gates.GateRules.Band(gateKey, PansLabyrinthProtocol.MinimumLevel, PansLabyrinthProtocol.MaximumLevel);
-        var gmSkips = Godswar.Server.Application.Gates.GateRules.GmMaySkip(gateKey) && await HasOperatorAuthorityAsync(cancellationToken);
+        var gmSkips = Godswar.Server.Application.Gates.GateRules.GmMaySkip(gateKey) && await HasOperatorPowerAsync(Godswar.Server.Application.Operators.GmPowerPolicy.GateBypass, cancellationToken);
         if (!gmSkips && !Godswar.Server.Application.Gates.GateSchedules.IsOpen(gateKey, _realmCalendar, DateTimeOffset.UtcNow))
         {
             await SendPansLabyrinthRefusalAsync(npc, PansLabyrinthProtocol.ClosedResultSubId,

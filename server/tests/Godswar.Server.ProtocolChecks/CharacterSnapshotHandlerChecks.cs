@@ -27,6 +27,8 @@ internal static partial class CharacterSnapshotHandlerChecks
         await CheckCancelledSnapshotCleansAccountSessionAsync();
         await CheckOccupiedSlotRejectsCreateAsync();
         await CheckReplacedSessionCannotStealCheckpointOwnershipAsync();
+        await CheckGameSessionOwnsLoginFlagAsync(); // W14
+        await CheckRefusedGameLoginLeavesNoLoginFlagAsync(); // W14
     }
 
     private static async Task CheckCompleteBootstrapAsync()

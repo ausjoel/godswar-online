@@ -175,7 +175,7 @@ internal sealed partial class GameClientHandler
                 // player into Troy as soon as the three beach heroes are down; GMs who may skip gates always pass.
                 if (!TroyBossChain.Shared.BeachCleared(day) &&
                     !(Application.Gates.GateRules.GmMaySkip(TroyEvent.GateKey) &&
-                        await HasOperatorAuthorityAsync(cancellationToken)))
+                        await HasOperatorPowerAsync(Godswar.Server.Application.Operators.GmPowerPolicy.GateBypass, cancellationToken)))
                 {
                     reply = [TroyTransporterRefusal];
                     break;

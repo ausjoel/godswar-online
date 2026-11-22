@@ -39,7 +39,7 @@ internal static partial class CapitalNpcServiceProtocolChecks
                 expectedItemId: 5445,
                 out var skillOffer) &&
             skillOffer.UnitPrice == 1 &&
-            skillOffer.Currency == CapitalNpcShopCurrency.BindingGold &&
+            skillOffer.Currency == CapitalNpcShopCurrency.Silver && // B22 W11 d58
             PacketBuilder.TryResolveCapitalNpcShopOffer(
                 CapitalNpcServiceKind.SkillVendor,
                 category: 2,
@@ -47,7 +47,7 @@ internal static partial class CapitalNpcServiceProtocolChecks
                 expectedItemId: 5042,
                 out var skillThirdCategoryOffer) &&
             skillThirdCategoryOffer.Currency ==
-                CapitalNpcShopCurrency.BindingGold &&
+                CapitalNpcShopCurrency.Silver && // B22 W11 d58
             PacketBuilder.TryResolveCapitalNpcShopOffer(
                 CapitalNpcServiceKind.SkillVendor,
                 category: 2,
@@ -55,7 +55,7 @@ internal static partial class CapitalNpcServiceProtocolChecks
                 expectedItemId: 5024,
                 out var skillThirdCategoryContinuationOffer) &&
             skillThirdCategoryContinuationOffer.Currency ==
-                CapitalNpcShopCurrency.BindingGold &&
+                CapitalNpcShopCurrency.Silver && // B22 W11 d58
             PacketBuilder.TryResolveCapitalNpcShopOffer(
                 CapitalNpcServiceKind.PropsVendor,
                 category: 0,
@@ -72,7 +72,7 @@ internal static partial class CapitalNpcServiceProtocolChecks
                 out var propsBindingGoldOffer) &&
             propsBindingGoldOffer.UnitPrice == 20_000 &&
             propsBindingGoldOffer.Currency ==
-                CapitalNpcShopCurrency.BindingGold,
+                CapitalNpcShopCurrency.Silver, // B22 W11 d58 (was B-Gold at the silver price)
             "captured Pet, Skill, and mixed-currency Props offers resolve " +
                 "currency from their exact catalog frames");
 

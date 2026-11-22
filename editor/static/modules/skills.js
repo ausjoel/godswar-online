@@ -77,7 +77,7 @@
       add(GW.clear(this.head), 
         h("span", { class: "gw-sk-name" }, b.name), h("span", { class: "gw-dim" }, " #" + b.id + " · Lv " + b.level + " " + d.class_name + " · " + d.camp_name),
         !d.writable ? chip("read-only database", "restart", "This editor was started read-only for " + d.database + ".") : null,
-        h("span", { class: "gw-sk-revision gw-dim", "data-help": "The server loads skills and talents from this pinned gameplay content revision (gameplay_content_publication)." }, "content " + String(d.revision).slice(0, 10)));
+        h("span", { class: "gw-sk-revision gw-dim", "data-help": "The version of the skill and talent data the game server is using." }, "content " + String(d.revision).slice(0, 10)));
       GW.clear(this.tabbar);
       for (const [k, label] of TABS) {
         const n = k === "quests" ? " (" + d.quests.rows.filter(q => q.state === 0).length + "/" + d.quests.max_carried + ")" : "";
@@ -124,7 +124,7 @@
       if (this.locked() && live) f2.querySelector("input").disabled = true;
       const box = h("div", { class: "gw-sk-strip" }, f1, f2, save,
         live ? chip("live: the player sees it now", "now", "The round-2 game server changes talent points of a logged-in character at once (POST /admin/progression).") : null,
-        h("span", { class: "gw-dim", "data-help": "100 talent EXP make one talent point (TalentExperienceCatalog). Changing points never changes the ranks below." }, "Points to spend on ranks; ranks are set directly below."));
+        h("span", { class: "gw-dim", "data-help": "100 talent EXP make one talent point. Changing points never changes the ranks below." }, "Points to spend on ranks; ranks are set directly below."));
       if (disabled) for (const x of box.querySelectorAll("input,button")) x.disabled = true;
       return box;
     },
@@ -157,7 +157,7 @@
         detail.append(h("table", { class: "gw-sk-kv" },
           h("tr", null, h("th", { "data-field": "character_skills.skill_id" }, "Skill id"), h("td", null, "#" + s.id)),
           h("tr", null, h("th", { "data-field": "character_skills.skill_level" }, "Level"), h("td", null, s.level || "(no levels)")),
-          h("tr", null, h("th", { "data-help": "The level the skill book asks for (PlayLv). The editor lets you give it earlier; the server does not check it at login." }, "Book needs Lv"), h("td", { class: (s.minlv || 1) > b.level ? "tt-bad" : "" }, s.minlv || 1)),
+          h("tr", null, h("th", { "data-help": "The level the skill book asks for. The editor lets you give it earlier; the server does not check it at login." }, "Book needs Lv"), h("td", { class: (s.minlv || 1) > b.level ? "tt-bad" : "" }, s.minlv || 1)),
           h("tr", null, h("th", { "data-help": "MP cost and cooldown from the server's pinned skill content." }, "MP / cooldown"), h("td", null, (s.mp || 0) + " / " + (s.cooldown || 0) + " s")),
           h("tr", null, h("th", { "data-help": "The skill book item(s) that teach this skill in game." }, "Book item"),
             h("td", null, (s.books || []).map(i => h("span", { class: "gw-sk-book-item", "data-tip-type": "item", "data-tip-id": String(i) }, GW.icon((GW.catalog.loadedRow("item", i) || {}).sprite), " ", (GW.catalog.loadedRow("item", i) || {}).name || "#" + i))))));
@@ -232,7 +232,7 @@
         const tot = T.list.reduce((a, t) => a + rankOf(t), 0);
         const cost = T.list.reduce((a, t) => a + T.table[rankOf(t)].total_cost, 0);
         GW.clear(sumBox).append(h("span", { "data-help": "Sum of all ranks in this tree." }, "Ranks: ", h("b", null, fmt(tot))), " · ",
-          h("span", { "data-help": "What these ranks would cost a player in game (TalentProgression.CalculateUpgradeCost, summed). The editor does not charge points." }, "worth ", h("b", null, fmt(cost)), " talent points in game"));
+          h("span", { "data-help": "What these ranks would cost a player in the game, added up. The editor does not charge points." }, "worth ", h("b", null, fmt(cost)), " talent points in game"));
       };
       const drawTree = () => {
         GW.clear(tree);
@@ -272,12 +272,12 @@
         const q = (v, help) => h("button", { class: "gw-btnx small", type: "button", "data-help": help, onclick: () => { stage(t, v); drawSide(t); } }, String(v));
         const row = T.table[r];
         add(side, nf, h("div", { class: "gw-sk-quick" }, q(0, "Not learned."), q(10, "Rank 10."), q(40, "Rank 40."),
-          q(T.client_cap, "Rank " + T.client_cap + ": the highest the admin's client shows."), q(T.rank_cap, "Rank " + T.rank_cap + ": the server's cap. The client shows 60 at most, but the server uses the real rank for stats.")),
+          q(T.client_cap, "Rank " + T.client_cap + ": the highest rank the game shows."), q(T.rank_cap, "Rank " + T.rank_cap + ": the server's cap. The client shows 60 at most, but the server uses the real rank for stats.")),
           r > T.client_cap ? h("p", { class: "tt-bad" }, "Above " + T.client_cap + ": the server uses it, but the game client shows at most " + T.client_cap + ".") : null,
           h("table", { class: "gw-sk-kv" },
             h("tr", null, h("th", { "data-help": "Talent points a player spends to reach this rank from 0 (sum of every step)." }, "In game it costs"), h("td", null, fmt(row.total_cost) + " TP")),
-            h("tr", null, h("th", { "data-help": "Player level the server wants before the last step to this rank (TalentProgression.CalculateRequiredPlayerLevel)." }, "Needs player Lv"), h("td", null, row.level || "-")),
-            h("tr", null, h("th", { "data-help": "The client multiplies its per-rank value by this 'display rank' (docs/client-progressive-talent-tooltips.md)." }, "Display rank"), h("td", null, row.effective)),
+            h("tr", null, h("th", { "data-help": "Player level the server wants before the last step to this rank." }, "Needs player Lv"), h("td", null, row.level || "-")),
+            h("tr", null, h("th", { "data-help": "The game multiplies its per-rank value by this 'display rank' in the tooltip." }, "Display rank"), h("td", null, row.effective)),
             h("tr", null, h("th", { "data-field": "character_talents.outbox_revision" }, "Outbox revision"), h("td", null, t.outbox_revision === null || t.outbox_revision === undefined ? "(no row yet)" : t.outbox_revision))));
       };
       let allV = 60;
@@ -406,8 +406,8 @@
         let e = 0, tp = 0;
         for (const x of L) if (x.level <= level) { e += x.energy || 0; tp += x.talent_points || 0; }
         lvTable.append(h("table", { class: "gw-sk-kv" },
-          h("tr", null, h("th", { "data-help": "Skill effect of this grid level (SkillTrainConfig.lua SkillEff)." }, "Effect"), h("td", { class: "gw-good" }, at ? "+" + fmt(at.effect) : "-")),
-          h("tr", null, h("th", { "data-help": "Extra MP the trained skill costs (SkillTrainConfig.lua MP)." }, "Extra MP"), h("td", null, at ? "+" + at.extra_mp : "-")),
+          h("tr", null, h("th", { "data-help": "Skill effect of this grid level." }, "Effect"), h("td", { class: "gw-good" }, at ? "+" + fmt(at.effect) : "-")),
+          h("tr", null, h("th", { "data-help": "Extra MP the trained skill costs." }, "Extra MP"), h("td", null, at ? "+" + at.extra_mp : "-")),
           h("tr", null, h("th", { "data-help": "Zodiac level the game wants for this grid level (Starlv)." }, "Needs zodiac Lv"), h("td", { class: at && at.zodiac_level > Z.level ? "tt-bad" : "" }, at ? at.zodiac_level : "-")),
           h("tr", null, h("th", { "data-help": "What a player spends in game to train this grid from 1 to this level (UpdateE energy + UpdateS talent points). The editor does not charge anything." }, "In game it costs"), h("td", null, fmt(e) + " energy + " + fmt(tp) + " TP")),
           h("tr", null, h("th", { "data-help": "Gold to unlock the grid in game (UnlockG)." }, "Unlock"), h("td", null, Z.grid_gold[g] ? fmt(Z.grid_gold[g]) + " Gold" : "free"))));
@@ -605,7 +605,7 @@
         h("div", null, chip(state, cur ? (cur.state === 1 ? "now" : "login") : "never", "character_quests.state: " + (cur ? cur.state : "no row")), " ", kinds),
         h("table", { class: "gw-sk-kv" },
           h("tr", null, h("th", { "data-field": "character_quests.quest_id" }, "Quest id"), h("td", null, "#" + id)),
-          h("tr", null, h("th", { "data-help": "Level band of the quest (client Quest.xml / server roster)." }, "Level"), h("td", null, r ? r.minlv + "-" + r.maxlv : (e.min_level || "?"))),
+          h("tr", null, h("th", { "data-help": "Level range of the quest." }, "Level"), h("td", null, r ? r.minlv + "-" + r.maxlv : (e.min_level || "?"))),
           h("tr", null, h("th", { "data-help": "Who gives and who takes the quest back." }, "From / to"), h("td", null, (e.giver_name || (r && r.giver) || "?") + " → " + (e.responder_name || (r && r.responder) || "?"))),
           r ? h("tr", null, h("th", { "data-help": "Rewards the server pays at hand-in (before the server rates)." }, "Rewards"), h("td", null, [r.exp ? fmt(r.exp) + " EXP" : "", r.tp ? r.tp + " TP" : "", r.silver ? fmt(r.silver) + " Silver" : "", r.gold ? fmt(r.gold) + " Gold" : ""].filter(Boolean).join(", ") || "-")) : null,
           !r ? h("tr", null, h("td", { colspan: 2, class: "tt-bad" }, "Not in the server's quest roster: the server ignores this quest.")) : null),

@@ -252,38 +252,52 @@ internal static class EasterAnniversarySeason
     public static IReadOnlyList<ServerRateDefinition> Definitions { get; } =
     [
         Absolute(EasterSwitchKey, "Easter: envoys, egg exchanges and egg drops", "0/1", 1m, 1m, 30,
-            "1 = while the Easter season is open, the Easter Envoy and Easter Bunny Envoy stand in both capitals and " +
-            "take eggs, and monsters drop eggs. 0 = none of it (the envoys are hidden)."),
+            "Runs the Easter event while its season is open. On: the Easter Envoy and Easter " +
+            "Bunny Envoy stand in both capitals and take eggs, and monsters drop eggs. Off: none " +
+            "of it; the envoys are hidden. Season dates are set on the Events & notices page."),
         Absolute(EasterAutoDatesKey, "Easter: only the 10 days before Easter Sunday", "0/1", 1m, 1m, 31,
-            "1 = Easter is open only from 10 days before Easter Sunday to the end of Easter Sunday (UTC), worked out " +
-            "for each year, on top of the season being on (the admin F-134; Easter moves every year). 0 = the editor " +
-            "dates alone."),
+            "Limits Easter to the 10 days before Easter Sunday. On: the event is open only from " +
+            "10 days before Easter Sunday to the end of that Sunday, worked out for each year. " +
+            "Off: only the dates set on the Events & notices page count. The season must still be " +
+            "switched on."),
         Absolute(EasterEggsPercentKey, "Easter: 'Easter Eggs' drop chance (Bunny Envoy)", "%", 3m, 100m, 32,
-            "Each monster killed anywhere drops Easter Eggs (3985) this often (GENERATED)."),
+            "Chance that any monster kill drops Easter Eggs, the item the Easter Bunny Envoy " +
+            "takes, while Easter is open. Our own value: the original is unknown."),
         Absolute(EasterEggPercentKey, "Easter: 'Easter Egg' drop chance (Easter Envoy)", "%", 3m, 100m, 33,
-            "Each monster killed anywhere drops an Easter Egg (9009, Exp Pill exchange) this often (GENERATED)."),
+            "Chance that any monster kill drops an Easter Egg, the item the Easter Envoy trades " +
+            "for Exp Pills, while Easter is open. Our own value: the original is unknown."),
         Absolute(StrangeEggPercentKey, "Easter: Strange Easter Egg drop chance", "%", 1m, 100m, 34,
-            "Strange Easter Egg (9008): the Easter Envoy's daily Easter Package costs one (GENERATED)."),
+            "Chance that any monster kill drops a Strange Easter Egg while Easter is open. The " +
+            "Easter Envoy's daily Easter Package costs one. Our own value: the original is " +
+            "unknown."),
         Absolute(PackageBunnyPercentKey, "Easter: Easter Bunny Egg chance in the Easter Package", "%", 5m, 100m, 35,
-            "The Easter Package is 1 Easter Chocolate, 5 Easter Bread and 5 Easter Lamb, plus this chance of an Easter " +
-            "Bunny Egg pet (GENERATED)."),
+            "Chance that an Easter Package also holds an Easter Bunny Egg pet. The package always " +
+            "holds 1 Easter Chocolate, 5 Easter Bread and 5 Easter Lamb."),
         Absolute(BunnyExpPerLevelKey, "Easter: Bunny Envoy EXP per level", "EXP", 500m, 1_000_000m, 36,
-            "EXP prize = this x character level, x (1 + turn-ins today / 4) (GENERATED). Events EXP rate on top."),
+            "EXP prize of the Easter Bunny Envoy, per character level. It grows with each turn-in " +
+            "that day (by a quarter each time). The 'Event NPC EXP & Talent' setting multiplies " +
+            "it."),
         Absolute(BunnyTalentKey, "Easter: Bunny Envoy Talent Points", "TP", 5m, 10_000m, 37,
-            "Talent Point prize, x (1 + turn-ins today / 4) (GENERATED)."),
+            "Talent Point prize of the Easter Bunny Envoy. It grows with each turn-in that day " +
+            "(by a quarter each time)."),
         Absolute(BunnyPetExpPerLevelKey, "Easter: Bunny Envoy pet EXP per level", "EXP", 1_000m, 1_000_000m, 38,
-            "Pet EXP prize = this x character level to the summoned pet (GENERATED). No pet out = EXP instead."),
+            "Pet EXP prize of the Easter Bunny Envoy, per character level, to the summoned pet. " +
+            "With no pet out, the player gets the EXP prize instead."),
         Absolute(BunnyZodiacKey, "Easter: Bunny Envoy Zodiac energy", "energy", 10m, 10_000m, 39,
-            "Zodiac energy prize, up to the storage limit (GENERATED). A full store = EXP instead."),
+            "Zodiac energy prize of the Easter Bunny Envoy. With a full energy store, the player " +
+            "gets the EXP prize instead."),
         Absolute(AnniversarySwitchKey, "IGG Anniversary: envoy, Gold Sacks and Key Piece drops", "0/1", 1m, 1m, 40,
-            "1 = while the IGG Anniversary season is open the IGG Anniversary Envoy sells Anniversary Gold Sacks and " +
-            "monsters on Marathon / Peloponnese drop Key Pieces. 0 = none of it (the envoy is hidden)."),
+            "Runs the IGG Anniversary event while its season is open. On: the IGG Anniversary " +
+            "Envoy sells Anniversary Gold Sacks, and monsters on Marathon and Peloponnese drop " +
+            "Key Pieces. Off: none of it; the envoy is hidden. Season dates are set on the Events " +
+            "& notices page."),
         Absolute(SackGoldKey, "IGG Anniversary: Gold Sack price", "Gold", 1_000m, 1_000_000m, 41,
-            "Gold for one Anniversary Gold Sack (1,000 in the 2011 news and the client's text)."),
+            "Gold price of one Anniversary Gold Sack. The original game charged 1,000."),
         Absolute(SackKeyPiecesKey, "IGG Anniversary: Key Pieces that pay for a sack", "pieces", 5m, 50m, 42,
-            "Holding this many Key Pieces, a sack takes them instead of the Gold (GENERATED; each piece fills a bag " +
-            "slot). 0 = Gold only."),
+            "Key Pieces that pay for an Anniversary Gold Sack instead of Gold. A player holding " +
+            "this many pays with them. 0 = Gold only."),
         Absolute(KeyPiecePercentKey, "IGG Anniversary: Key Piece drop chance", "%", 3m, 100m, 43,
-            "Monsters on Marathon and Peloponnese (the Key Collectors' maps) drop Key Pieces this often (GENERATED).")
+            "Chance that a monster killed on Marathon or Peloponnese drops a Key Piece while the " +
+            "IGG Anniversary is open. Our own value: the original is unknown.")
     ];
 }

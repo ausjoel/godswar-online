@@ -387,6 +387,35 @@ internal sealed partial class GameClientHandler
             return;
         }
 
+        // W14: a session that never took checkpoint ownership (it ended on the character
+        // screen, or its world entry was refused, or its ownership was released or lost)
+        // may not write a checkpoint: an unfenced write could overwrite another owner. The
+        // old forced flush threw "no active checkpoint owner" here, so skipping it loses
+        // nothing it could have saved. The legacy path (no coordinator) needs no owner and
+        // still flushes as before.
+        if (_characterCheckpoints is not null &&
+            !_checkpointOwnershipAcquired)
+        {
+            if (TryGetCheckpointOwner(character, out _))
+            {
+                Console.Error.WriteLine(
+                    "[checkpoint] final flush skipped: owner fence present " +
+                    $"without acquired ownership character={character.Id}");
+            }
+            await ReleasePlayerCoordinationLeaseAsync();
+            return;
+        }
+        if (_characterCheckpoints is not null &&
+            !TryGetCheckpointOwner(character, out _))
+        {
+            // W14: ownership was taken but the fence is gone. The final writes cannot be
+            // fenced, so they are refused; say so loudly, since this can lose the last
+            // position and HP/MP.
+            Console.Error.WriteLine(
+                "[checkpoint] final flush impossible: owned session lost its owner " +
+                $"fence character={character.Id}");
+        }
+
         using var flushDeadline = new CancellationTokenSource(
             CheckpointFinalizationTimeout);
         await Task.WhenAll(

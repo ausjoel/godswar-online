@@ -429,16 +429,20 @@ internal sealed partial class GameSessionRegistry
                     definitions,
                     initializedAt ?? DateTimeOffset.UtcNow,
                     activeWorldBossRespawn,
-                    MonsterRespawnPolicyForMap(runtime.MapId)).Count);
+                    ResolveInstanceRespawnPolicy(runtime, definitions)).Count); // B21
     }
 
     /// <summary>
     /// INSTANCES: Bay Under Attack monsters never respawn inside a run (each run
-    /// is a fresh instance). Every other map keeps the timed respawn it had.
+    /// is a fresh instance). B21: the Training Grounds (210, 201-203, 206) do the
+    /// same while instance.training_one_clear is 1 (the default). Every other map
+    /// keeps the timed respawn it had.
     /// </summary>
     internal static MonsterRespawnPolicy MonsterRespawnPolicyForMap(int mapId) =>
         Godswar.Server.Domain.World.Instances.DynamicDungeonContentMapPolicy
-            .IsHarborAttackMap(mapId)
+            .IsHarborAttackMap(mapId) ||
+        (Godswar.Server.Application.WorldInstances.TrainingGroundPolicy.IsTrainingGroundMap(mapId) && // B21
+         Godswar.Server.Application.WorldInstances.InstanceEntrySwitches.IsTrainingGroundOneClear) // B21
             ? MonsterRespawnPolicy.Never
             : MonsterRespawnPolicy.Timed;
 

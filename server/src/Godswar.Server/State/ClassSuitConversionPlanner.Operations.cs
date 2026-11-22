@@ -26,7 +26,24 @@ internal static partial class ClassSuitConversionPlanner
         out ClassSuitConversionStatus status,
         out string reason)
     {
+        if (request.Operation == ClassSuitConversionOperation.UpgradeTierBeyond) // B22 G2
+        {
+            return TryPlanTierBeyond(templates, working, request, equipment, sourceTemplate, profession, playerLevel,
+                materials, out equipmentAfter, out status, out reason);
+        }
+
         var targetTier = TargetTierFor(request.Operation);
+        if (targetTier == ClassSuitTier.TierIV &&
+            !Godswar.Server.Application.Limits.GameLimitProfile.ClassSuitTierIVAllowed) // W4F: Original GW limits
+        {
+            return Fail(
+                equipment,
+                ClassSuitConversionStatus.UnsupportedOperation,
+                "Class Suit IV is off: the server runs the Original GodsWar limits (limits.original_gw = 1).",
+                out equipmentAfter,
+                out status,
+                out reason);
+        }
         if (!ClassSuitConversionCatalog.TryResolveForward(
                 profession,
                 equipment.Id,
@@ -126,6 +143,113 @@ internal static partial class ClassSuitConversionPlanner
             rule.InsigniaItemId,
             rule.InsigniaQuantity,
             insignia.Bound,
+            ClassSuitMaterialDirection.Consumed));
+        status = ClassSuitConversionStatus.Succeeded;
+        reason = string.Empty;
+        return true;
+    }
+
+    /// <summary>B22 G2 (d36): one step past Class Suit IV (ClassSuitTierUpgradeCatalog), the item keeps all it has.</summary>
+    private static bool TryPlanTierBeyond(
+        IItemTemplateCatalog templates,
+        CompactItemEntry[] working,
+        ClassSuitConversionRequest request,
+        CompactItemEntry equipment,
+        ItemTemplateDefinition sourceTemplate,
+        byte profession,
+        int playerLevel,
+        List<ClassSuitMaterialChange> materials,
+        out CompactItemEntry equipmentAfter,
+        out ClassSuitConversionStatus status,
+        out string reason)
+    {
+        if (!Godswar.Server.Application.Limits.GameLimitProfile.ClassSuitTierIVAllowed) // same W4F switch as Class Suit IV
+        {
+            return Fail(
+                equipment,
+                ClassSuitConversionStatus.UnsupportedOperation,
+                "Class Suit V-VII is off: the server runs the Original GodsWar limits (limits.original_gw = 1).",
+                out equipmentAfter,
+                out status,
+                out reason);
+        }
+
+        if (!ClassSuitTierUpgradeCatalog.TryResolve(equipment.Id, out var rule))
+        {
+            return Fail(
+                equipment,
+                ClassSuitConversionStatus.UnsupportedSource,
+                "Only Class Suit IV, Titan or Primordial gear can be upgraded here.",
+                out equipmentAfter,
+                out status,
+                out reason);
+        }
+
+        if (equipment.ElementalAttribute1.HasValue || equipment.ElementalAttribute2.HasValue)
+        {
+            return Fail(
+                equipment,
+                ClassSuitConversionStatus.InvalidEquipment,
+                "Remove the elemental attribute before upgrading past Class Suit IV.",
+                out equipmentAfter,
+                out status,
+                out reason);
+        }
+
+        if (!TryValidateTarget(
+                templates,
+                sourceTemplate,
+                rule.TargetItemId,
+                profession,
+                playerLevel,
+                out var targetStatus,
+                out var targetReason))
+        {
+            return Fail(
+                equipment,
+                targetStatus,
+                targetReason,
+                out equipmentAfter,
+                out status,
+                out reason);
+        }
+
+        var medalSelection = request.Insignia!;
+        var medal = working[medalSelection.KitBagSlot];
+        if (medal.Id != rule.MedalItemId)
+        {
+            return Fail(
+                equipment,
+                ClassSuitConversionStatus.InvalidInsignia,
+                rule.MedalItemId == ClassSuitTierUpgradeCatalog.ValourLaurel
+                    ? "Valour Laurels are required for this upgrade."
+                    : "Aether Crests are required for this upgrade.",
+                out equipmentAfter,
+                out status,
+                out reason);
+        }
+
+        if (medal.Stack < rule.MedalQuantity)
+        {
+            return Fail(
+                equipment,
+                ClassSuitConversionStatus.InsufficientInsignia,
+                $"This piece needs {rule.MedalQuantity} medals.",
+                out equipmentAfter,
+                out status,
+                out reason);
+        }
+
+        equipmentAfter = equipment with
+        {
+            Id = rule.TargetItemId,
+            Bound = Math.Max(equipment.Bound, medal.Bound)
+        };
+        working[medalSelection.KitBagSlot] = Consume(medal, rule.MedalQuantity);
+        materials.Add(new ClassSuitMaterialChange(
+            rule.MedalItemId,
+            rule.MedalQuantity,
+            medal.Bound,
             ClassSuitMaterialDirection.Consumed));
         status = ClassSuitConversionStatus.Succeeded;
         reason = string.Empty;

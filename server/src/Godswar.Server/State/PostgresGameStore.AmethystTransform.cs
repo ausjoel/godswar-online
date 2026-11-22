@@ -5,7 +5,8 @@ namespace Godswar.Server.State;
 internal sealed partial class PostgresGameStore
 {
     /// <summary>
-    /// Transforms one bag equipment item into a random RltID sibling and spends
+    /// Transforms one bag equipment item into the picked RltID sibling
+    /// (<paramref name="preferredTargetId"/>; 0 = random) and spends
     /// one Level 3 Amethyst, both checked against the locked inventory rows.
     /// </summary>
     public async Task<AmethystTransformResult> TransformEquipmentWithAmethystAsync(
@@ -79,16 +80,26 @@ internal sealed partial class PostgresGameStore
                 gear, gear);
         }
 
+        // W6-D: the clicked preview entry (0 = pick switch off -> random). A
+        // picked item that is not published is refused, never re-rolled.
+        var chosenIndex = EquipmentTransformPick.ChooseIndex(
+            targets,
+            preferredTargetId,
+            System.Security.Cryptography.RandomNumberGenerator.GetInt32(targets.Count));
+        if (chosenIndex < 0)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return new AmethystTransformResult(
+                AmethystTransformStatus.PickUnavailable,
+                await GetCharacterByIdAsync(characterId, cancellationToken),
+                gear, gear);
+        }
+
         var plan = EquipmentTransformCatalog.Plan(
             gear,
             amethyst,
             targets,
-            // FORGEGEMS: the player's preview pick when a patched client
-            // sends it (stock clients send 0, which keeps the random pick).
-            EquipmentTransformPick.ChooseIndex(
-                targets,
-                preferredTargetId,
-                System.Security.Cryptography.RandomNumberGenerator.GetInt32(targets.Count)));
+            chosenIndex);
         if (plan is null)
         {
             await transaction.RollbackAsync(cancellationToken);

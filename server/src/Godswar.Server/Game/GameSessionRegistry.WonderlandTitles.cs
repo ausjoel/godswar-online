@@ -59,8 +59,15 @@ internal sealed partial class GameSessionRegistry
                     continue;
                 }
                 if (_wonderlandTitleAdmissions is { } admissions)
+                {
+                    // S5: each admission is recorded against the reservation that admitted it. A member
+                    // who joined after the seal is not on the party's reservation, so recording the whole
+                    // roster there never matched and the island retried forever (5 Nov party run).
                     await admissions.RecordAdmissionsAsync(entry.Value.AdmissionReservationId,
-                        entry.Value.AdmittedCharacterIds, cancellationToken);
+                        entry.Value.PartyCharacterIds, cancellationToken);
+                    foreach (var (characterId, reservationId) in entry.Value.LateAdmissionReservations)
+                        await admissions.RecordAdmissionsAsync(reservationId, [characterId], cancellationToken);
+                }
                 var receipt = await store.SettleAsync(entry.Value, cancellationToken);
                 if (!receipt.Succeeded) throw new InvalidOperationException($"Title settlement rejected: {receipt.Status}.");
                 QueueWonderlandMedals(entry.Value); // ECONOMY r10: paid by its own retry loop, never blocks titles

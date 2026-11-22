@@ -1,0 +1,96 @@
+using System.Text.Json;
+using Godswar.Server.Application.WorldInstances;
+using Godswar.Server.Domain.Characters;
+using Godswar.Server.Game;
+using Godswar.Server.Game.WorldInstances;
+using Godswar.Server.State;
+using Godswar.Server.World.Systems.Combat;
+
+namespace Godswar.Server.ProtocolChecks;
+
+// SCRATCH ONLY (not committed): dumps the code-defined Wonderland roster and exact AuthoredCombatV1 vectors for the editor.
+internal static class ZzWonderlandRosterDump
+{
+    public const string CheckName = "ZZ dump Wonderland roster for the editor";
+
+    static int Crit(int level, bool boss) => (int)Math.Clamp((long)(25 + 8 * Math.Clamp(level, 1, 10000)) * (boss ? 13000 : 10000) / 10000, 0, int.MaxValue);
+
+    public static Task RunAsync()
+    {
+        var outPath = Environment.GetEnvironmentVariable("GW_DUMP_OUT") ?? "wonderland-dump.json";
+        var camps = new (string Name, byte Camp)[] { ("athens", FactionPortalSkillPolicy.AthensCamp), ("sparta", FactionPortalSkillPolicy.SpartaCamp) };
+        var roster = new Dictionary<string, object>();
+        var partySizeMatters = false;
+        foreach (var (name, camp) in camps)
+        {
+            var rows = new List<object>();
+            for (var island = 1; island <= 8; island++)
+            {
+                var p5 = WonderlandMonsterPlan.Create(island, 5, camp);
+                var p1 = WonderlandMonsterPlan.Create(island, 1, camp);
+                if (!p5.Select(x => x.Stats).SequenceEqual(p1.Select(x => x.Stats))) partySizeMatters = true;
+                foreach (var s in p5)
+                {
+                    var original = new MonsterCombatProfile(MonsterAttackDamageKind.Physical, 3f, s.Stats.Level, 0, 0, 0, 0, 0, 0,
+                        Crit(s.Stats.Level, s.IsBoss), 0, false, s.IsBoss);
+                    var resolved = WonderlandMonsterProfilePolicy.Resolve(original, s);
+                    var normal = WonderlandCapturedAttackPolicy.ApplyProfile(resolved, s, HostileStatusControlFlags.None);
+                    var silenced = WonderlandCapturedAttackPolicy.ApplyProfile(resolved, s,
+                        HostileStatusControlFlags.NonMagicUsing | HostileStatusControlFlags.NonTechniqueUsing);
+                    rows.Add(new
+                    {
+                        object_id = s.ObjectId, island = s.Stage, key = s.TemplateKey, role = s.Role.ToString(), mechanic = s.MechanicKey,
+                        boss = s.IsBoss, required = s.RequiredForProgression, allied = s.IsAllied, camp = s.FactionCamp,
+                        stationary = s.Stationary, level = s.Stats.Level, hp = s.Stats.MaximumHealth,
+                        authored = new { pa = s.Stats.PhysicalAttack, ma = s.Stats.MagicAttack, magic = s.Stats.UsesMagicDamage },
+                        pd = s.Stats.PhysicalDefense, md = s.Stats.MagicDefense, hit = s.Stats.Hit, dodge = s.Stats.Dodge,
+                        crit = resolved.Critical, crit_res = resolved.CriticalResistance,
+                        interval_s = s.Stats.AttackInterval.TotalSeconds, range = s.Stats.AttackRange, aggro = s.AggroRadius,
+                        attack = new { magic = normal.UsesMagicDamage, pa = normal.PhysicalAttack, ma = normal.MagicAttack },
+                        silenced = new { magic = silenced.UsesMagicDamage, pa = silenced.PhysicalAttack, ma = silenced.MagicAttack },
+                        skill = WonderlandCapturedAttackPolicy.PrimarySkillId(s.TemplateKey),
+                        area_radius = WonderlandCapturedAttackPolicy.NativeAreaRadius(s.TemplateKey)
+                    });
+                }
+            }
+            roster[name] = rows;
+        }
+        var abilities = new List<object>();
+        foreach (var (key, a) in new[] { ("rooster", WonderlandBossAbilityPolicy.For("rooster").Single()),
+                     ("atlas_death_blast", WonderlandBossAbilityPolicy.AtlasDeathBlast), ("ground_fire", WonderlandBossAbilityPolicy.TerrainFire) })
+            abilities.Add(new { key, name = a.Key, skill = a.NativeSkillId, magic = a.Magical, multiplier = a.DamageMultiplier,
+                cooldown_s = a.Cooldown.TotalSeconds, windup_s = a.Windup.TotalSeconds, radius = a.Radius, hits = a.HitCount });
+
+        // Exact formula vectors: attacker x target x outcome through the server's own AuthoredCombatPveCurrent.
+        var attackers = new List<CombatAttackerStats>();
+        foreach (var lv in new[] { 1, 60, 120, 200 })
+            foreach (var atk in new[] { 0, 500, 8000, 26163, 33364 })
+                foreach (var prof in new byte[] { 0, 3 })
+                    attackers.Add(new CombatAttackerStats { Level = lv, Profession = prof, PhysicalAttack = atk, MagicAttack = atk + 7, Hit = 3500 + lv, Critical = Crit(lv, lv == 200) });
+        var targets = new List<CombatTargetStats>
+        {
+            new() { Level = 143, PhysicalDefense = 5379, MagicDefense = 2920, Dodge = 1500, CriticalResistance = 8, PhysicalFlatAbsorption = 4791, MagicFlatAbsorption = 4791 },
+            new() { Level = 200, PhysicalDefense = 2551, MagicDefense = 1820, Dodge = 1644, CriticalResistance = 312, PhysicalFlatAbsorption = 1820, MagicFlatAbsorption = 1820 },
+            new() { Level = 200, PhysicalDefense = 5132, MagicDefense = 7827, Dodge = 2660, CriticalResistance = 400, PhysicalFlatAbsorption = 30000, MagicFlatAbsorption = 30000 },
+            new() { Level = 90, PhysicalDefense = 900, MagicDefense = 700, Dodge = 20000, CriticalResistance = 5000, PhysicalDamageReductionBasisPoints = 2500,
+                MagicDamageReductionBasisPoints = 9000, PhysicalDamageTakenIncreaseBasisPoints = 1500, MagicDamageTakenIncreaseBasisPoints = 9500,
+                CriticalDamageReductionBasisPoints = 3000, CriticalDamageFlatReduction = 777, PhysicalFlatAbsorption = 333, MagicFlatAbsorption = 0 },
+            new() { Level = 10, PhysicalDefense = 0, MagicDefense = 0, Dodge = 0, CriticalResistance = 0 },
+        };
+        var vectors = new List<object>();
+        foreach (var at in attackers)
+            foreach (var tg in targets)
+            {
+                var n = AuthoredCombatPveCurrent.ResolveBasicAttackForOutcome(at, tg, CombatHitOutcome.Normal);
+                var c = AuthoredCombatPveCurrent.ResolveBasicAttackForOutcome(at, tg, CombatHitOutcome.Critical);
+                var sk = AuthoredCombatPveCurrent.ResolveSkillDamageForOutcome(at, tg, at.Profession == 3 ? 1 : 0, 1.5m, 0m, CombatHitOutcome.Normal);
+                vectors.Add(new { attacker = at, target = tg, hit_bp = AuthoredCombatV1.CalculateHitChanceBasisPoints(at, tg),
+                    crit_bp = AuthoredCombatV1.CalculateCriticalChanceBasisPoints(at, tg),
+                    normal = n.Damage, critical = c.Damage, skill_x2_5 = sk.Damage });
+            }
+        File.WriteAllText(outPath, JsonSerializer.Serialize(new { party_size_matters = partySizeMatters, roster, abilities, vectors },
+            new JsonSerializerOptions { WriteIndented = true, IncludeFields = true }));
+        Console.WriteLine("WONDERLAND dump written " + outPath);
+        return Task.CompletedTask;
+    }
+}

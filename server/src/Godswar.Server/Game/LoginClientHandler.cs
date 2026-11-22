@@ -28,6 +28,8 @@ internal sealed class LoginClientHandler : IClientHandler
     private bool _grantCommitted;
     private bool _loginAttempted;
     private readonly TimeSpan _redirectPacing;
+    // W6A: what this connection did, for public.session_health. Written once when the connection ends.
+    private readonly Godswar.Server.Operations.Health.SessionJourney _journey;
 
     /// <summary>
     /// How long SendServer (S2C 7) and the game-server redirect (S2C 10001) each
@@ -71,6 +73,7 @@ internal sealed class LoginClientHandler : IClientHandler
             throw new ArgumentOutOfRangeException(nameof(redirectPacing));
         }
         _session = session ?? throw new ArgumentNullException(nameof(session));
+        _journey = new("login", LegacyGameLoginHandoff.ProcessRealmId, session.RemoteEndPoint);
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _authentication = authentication ??
             throw new ArgumentNullException(nameof(authentication));
@@ -123,8 +126,16 @@ internal sealed class LoginClientHandler : IClientHandler
                 }
             }
         }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            _journey.SetError(error); // W6A
+            throw;
+        }
         finally
         {
+            _journey.TransportError = _session.TerminalErrorType; // W6A
+            _journey.LastSendOpcode = _session.LastCompletedSendOpcode;
+            Godswar.Server.Operations.Health.SessionHealthRecorder.Record(_journey);
             if (!_grantCommitted &&
                 _loginGeneration is not null &&
                 _ticketStore is not null)
@@ -177,19 +188,30 @@ internal sealed class LoginClientHandler : IClientHandler
                 return;
             }
             _loginAttempted = true;
+            _journey.Attempted = true; // W6A
+            _journey.LastOpcode = packet.Opcode;
+            _journey.Mark("login");
 
             var payload = packet.Payload;
             if (payload.Length < 64)
             {
+                _journey.Refuse("malformed");
                 await SendGenericFailureAsync(cancellationToken);
                 return;
             }
+            // ROUND-CLIENTBUILD: twice the patch.vn number (2.51.002 sends 4102004, releases up to 1.5.6 send 4108000,
+            // stamped releases 4108000 + 2 x channel release). Recorded in session_health.client_build and logged once.
+            uint? clientBuild = ClientBuildPolicy.TryRead(payload, out var sentBuild) ? sentBuild : null;
+            _journey.ClientBuild = clientBuild;
+            Console.WriteLine("[login] client build=" + ClientBuildPolicy.Describe(clientBuild));
 
             // ROUND3: the Origin login carries its uint32 build at payload +132.
             // Reject missing/old stamps before credential work or issuing a game grant.
             if (!ClientBuildPolicy.Allows(packet, _options.MinimumClientBuild))
             {
-                Console.Error.WriteLine("[login] please update client: minimum build=" + _options.MinimumClientBuild);
+                Console.Error.WriteLine("[login] please update client: minimum build=" + _options.MinimumClientBuild +
+                    " client build=" + ClientBuildPolicy.Describe(clientBuild)); // ROUND-CLIENTBUILD
+                _journey.Refuse("old_client");
                 await SendGenericFailureAsync(cancellationToken);
                 _session.Disconnect();
                 return;
@@ -198,6 +220,7 @@ internal sealed class LoginClientHandler : IClientHandler
             var rawUsername = PacketText.ReadFixedAscii(payload, 0, 32);
             if (string.IsNullOrWhiteSpace(rawUsername))
             {
+                _journey.Refuse("malformed");
                 await SendGenericFailureAsync(cancellationToken);
                 return;
             }
@@ -213,6 +236,7 @@ internal sealed class LoginClientHandler : IClientHandler
                     Console.Error.WriteLine(
                         "[security] rejected legacy authentication " +
                         "endpoint=login reason=profile");
+                    _journey.Refuse("server_profile");
                     _session.Disconnect();
                     return;
                 }
@@ -241,6 +265,10 @@ internal sealed class LoginClientHandler : IClientHandler
                     cancellationToken);
                 if (!result.IsAccepted)
                 {
+                    // W6A: the typed name is not stored. The writer turns it into the account id when the
+                    // account exists (wrong password) and drops it when it does not (unknown name).
+                    _journey.AttemptedName = username;
+                    _journey.Refuse("bad_credentials");
                     await SendGenericFailureAsync(cancellationToken);
                     return;
                 }
@@ -253,6 +281,8 @@ internal sealed class LoginClientHandler : IClientHandler
                 {
                     Console.WriteLine(
                         $"[operator] login refused (banned) endpoint=login account={result.Account.Id}");
+                    _journey.AccountId = result.Account.Id;
+                    _journey.Refuse("banned");
                     await SendGenericFailureAsync(cancellationToken);
                     return;
                 }
@@ -266,6 +296,8 @@ internal sealed class LoginClientHandler : IClientHandler
                         cancellationToken);
                     if (!generation.IsStarted)
                     {
+                        _journey.AccountId = result.Account.Id;
+                        _journey.Refuse("ticket_refused");
                         await SendGenericFailureAsync(cancellationToken);
                         return;
                     }
@@ -284,6 +316,9 @@ internal sealed class LoginClientHandler : IClientHandler
             }
 
             _session.MarkAuthenticated();
+            _journey.AccountId = _authenticatedAccount?.Id; // W6A
+            _journey.Outcome = "accepted";
+            _journey.Mark("accepted");
             if (!_session.IsSecure &&
                 _session.AllowsPayloadDiagnostics)
             {
@@ -316,14 +351,19 @@ internal sealed class LoginClientHandler : IClientHandler
         // the quest UI) before the redirect asks for ADAPTER. Waited before any
         // ticket is issued, so the secure grant's lease deadline is untouched.
         await PaceLoginReplyAsync(cancellationToken);
+        _journey.Mark("redirect"); // W6A
 
         if (!_session.IsSecure)
         {
             // LOGINFIX: the legacy game login on the game port carries no
             // password; admit it only from the address that just passed here.
-            LegacyGameLoginHandoff.Issue(
+            // ROUND-SHAREDHANDOFF: bound to the realm the player selected (or this process's own).
+            await LegacyGameLoginHandoff.IssueAsync(
                 _authenticatedAccount.Id,
-                _session.RemoteEndPoint);
+                _selectedRealm?.RealmId.Value ?? LegacyGameLoginHandoff.ProcessRealmId,
+                _session.RemoteEndPoint,
+                lifetime: null,
+                cancellationToken);
             if (_selectedRealm is not null)
             {
                 await _session.SendAsync(
@@ -389,6 +429,7 @@ internal sealed class LoginClientHandler : IClientHandler
     private async Task SendServerListAsync(
         CancellationToken cancellationToken)
     {
+        _journey.Mark("server_list"); // W6A
         if (_realmCatalog is null)
         {
             await _session.SendAsync(
@@ -427,6 +468,7 @@ internal sealed class LoginClientHandler : IClientHandler
             _session.Disconnect();
             return;
         }
+        _journey.Mark("server_selected"); // W6A
 
         if (_realmCatalog is null)
         {

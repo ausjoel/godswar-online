@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_downloads.html" as dl %}
 {% block title %}Account ready{% endblock %}
 {% block content %}
 <section class="card">
@@ -10,9 +11,9 @@
     <li>
       <h3>Get the GodsWar launcher</h3>
       <p>The launcher downloads the game for you and keeps it up to date.</p>
-      <p><a class="go link" href="/downloads/files/GodsWar-Launcher-mac.zip" rel="noopener">Download for Mac</a></p>
-      <p><a class="go link" href="/downloads/files/GodsWar-Launcher-windows.exe" rel="noopener">Download for Windows</a></p>
+      {{ dl.small_buttons() }}
       <p class="small">Your computer will warn that the app is from an unknown publisher the first time. <a href="/static/player-guide.html">The how-to-play guide</a> shows the clicks to allow it.</p>
+      <p class="small">{{ dl.native_line() }}</p>
     </li>
     <li>
       <h3>Log in</h3>
@@ -21,7 +22,7 @@
     </li>
     <li>
       <h3>Make your hero</h3>
-      <p>Pick the server, choose your faction and class, and enter the world.</p>
+      <p>Pick the server, choose your faction and class, and enter the world. New here? Read <a href="/guides/getting-started">Getting started</a>.</p>
     </li>
   </ol>
 

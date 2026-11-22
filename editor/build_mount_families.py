@@ -2,7 +2,7 @@
 import hashlib,json,re
 from pathlib import Path
 HERE=Path(__file__).resolve().parent
-DEFAULT_SOURCE=HERE.parents[2]/'GodsWar-2.51/Polish/reborn-src-v2/src/Godswar.Server/State/DeveloperMountCatalog.cs'
+DEFAULT_SOURCE=HERE.parent/'server/src/Godswar.Server/State/DeveloperMountCatalog.cs'
 TIERS=['40','50','60','70','80','90','100','110','max','special']
 def build(source,items):
  raw=Path(source).read_bytes();text=raw.decode()

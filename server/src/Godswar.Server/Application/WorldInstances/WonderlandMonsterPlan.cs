@@ -23,6 +23,8 @@ internal static class WonderlandMonsterPlan
             int? capturedLevel = null)
         {
             var allied = camp.HasValue && camp == partyCamp;
+            // WL-SLIDERS: the island's HP % slider (100 = stock) scales enemies only; allied helpers keep stock HP.
+            if (!allied) hp = WonderlandIslandScale.ScaleHp(island, hp);
             // September 13 external 10020 fields +12/+24 pin levels and HP.
             // The user explicitly requires identical HP for every party size.
             var level = capturedLevel ?? (boss || stationary || role == WonderlandMonsterRole.ChestGuard ? 200 : 120);

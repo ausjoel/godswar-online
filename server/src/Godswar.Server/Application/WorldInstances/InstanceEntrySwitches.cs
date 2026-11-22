@@ -19,6 +19,11 @@ internal static class InstanceEntrySwitches
     public static bool IsWarriorTrainingOpen =>
         ServerRates.Current.Absolute(ServerRateKeys.WarriorTrainingEntry) == 1;
 
+    /// <summary>B21: Training Ground monsters appear once per run and the target is one full clear
+    /// (instance.training_one_clear, default 1). Read once per run, when its monsters are first loaded.</summary>
+    public static bool IsTrainingGroundOneClear => // B21
+        ServerRates.Current.Absolute(ServerRateKeys.TrainingGroundOneClear) == 1;
+
     /// <summary>WARRIOR (F-51): whether the switch of a Training Ground entry kind is on.</summary>
     public static bool IsOpen(Domain.World.Content.InstanceCallerEntryKind kind) =>
         kind == Domain.World.Content.InstanceCallerEntryKind.TrainingGround ? IsTrainingGroundOpen

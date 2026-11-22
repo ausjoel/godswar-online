@@ -40,12 +40,12 @@
       async function load() {
         const D = await ctx.api("overview");
         GW.clear(body);
-        body.append(h("p", null, "Who may go in and when: every transporter destination, battlefield, instance and event. Empty fields use the server's default (the admin's answers of 2026-11-05). ",
+        body.append(h("p", null, "Who may go in and when: every transporter destination, battlefield, instance and event. Empty fields use the server's default. ",
           "Level 200 means no cap. Times are server time, ", h("b", null, D.time_zone || "AEST"), ". Saved values reach the game within 15 seconds (no restart). ", GW.appliesChip("hot_reload")));
         if (!D.ready) { body.append(h("p", { class: "tt-bad", role: "alert" }, D.why_missing)); if (!D.gates.length) return; }
         body.append(h("p", { class: "gw-dim" }, "Server time now: ", D.realm_time, ". GMs: ",
           String(D.gm_obey_gates).startsWith("1") ? "gm.obey_gates = 1, GMs obey every gate." : "gm.obey_gates = 0, GMs skip the gates marked 'GM skips: yes'.",
-          " Change the global switch on ", h("a", { href: "#/rates" }, "Server rates"), ". Mycenae also costs ", String(D.mycenae_silver), " Silver (compiled)."));
+          " Change the global switch on ", h("a", { href: "#/rates" }, "Server rates"), ". Mycenae also costs ", String(D.mycenae_silver), " Silver (fixed in the server)."));
         body.append(h("p", { class: "gw-dim" }, "Pindus, Ni Mini and Lelantine Farm times saved here replace the ones on ", h("a", { href: "#/events" }, "Events & notices"),
           " (same rows). Players' client texts do not change: when a value disagrees with them the row says so."));
         const groups = {};

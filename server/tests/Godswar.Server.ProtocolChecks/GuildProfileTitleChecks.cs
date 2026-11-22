@@ -43,7 +43,7 @@ internal static class GuildProfileTitleChecks
             CharacterId,
             new GuildPanelStatus(Duty: 4, Contribution: 99, GuildName: "567"));
         var member = PacketBuilder.PlayerTitleInfo(character, ObjectId);
-        Check.Equal(80, member.Length, "guild profile packet length");
+        Check.Equal(92, member.Length, "guild profile packet length (80 native + RANK-DISPLAY tail)");
         Check.Equal(
             (ushort)0x27D7,
             BinaryPrimitives.ReadUInt16LittleEndian(member.AsSpan(2)),

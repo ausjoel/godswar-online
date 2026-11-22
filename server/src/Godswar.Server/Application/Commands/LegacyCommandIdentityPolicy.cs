@@ -39,6 +39,7 @@ internal static class LegacyCommandIdentityPolicy
             CommandFamily.ClassSuitUpgradeTierII or
             CommandFamily.ClassSuitUpgradeTierIII or
             CommandFamily.ClassSuitUpgradeTierIV or
+            CommandFamily.ClassSuitUpgradeTierBeyond or // B22 G2
             CommandFamily.ClassSuitAddAttribute or
             CommandFamily.ClassSuitDeleteAttribute or
             CommandFamily.ZodiacSkillGridUpgrade or

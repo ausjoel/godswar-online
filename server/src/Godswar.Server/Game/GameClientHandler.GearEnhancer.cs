@@ -125,6 +125,23 @@ internal sealed partial class GameClientHandler
             }
         }
 
+        if (dialogIndex == GearEnhancerProtocol.OriginDialogIndex &&
+            contextIsActive &&
+            stagedContext!.TryResolveNativeCommit(
+                GearEnhancerSelectionShape.MalformedCommit,
+                out var originStagedSelections))
+        {
+            // W6-B: the stock dialog-118 window stages its three items through
+            // opcode 10193 exactly like the Gear Mentor; its final 10069 carries
+            // scratch. Items staged that way are the authoritative choice.
+            nativeSelections = originStagedSelections;
+            gearKitBagSlot = originStagedSelections.GearKitBagSlot;
+            catalystKitBagSlot = originStagedSelections.CatalystKitBagSlot;
+            attributeStoneKitBagSlot =
+                originStagedSelections.AttributeStoneKitBagSlot;
+            selectionShape = GearEnhancerSelectionShape.Commit;
+        }
+
         if (selectionShape == GearEnhancerSelectionShape.MenuSelection)
         {
             ClearGearEnhancerSelection();

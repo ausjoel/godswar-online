@@ -187,6 +187,9 @@ internal sealed partial class PostgresGameStore
     /// other grants here - lock the character, take the first free slot, insert the
     /// item, and return the committed character.
     /// </remarks>
+    /// <summary>B21 (bug b1794901326354): 1 = bound (free wish), 0 = unbound (wish paid with Gold).</summary>
+    internal static int WishingPoolBookBound(int goldCost) => goldCost > 0 ? 0 : 1;
+
     public async Task<KitBagItemGrantResult> AddWishingPoolSkillBookAsync(
         int accountId,
         int characterId,
@@ -282,11 +285,13 @@ internal sealed partial class PostgresGameStore
             )
             VALUES (
                 @characterId, @itemLocation, @slotIndex, @itemId,
-                1, 1, 1, 1, 0, 0
+                1, 1, @bound, 1, 0, 0
             );
             """, connection, transaction))
         {
             insertItem.Parameters.AddWithValue("characterId", characterId);
+            // B21 (bug b1794901326354): the free wish gives a bound book; a wish paid with Gold gives an unbound one.
+            insertItem.Parameters.AddWithValue("bound", (short)WishingPoolBookBound(goldCost));
             insertItem.Parameters.AddWithValue("itemLocation", ItemLocationKitBag);
             insertItem.Parameters.AddWithValue("slotIndex", checked((short)freeSlot));
             insertItem.Parameters.AddWithValue("itemId", checked((int)itemId));

@@ -104,13 +104,13 @@ internal static class EconomyMedalChecks
 
     private static void CheckPolicy()
     {
-        int[] expected = [0, 50, 130, 80, 90, 100, 110, 120, 570];
+        int[] expected = [0, 50, 130, 80, 90, 100, 110, 120, 720]; // d20: island 8 counts the Chest Guard as Mobby (+150)
         for (var island = 1; island <= 8; island++)
             Check.Equal(expected[island], WonderlandMedalPolicy.Resolve(island), $"island {island} pays the guide's boss medals");
         Check.Equal(0, WonderlandMedalPolicy.Resolve(0), "no island 0");
         Check.Equal(0, WonderlandMedalPolicy.Resolve(9), "no island 9");
         var run = Enumerable.Range(1, 8).Sum(WonderlandMedalPolicy.Resolve);
-        Check.Equal(1250, run, "a full run pays 1,250 medals");
+        Check.Equal(1400, run, "a full run pays 1,400 medals (d20: Chest Guard = Mobby)");
         Check.True(run >= 1200, "one full run reaches a 1,200-medal item");
         Check.Equal(0m, ServerRateCatalog.Get(ServerRateKeys.WonderlandMedals).DefaultValue, "RELEASE: the rate defaults to 0 (off; 1 = the guide)");
         Check.Equal(0m, ServerRateCatalog.Get(ServerRateKeys.WonderlandMedals).MinimumValue, "the rate can be set to 0 (off)");

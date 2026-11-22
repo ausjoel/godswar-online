@@ -1,0 +1,25 @@
+[Unit]
+Description=GodsWar editor service-control job (helper v3)
+[Service]
+ExecStart=/usr/bin/python3 -I /usr/local/libexec/gweditor-control.py
+User=root
+Group=gweditor
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+RuntimeDirectory=gweditor-control
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
+UMask=0027
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+# Only to read the game log (owned by godswar251, mode 700) for 'logs' and list /opt/godswar251/backup (root 700) for
+# 'backups'; nothing can be written. 'restore' only starts the fixed godswar251-restore@<file>.service, and the realm actions only start
+# godswar251-realm-admin@<job>.service (v3); the helper itself still cannot write outside /run/gweditor-control.
+CapabilityBoundingSet=CAP_DAC_READ_SEARCH
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true

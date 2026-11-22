@@ -31,8 +31,9 @@ internal static class ClassChangeChecks
         Check.Equal(-1, ClassChangePolicy.ResolveClassClick(100, 114), "permit form is not a class click");
         Check.Equal(-1, ClassChangePolicy.ResolveClassClick(-1, -1), "first-page request is not a class click");
 
-        var defaults = ServerRatesSnapshot.Default;
-        Check.True(!ClassChangePolicy.IsEnabled(null, defaults), "off by default");
+        Check.True(ClassChangePolicy.IsEnabled(null, ServerRatesSnapshot.Default), "B21: on by default (live is on)");
+        var defaults = ServerRatesSnapshot.Create([new(ServerRateKeys.ClassChangeEnabled, 0m)], 1, DateTimeOffset.UtcNow, "check", "test");
+        Check.True(!ClassChangePolicy.IsEnabled(null, defaults), "npc.class_change = 0: off");
         Check.True(!ClassChangePolicy.IsEnabled("false", defaults), "env false keeps it off");
         Check.True(ClassChangePolicy.IsEnabled("true", defaults), "env true turns it on");
         Check.True(ClassChangePolicy.IsEnabled("1", defaults), "env 1 turns it on");
@@ -40,7 +41,7 @@ internal static class ClassChangeChecks
             [new(ServerRateKeys.ClassChangeEnabled, 1m), new(ServerRateKeys.ClassChangeFreeLevel, 120m)],
             1, DateTimeOffset.UtcNow, "check", "test");
         Check.True(ClassChangePolicy.IsEnabled(null, on), "server rate npc.class_change = 1 turns it on");
-        Check.Equal(0m, ServerRateCatalog.Get(ServerRateKeys.ClassChangeEnabled).DefaultValue, "rate defaults to 0");
+        Check.Equal(1m, ServerRateCatalog.Get(ServerRateKeys.ClassChangeEnabled).DefaultValue, "B21: rate defaults to 1");
         Check.True(ServerRateCatalog.Get(ServerRateKeys.ClassChangeEnabled).Kind == ServerRateKind.Absolute, "switch is absolute");
 
         Check.Equal(100, ClassChangePolicy.FreeLevel(defaults), "retail free level 100");

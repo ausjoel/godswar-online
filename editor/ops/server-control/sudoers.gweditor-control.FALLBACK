@@ -1,0 +1,14 @@
+# /etc/sudoers.d/gweditor-control  - FALLBACK ONLY, NOT RECOMMENDED. Install with: visudo -cf <file> first.
+#
+# The editor normally reaches its root helper through the socket gweditor-control.socket (no sudo at all).
+# sudo CANNOT work from gweditor.service as deployed: the unit sets NoNewPrivileges=true, RestrictSUIDSGID=true and an
+# empty CapabilityBoundingSet, so the setuid sudo binary never gains root. Using this file also needs a drop-in that
+# turns those three off, which weakens the editor's sandbox. Prefer the socket.
+#
+# Exactly one command, no arguments from the caller (the request arrives as one JSON line on stdin and is validated
+# by the helper itself); env_reset keeps GWC_* test variables out.
+# The helper also needs its state folder: create /run/gweditor-control (root:gweditor 0750) with a tmpfiles.d line,
+# because without the socket unit nothing makes it:  d /run/gweditor-control 0750 root gweditor -
+Cmnd_Alias GWEDITOR_CONTROL = /usr/bin/python3 -I /usr/local/libexec/gweditor-control.py ""
+Defaults!GWEDITOR_CONTROL env_reset, !requiretty
+gweditor ALL=(root) NOPASSWD: GWEDITOR_CONTROL

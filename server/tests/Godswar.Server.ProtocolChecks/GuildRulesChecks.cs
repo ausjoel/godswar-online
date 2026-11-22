@@ -44,13 +44,12 @@ internal static class GuildRulesChecks
         ServerRates.ResetToDefaults();
         Check.Equal(9, ServerRateCatalog.Definitions.Count(static d => d.Category == GuildRateKeys.Category),
             "nine guild settings in the Guild category");
-        // RELEASE: every guild switch defaults off (the admin turns them on).
-        Check.True(!GuildRateKeys.On(GuildRateKeys.BuildingRules), "RELEASE: building rules default off");
-        Check.True(!GuildRateKeys.On(GuildRateKeys.AltarCurve), "RELEASE: guide altar curve default off");
-        Check.True(!GuildRateKeys.On(GuildRateKeys.LordRules), "RELEASE: Lord rules default off");
-        Check.True(!GuildRateKeys.On(GuildRateKeys.DoubleClaims), "RELEASE: advisor claims default off");
-        Check.True(!GuildRateKeys.On(GuildRateKeys.QuestRules),
-            "guild quest rules default OFF (review fix: dailies stay open until guilds exist)");
+        // B21 item 17: every guild switch defaults ON now (live has run them on since 2026-11-04).
+        Check.True(GuildRateKeys.On(GuildRateKeys.BuildingRules), "B21: building rules default on");
+        Check.True(GuildRateKeys.On(GuildRateKeys.AltarCurve), "B21: altar curve default on");
+        Check.True(GuildRateKeys.On(GuildRateKeys.LordRules), "B21: Lord rules default on");
+        Check.True(GuildRateKeys.On(GuildRateKeys.DoubleClaims), "B21: advisor claims default on");
+        Check.True(GuildRateKeys.On(GuildRateKeys.QuestRules), "B21: guild quest rules default on (live is on)");
         Check.Equal(5, GuildRateKeys.DutyOf(GuildRateKeys.BuildDuty), "Lord and Deputies build by default");
         Check.Equal(6, GuildRateKeys.DutyOf(GuildRateKeys.DeleteDuty), "only the Lord demolishes by default");
         Check.Equal(4, GuildRateKeys.DutyOf(GuildRateKeys.QuestReleaseDuty), "Directors and up release quests");
@@ -180,8 +179,8 @@ internal static class GuildRulesChecks
         Check.True(consistent, "every catalog quest is a sort-4 chain quest whose Gold column is the Guild Gold");
 
         var payout = new QuestRewardPayout(2000, 2, 0, 30);
-        Check.Equal(payout, GameClientHandler.GuildQuestPersonalPayout(210, payout, inGuild: true),
-            "default (rules off since the review fix): the stock payout is untouched");
+        Check.Equal(new QuestRewardPayout(2000, 2, 0, 0), GameClientHandler.GuildQuestPersonalPayout(210, payout, inGuild: true),
+            "B21 default (rules on, as live): the Guild Gold is not paid to a guild member");
         Install(GuildRateKeys.QuestRules, 1m);
         Check.Equal(new QuestRewardPayout(2000, 2, 0, 0), GameClientHandler.GuildQuestPersonalPayout(210, payout, inGuild: true),
             "rules on: the Guild Gold is not paid to a guild member");

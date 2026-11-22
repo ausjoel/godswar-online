@@ -45,6 +45,14 @@ internal sealed partial class GameClientHandler
             return true;
         }
 
+        if (await RefuseSwitchedOffCommandAsync( // W5B
+                packet,
+                Godswar.Server.Application.Operators.GmPowerPolicy.CommandKeyOfLine(text, DeveloperCommandText.FindBodyOffset(text)),
+                cancellationToken))
+        {
+            return true;
+        }
+
         if (command is null)
         {
             await SendDeveloperItemFeedbackAsync(

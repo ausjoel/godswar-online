@@ -23,6 +23,7 @@ internal static class EventsNpcChecks
             CheckSpawns();
             CheckAcceptBand();
             CheckReviewFixes();
+            CheckMarathonAnswerCapture();
         }
         finally
         {
@@ -150,6 +151,40 @@ internal static class EventsNpcChecks
 
     // Review fixes (2026-11-03): one-shot sack state, owed reward, the new columns, and the shared Zeus EXP path
     // still applying exp.events by default (only the pill turn-in opts out).
+    /// <summary>
+    /// W5-F: the Marathon sum submission exactly as the real client 1.4.9 sent it on the private rig (2026-11-12,
+    /// Fitness Trainer 8 = NPC 5713, function 22, "4 + 4", typed 7; then "3 + 4", typed 7 -> Manual 14 for 15).
+    /// 92 bytes, opcode 10069: +4 npc, +8/+12 function, +16.. click path [1201, 0], +0x3C the BijouEditBox number
+    /// (GodsWar.exe 0x5a9900), every other word -1.
+    /// </summary>
+    private static void CheckMarathonAnswerCapture()
+    {
+        static Godswar.Server.Protocol.GamePacket Submit(int typed)
+        {
+            var frame = new byte[92];
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(frame, 92);
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(2), 10069);
+            var words = new[] { 5713, 22, 22, 1201, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, typed, -1, -1, -1, -1, -1, -1, -1 };
+            for (var index = 0; index < words.Length; index++)
+            {
+                System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(4 + index * 4), words[index]);
+            }
+
+            return new Godswar.Server.Protocol.GamePacket(frame);
+        }
+
+        Check.Equal(0x38, Godswar.Server.Game.GameClientHandler.DialogAmountOffset, "the typed number is payload word +0x38");
+        Check.Equal(7, Godswar.Server.Game.GameClientHandler.DialogAmount(Submit(7)),
+            "the captured Marathon submission's typed sum is read from the BijouEditBox word");
+        Check.True(Godswar.Server.Game.GameClientHandler.DialogPath(Submit(7)).SequenceEqual(new[] { 1201, 0 }),
+            "the captured Marathon submission's click path is [1201, 0]");
+        Check.True(Godswar.Server.Game.GameClientHandler.DialogAmount(Submit(-1)) <= 0,
+            "an empty answer box (-1) is not a positive number, so it can never equal a sum of 2-18");
+        Check.True(ServerRateCatalog.TryGet(EventsNpcRateKeys.MarathonCheckAnswer, out var check) &&
+            !check.Description.Contains("UNPROVEN", StringComparison.Ordinal),
+            "event.marathon_check_answer no longer warns that the answer field is unproven");
+    }
+
     private static void CheckReviewFixes()
     {
         var day = new DateOnly(2026, 11, 3);

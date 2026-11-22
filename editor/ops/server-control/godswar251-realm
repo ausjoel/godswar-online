@@ -1,0 +1,486 @@
+#!/usr/bin/env python3
+"""godswar251-realm: set up or take down the game process of an ADDITIONAL realm (a second "server" in the client's
+server list). Runs as root, started only by systemd (godswar251-realm-admin@<job>.service, which the editor's root
+helper gweditor-control starts). It never takes shell text, unit names or paths: a job is one of
+
+    provision-<realm>-<port>    realm 2..255, port 7001..7099
+    remove-<realm>
+
+and everything else is derived from the realm number:
+
+    unit         godswar251-realm@<realm>.service   (template godswar251-realm@.service, same binary as realm 1)
+    settings     /etc/godswar251-realms/realm-<realm>.env   (numbers only; the database password stays in appsettings.json)
+    game port    <port>, public, opened in ufw
+    login port   17000 + realm on 127.0.0.1 (unused: players log in through the main process on 6999)
+    management   19000 + realm on 127.0.0.1 (/readyz)
+    log          /opt/godswar251/logs/realm-<realm>.log
+    result       /var/lib/godswar251-realms/realm-<realm>.json  (what was done, step by step; the editor shows it)
+
+provision: checks, (stops an idle realm process), writes the settings, opens the ufw port, listens on the port for a
+few seconds so the editor page in the owner's browser can prove the provider firewall passes it ("knock"), starts the
+process and waits for /readyz. It does NOT touch the database and does NOT restart the main game: when the main game
+still uses the in-memory login handoff it writes the drop-in, says so, and stops (restart the game at zero players,
+then run it again).
+remove: refuses while anyone is connected to the realm's port; stops and disables the unit, closes the ufw port and
+moves the settings file to removed/. Characters are database rows: nothing here can touch them.
+
+Usage: godswar251-realm job <job> | provision <realm> <port> | remove <realm> | status | wait-main
+GWR_* variables exist only so the tests can point it at stubs; the systemd unit sets none of them.
+"""
+import datetime, json, os, pathlib, re, socket, subprocess, sys, time, urllib.request
+
+E = os.environ.get
+SYSTEMCTL = E('GWR_SYSTEMCTL', '/usr/bin/systemctl')
+UFW = E('GWR_UFW', '/usr/sbin/ufw')
+SS = E('GWR_SS', '/usr/bin/ss')
+ETC = pathlib.Path(E('GWR_ETC', '/etc/godswar251-realms'))
+STATE = pathlib.Path(E('GWR_STATE', '/var/lib/godswar251-realms'))
+UNIT_DIR = pathlib.Path(E('GWR_UNIT_DIR', '/etc/systemd/system'))
+PROC = pathlib.Path(E('GWR_PROC', '/proc'))
+READY_URL = E('GWR_READY_URL', 'http://127.0.0.1:%d/readyz')
+READY_TRIES = int(E('GWR_READY_TRIES', '180'))          # x 0.5 s
+KNOCK_SECONDS = float(E('GWR_KNOCK_SECONDS', '30'))
+KNOCK_BIND = E('GWR_KNOCK_BIND', '0.0.0.0')
+KNOCK_ANY = E('GWR_KNOCK_ANY') == '1'                   # tests: count a loopback connection as "from outside"
+
+MAIN_UNIT = 'godswar251.service'
+TEMPLATE = 'godswar251-realm@.service'
+HANDOFF_DROPIN = 'realm-handoff.conf'
+HANDOFF_KEY = 'GODSWAR_LEGACY_GAME_LOGIN_HANDOFF_STORE'
+REALM_MIN, REALM_MAX = 2, 255
+PORT_MIN, PORT_MAX = 7001, 7099
+LOGIN_BASE, MGMT_BASE = 17000, 19000
+JOB = re.compile(r'(?:provision-(\d{1,3})-(\d{4})|remove-(\d{1,3}))')
+# the keys this script sets per realm; every other GODSWAR_* switch must come from the shared drop-ins
+OWN_KEYS = ('GODSWAR_WORLD_INSTANCE_REALM_ID', 'GODSWAR_WORLD_INSTANCE_SERVER_NODE_ID', 'GODSWAR_GAME_PORT',
+            'GODSWAR_GAME_PUBLIC_PORT', 'GODSWAR_LOGIN_BIND_HOST', 'GODSWAR_LOGIN_PORT', 'GODSWAR_MANAGEMENT_PORT',
+            'GODSWAR_MANAGEMENT_BIND_HOST', 'GODSWAR_SECURE_ENABLED', HANDOFF_KEY)
+
+
+class Stop(Exception):
+    """A refusal or failure with a message for the admin; code tells the editor what to offer next."""
+    def __init__(self, message, code='failed'):
+        super().__init__(message); self.code = code
+
+
+def now():
+    return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds')
+
+
+def realm_number(value):
+    if isinstance(value, bool) or not re.fullmatch(r'\d{1,3}', str(value)) or not REALM_MIN <= int(value) <= REALM_MAX:
+        raise Stop('realm must be a number %d..%d (realm 1 is the main game process)' % (REALM_MIN, REALM_MAX), 'bad_request')
+    return int(value)
+
+
+def port_number(value):
+    if isinstance(value, bool) or not re.fullmatch(r'\d{4}', str(value)) or not PORT_MIN <= int(value) <= PORT_MAX:
+        raise Stop('game port must be %d..%d' % (PORT_MIN, PORT_MAX), 'bad_request')
+    return int(value)
+
+
+def unit_of(realm):
+    return 'godswar251-realm@%d.service' % realm
+
+
+def env_path(realm):
+    return ETC / ('realm-%d.env' % realm)
+
+
+def state_path(realm):
+    return STATE / ('realm-%d.json' % realm)
+
+
+def run(cmd, timeout=60, check=True):
+    p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    if check and p.returncode:
+        raise Stop('%s failed (%d): %s' % (os.path.basename(cmd[0]) + ' ' + ' '.join(cmd[1:3]), p.returncode,
+                                           (p.stderr or p.stdout).strip()[:300]))
+    return p
+
+
+def show(unit, prop):
+    return run([SYSTEMCTL, 'show', unit, '-p', prop, '--value'], check=False).stdout.strip()
+
+
+def parse_env_words(text):
+    """systemctl show -p Environment --value -> {NAME: value}."""
+    import shlex
+    try:
+        words = shlex.split(text or '')
+    except ValueError:
+        words = (text or '').split()
+    out = {}
+    for w in words:
+        k, sep, v = w.partition('=')
+        if sep and re.fullmatch(r'[A-Z][A-Z0-9_]*', k):
+            out[k] = v
+    return out
+
+
+def read_env_file(realm):
+    """The settings this script wrote for a realm, or None. Only KEY=value lines with our own keys are believed."""
+    try:
+        text = env_path(realm).read_text()
+    except OSError:
+        return None
+    out = {}
+    for line in text.splitlines():
+        k, sep, v = line.partition('=')
+        if sep and k in OWN_KEYS and re.fullmatch(r'[A-Za-z0-9.\-]{1,40}', v):
+            out[k] = v
+    return out
+
+
+def realm_port(realm):
+    env = read_env_file(realm)
+    try:
+        return port_number((env or {}).get('GODSWAR_GAME_PORT'))
+    except Stop:
+        return None
+
+
+def provisioned():
+    """{realm: port} of every settings file."""
+    out = {}
+    try:
+        names = os.listdir(ETC)
+    except OSError:
+        return out
+    for name in names:
+        m = re.fullmatch(r'realm-(\d{1,3})\.env', name)
+        if m and REALM_MIN <= int(m.group(1)) <= REALM_MAX:
+            out[int(m.group(1))] = realm_port(int(m.group(1)))
+    return out
+
+
+def listening(port):
+    return bool(run([SS, '-Htln', 'sport', '=', ':%d' % port], check=False).stdout.strip())
+
+
+def connections(port):
+    """Established TCP connections to a local port (players in that realm)."""
+    out = run([SS, '-Htn', 'state', 'established', 'sport', '=', ':%d' % port], check=False).stdout
+    return len([l for l in out.splitlines() if l.strip()])
+
+
+def main_process_env():
+    """The environment the RUNNING main game process was started with (not what the unit files say now)."""
+    pid = show(MAIN_UNIT, 'MainPID')
+    if not re.fullmatch(r'[1-9]\d*', pid):
+        return None
+    try:
+        raw = (PROC / pid / 'environ').read_bytes()
+    except OSError:
+        return None
+    out = {}
+    for item in raw.split(b'\0'):
+        k, sep, v = item.partition(b'=')
+        if sep:
+            out[k.decode('ascii', 'replace')] = v.decode('utf-8', 'replace')
+    return out
+
+
+def local_addresses():
+    out = {'127.0.0.1', '::1'}
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None):
+            out.add(info[4][0])
+    except OSError:
+        pass
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:      # no packet is sent
+            s.connect(('192.0.2.1', 9)); out.add(s.getsockname()[0])
+    except OSError:
+        pass
+    return out
+
+
+def knock(port, seconds):
+    """Listen on the realm's port for a moment. A connection from another machine proves that ufw AND the provider
+    firewall pass the port (the editor page in the browser tries to connect while this runs).
+    Returns {'result': 'seen'|'not_seen'|'skipped', 'from': address or None, 'seconds': waited}."""
+    if seconds <= 0:
+        return {'result': 'skipped', 'from': None, 'seconds': 0}
+    mine = local_addresses()
+    started = time.time()
+    try:
+        srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        srv.bind((KNOCK_BIND, port)); srv.listen(8)
+    except OSError as e:
+        return {'result': 'skipped', 'from': None, 'seconds': 0, 'why': 'could not listen on %d (%s)' % (port, type(e).__name__)}
+    seen = None
+    try:
+        while seen is None and time.time() - started < seconds:
+            srv.settimeout(max(0.1, seconds - (time.time() - started)))
+            try:
+                conn, peer = srv.accept()
+            except (socket.timeout, OSError):
+                continue
+            conn.close()
+            if KNOCK_ANY or peer[0] not in mine:
+                seen = peer[0]
+    finally:
+        srv.close()
+    return {'result': 'seen' if seen else 'not_seen', 'from': seen, 'seconds': round(time.time() - started, 1)}
+
+
+def wait_ready(realm, port):
+    url = READY_URL % (MGMT_BASE + realm)
+    for _ in range(READY_TRIES):
+        try:
+            with urllib.request.urlopen(url, timeout=1) as response:
+                if response.status == 200 and listening(port):
+                    return True
+        except Exception:
+            pass
+        if show(unit_of(realm), 'ActiveState') == 'failed':
+            return False
+        time.sleep(.5)
+    return False
+
+
+def ufw_active():
+    p = run([UFW, 'status'], check=False)
+    return p.returncode == 0 and 'Status: active' in p.stdout
+
+
+class Job:
+    def __init__(self, action, realm, port=None):
+        self.doc = {'realm': realm, 'action': action, 'port': port, 'state': 'running', 'started_at': now(), 'steps': [],
+                    'unit': unit_of(realm), 'login_port': LOGIN_BASE + realm, 'management_port': MGMT_BASE + realm,
+                    'log': '/opt/godswar251/logs/realm-%d.log' % realm, 'version': 1}
+        self.realm = realm
+
+    def step(self, name, ok, detail=''):
+        self.doc['steps'].append({'step': name, 'ok': bool(ok), 'detail': str(detail)[:400]})
+
+    def save(self):
+        STATE.mkdir(parents=True, exist_ok=True)
+        temp = STATE / ('realm-%d.tmp' % self.realm)
+        temp.write_text(json.dumps(self.doc, indent=1)); temp.chmod(0o644); os.replace(temp, state_path(self.realm))
+
+    def finish(self, state, error=None, code=None):
+        self.doc.update(state=state, finished_at=now())
+        if error:
+            self.doc.update(error=str(error)[:500], code=code or 'failed')
+        self.save()
+
+
+def set_aside(realm):
+    """Move a realm's settings file to removed/ (kept, never deleted); the unit's ConditionPathExists then fails."""
+    keep = STATE / 'removed'
+    keep.mkdir(parents=True, exist_ok=True)
+    if env_path(realm).exists():
+        os.replace(env_path(realm), keep / ('realm-%d-%s.env' % (realm, datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d-%H%M%S'))))
+    return keep
+
+
+def provision(realm, port):
+    realm, port = realm_number(realm), port_number(port)
+    job = Job('provision', realm, port)
+    unit = unit_of(realm)
+    try:
+        # 1. what must already be installed (INSTALL.md); nothing is changed before these pass
+        if not (UNIT_DIR / TEMPLATE).is_file():
+            raise Stop('%s is not installed (editor/ops/server-control/INSTALL.md, helper v3)' % TEMPLATE, 'not_installed')
+        if show(MAIN_UNIT, 'ActiveState') != 'active':
+            raise Stop('the main game server (%s) is not running; start it first' % MAIN_UNIT, 'main_down')
+        job.step('installed', True, '%s present, %s active' % (TEMPLATE, MAIN_UNIT))
+
+        # 2. the port: ours, or free
+        others = {r: p for r, p in provisioned().items() if r != realm}
+        if port in others.values():
+            raise Stop('port %d already belongs to realm %d' % (port, [r for r, p in others.items() if p == port][0]), 'port_taken')
+        old_port = realm_port(realm)
+        active = show(unit, 'ActiveState') == 'active'
+        if active:
+            n = connections(old_port or port)
+            if n:
+                raise Stop('%d connection%s to realm %d right now; it can be set up again only when nobody is in it'
+                           % (n, '' if n == 1 else 's', realm), 'players_online')
+            run([SYSTEMCTL, 'stop', unit])
+            job.step('stop idle process', True, '%s stopped (nobody connected)' % unit)
+        if listening(port):
+            raise Stop('something else is listening on port %d' % port, 'port_taken')
+        job.step('port free', True, 'TCP %d' % port)
+
+        # 3. the login handoff must be shared, or the main process cannot hand a login to this one
+        running = main_process_env()
+        dropin = UNIT_DIR / (MAIN_UNIT + '.d') / HANDOFF_DROPIN
+        if running is None:
+            raise Stop('could not read the running game process; is %s active?' % MAIN_UNIT, 'main_down')
+        if running.get(HANDOFF_KEY, 'memory').strip().lower() != 'postgres':
+            if not dropin.is_file():
+                dropin.parent.mkdir(parents=True, exist_ok=True)
+                dropin.write_text('# written by godswar251-realm (editor: Operations -> Servers -> Add a server), %s\n'
+                                  '# A second realm needs the login handoff in PostgreSQL (table legacy_game_login_handoffs,\n'
+                                  '# migration 239). Rollback: remove this file, systemctl daemon-reload, restart at zero players.\n'
+                                  '[Service]\nEnvironment=%s=postgres\n' % (now(), HANDOFF_KEY))
+                dropin.chmod(0o644)
+                run([SYSTEMCTL, 'daemon-reload'])
+                job.step('shared login handoff', False, 'drop-in %s written; it takes effect at the next game restart' % HANDOFF_DROPIN)
+            else:
+                job.step('shared login handoff', False, 'drop-in %s is there, but the running game was started before it' % HANDOFF_DROPIN)
+            raise Stop('The main game server must be restarted once (at zero players) before a second server can take '
+                       'logins: it still keeps the login handoff in memory. Restart it, then press Set up again.', 'needs_restart')
+        job.step('shared login handoff', True, 'the running game uses the PostgreSQL handoff store')
+
+        # 4. settings (numbers only)
+        ETC.mkdir(parents=True, exist_ok=True)
+        lines = ['# written by godswar251-realm %s; do not edit (Operations -> Servers rewrites it)' % now(),
+                 'GODSWAR_WORLD_INSTANCE_REALM_ID=%d' % realm, 'GODSWAR_WORLD_INSTANCE_SERVER_NODE_ID=realm-%d' % realm,
+                 'GODSWAR_GAME_PORT=%d' % port, 'GODSWAR_GAME_PUBLIC_PORT=%d' % port,
+                 'GODSWAR_LOGIN_BIND_HOST=127.0.0.1', 'GODSWAR_LOGIN_PORT=%d' % (LOGIN_BASE + realm),
+                 'GODSWAR_MANAGEMENT_BIND_HOST=127.0.0.1', 'GODSWAR_MANAGEMENT_PORT=%d' % (MGMT_BASE + realm),
+                 'GODSWAR_SECURE_ENABLED=false', '%s=postgres' % HANDOFF_KEY]
+        temp = ETC / ('realm-%d.tmp' % realm)
+        temp.write_text('\n'.join(lines) + '\n'); temp.chmod(0o644); os.replace(temp, env_path(realm))
+        job.step('settings', True, str(env_path(realm)))
+
+        # 5. the second process must run with the same feature switches as the main one
+        main_env = {k: v for k, v in parse_env_words(show(MAIN_UNIT, 'Environment')).items() if k.startswith('GODSWAR_') and k not in OWN_KEYS}
+        realm_env = parse_env_words(show(unit, 'Environment'))
+        missing = sorted(k for k, v in main_env.items() if realm_env.get(k) != v)
+        if missing:
+            raise Stop('realm %d would start without %d of the main server\'s feature switches (%s%s). The drop-in link '
+                       'godswar251-realm@.service.d -> godswar251.service.d is missing (INSTALL.md).'
+                       % (realm, len(missing), ', '.join(missing[:4]), ' ...' if len(missing) > 4 else ''), 'not_installed')
+        job.step('feature switches', True, '%d switches match the main server' % len(main_env))
+
+        # 6. firewall on this machine
+        if ufw_active():
+            if old_port and old_port != port:
+                run([UFW, 'delete', 'allow', '%d/tcp' % old_port], check=False)
+            run([UFW, 'allow', '%d/tcp' % port, 'comment', 'godswar realm %d' % realm])
+            job.step('ufw', True, 'TCP %d open (comment "godswar realm %d")' % (port, realm))
+            job.doc['ufw'] = 'open'
+        else:
+            job.step('ufw', True, 'ufw is not active on this machine; nothing to open')
+            job.doc['ufw'] = 'inactive'
+
+        # 7. can the outside world reach the port? (ufw + the provider firewall)
+        if KNOCK_SECONDS > 0:                   # the editor page reads this and offers "Test from this computer" now
+            job.doc['outside'] = {'result': 'listening', 'from': None, 'seconds': KNOCK_SECONDS, 'since': now()}
+            job.save()
+        job.doc['outside'] = knock(port, KNOCK_SECONDS)
+        job.step('reachable from outside', job.doc['outside']['result'] != 'not_seen',
+                 {'seen': 'a connection arrived from %s' % job.doc['outside']['from'],
+                  'not_seen': 'no connection from another machine arrived in %s s: open TCP %d in the Hosting by Design '
+                              'firewall panel, then press Test again' % (job.doc['outside']['seconds'], port),
+                  'skipped': 'not tested'}[job.doc['outside']['result']])
+        job.save()
+
+        # 8. start and wait
+        run([SYSTEMCTL, 'enable', unit])
+        run([SYSTEMCTL, 'start', unit], timeout=120)
+        if not wait_ready(realm, port):
+            # leave nothing half set up: stop it, close the port again, put the settings file aside (the log stays)
+            run([SYSTEMCTL, 'disable', '--now', unit], check=False)
+            if job.doc.get('ufw') == 'open':
+                run([UFW, 'delete', 'allow', '%d/tcp' % port], check=False)
+                job.doc['ufw'] = 'closed'
+            set_aside(realm)
+            raise Stop('the realm process did not become ready within %d seconds; it was stopped and its port closed '
+                       'again. Read %s' % (READY_TRIES // 2, job.doc['log']), 'not_ready')
+        job.step('started', True, '%s is ready; listening on TCP %d' % (unit, port))
+        job.finish('succeeded')
+        return 0
+    except Stop as e:
+        job.step('stopped here', False, str(e))
+        job.finish('failed', e, e.code)
+        print(str(e), file=sys.stderr)
+        return 1
+    except Exception as e:                      # noqa: BLE001 - the state file must always say how it ended
+        job.finish('failed', '%s: %s' % (type(e).__name__, e))
+        print('%s: %s' % (type(e).__name__, e), file=sys.stderr)
+        return 1
+
+
+def remove(realm):
+    realm = realm_number(realm)
+    job = Job('remove', realm)
+    unit = unit_of(realm)
+    try:
+        port = realm_port(realm)
+        job.doc['port'] = port
+        if port is None and not env_path(realm).exists():
+            job.step('settings', True, 'realm %d was not set up on this machine; nothing to stop or close' % realm)
+            run([SYSTEMCTL, 'disable', '--now', unit], check=False)
+            job.finish('succeeded')
+            return 0
+        if port is not None and show(unit, 'ActiveState') == 'active':
+            n = connections(port)
+            if n:
+                raise Stop('%d connection%s to realm %d right now; it can be taken down only when nobody is in it'
+                           % (n, '' if n == 1 else 's', realm), 'players_online')
+        run([SYSTEMCTL, 'disable', '--now', unit])
+        job.step('process', True, '%s stopped and disabled' % unit)
+        if port is not None and ufw_active():
+            run([UFW, 'delete', 'allow', '%d/tcp' % port], check=False)
+            job.step('ufw', True, 'TCP %d closed' % port)
+        job.step('settings', True, 'settings file moved to %s (the log file stays)' % set_aside(realm))
+        job.doc['ufw'] = 'closed'
+        job.finish('removed')
+        return 0
+    except Stop as e:
+        job.step('stopped here', False, str(e))
+        job.finish('failed', e, e.code)
+        print(str(e), file=sys.stderr)
+        return 1
+    except Exception as e:                      # noqa: BLE001
+        job.finish('failed', '%s: %s' % (type(e).__name__, e))
+        print('%s: %s' % (type(e).__name__, e), file=sys.stderr)
+        return 1
+
+
+def status():
+    out = []
+    for realm, port in sorted(provisioned().items()):
+        out.append({'realm': realm, 'port': port, 'unit': unit_of(realm), 'active': show(unit_of(realm), 'ActiveState'),
+                    'listening': bool(port and listening(port)), 'connections': connections(port) if port else None})
+    print(json.dumps({'realms': out}, indent=1))
+    return 0
+
+
+def wait_main():
+    """ExecStartPre of godswar251-realm@.service (runs as godswar251, changes nothing): wait until the main game
+    answers /readyz, so it has applied the schema migrations before a second process opens the database."""
+    url = E('GWR_MAIN_READY_URL', 'http://127.0.0.1:9090/readyz')
+    for _ in range(int(E('GWR_MAIN_READY_TRIES', '180'))):
+        try:
+            with urllib.request.urlopen(url, timeout=2) as response:
+                if response.status == 200:
+                    return 0
+        except Exception:
+            pass
+        time.sleep(1)
+    print('the main game server did not become ready; the realm process is not started', file=sys.stderr)
+    return 1
+
+
+def main(argv):
+    try:
+        if len(argv) == 2 and argv[0] == 'job':
+            m = JOB.fullmatch(argv[1])
+            if not m:
+                raise Stop('not a realm job', 'bad_request')
+            return provision(m.group(1), m.group(2)) if m.group(1) else remove(m.group(3))
+        if len(argv) == 3 and argv[0] == 'provision':
+            return provision(argv[1], argv[2])
+        if len(argv) == 2 and argv[0] == 'remove':
+            return remove(argv[1])
+        if argv == ['status']:
+            return status()
+        if argv == ['wait-main']:
+            return wait_main()
+    except Stop as e:
+        print(str(e), file=sys.stderr)
+        return 2
+    print(__doc__.strip().splitlines()[-2], file=sys.stderr)
+    return 2
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))

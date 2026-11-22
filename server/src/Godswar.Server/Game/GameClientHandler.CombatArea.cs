@@ -150,6 +150,8 @@ internal sealed partial class GameClientHandler
                 targetOrder,
                 observedAt,
                 runtimeCombatModifiers);
+            // B21 item 18: per-class area skill damage (combat.aoe_*, default x1 = unchanged).
+            resolution = Godswar.Server.Application.Combat.AreaSkillBalance.Apply(character.Profession, resolution);
             if (!resolution.Hit)
             {
                 misses++;

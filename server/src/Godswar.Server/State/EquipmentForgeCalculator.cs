@@ -31,7 +31,10 @@ internal enum EquipmentForgeValidationError
     MissingSuccessTarget,
     // FORGE: the client disables Start below 5% (ProbabilityError), so a
     // Start for such a forge never comes from the stock window.
-    BelowClientMinimum
+    BelowClientMinimum,
+    // B22 G2: rare gems (4902-4913) forge only tier gear; tier gear at G20+ needs a rare gem.
+    RareGemNeedsTierGear,
+    TierGearNeedsRareGem
 }
 
 internal readonly record struct EquipmentForgeMaterialSelection(
@@ -189,7 +192,7 @@ internal static class EquipmentForgeCalculator
 
             case EquipmentForgeOperation.Sapphire:
             {
-                if (request.Equipment.Quality >= MaximumQuality)
+                if (request.Equipment.Quality >= Godswar.Server.Application.Limits.GameLimitProfile.MaximumQuality(MaximumQuality)) // W4F
                 {
                     error = EquipmentForgeValidationError.ProgressionOutOfRange;
                     return false;
@@ -223,9 +226,20 @@ internal static class EquipmentForgeCalculator
                 // ForgeAppend) raises grade on any equipment; the "green
                 // attributes" line in the window is only help text. Requiring
                 // one refused every attribute-less item (e.g. the admin's 1799).
-                if (request.Equipment.Grade >= MaximumGrade)
+                if (request.Equipment.Grade >= Godswar.Server.Application.Limits.GameLimitProfile.MaximumGrade(MaximumGrade)) // W4F
                 {
                     error = EquipmentForgeValidationError.ProgressionOutOfRange;
+                    return false;
+                }
+
+                // B22 G2: rare gems are the tier gear's G21-25 material (RareGemForgeRules).
+                var tierGemError = RareGemForgeRules.CheckGrade(
+                    request.Equipment.Id,
+                    request.Equipment.Grade,
+                    primary.Item.Id);
+                if (tierGemError != EquipmentForgeValidationError.None)
+                {
+                    error = tierGemError;
                     return false;
                 }
 

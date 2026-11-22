@@ -456,10 +456,32 @@ class Store:
             return cur.fetchall()
         return self._run(read)
 
+    # W4A: user names held by the game (an account renamed away from it, or deleted in the editor; server
+    # migration 240). Refused like a taken name. If the table exists but this role cannot read it (signup-db.sql not
+    # re-run after the server release), every sign-up is refused rather than letting a held name through.
+    HELD_NAME = """SELECT CASE
+        WHEN to_regclass('public.account_username_holds') IS NULL THEN 0
+        WHEN NOT has_column_privilege(current_user, 'public.account_username_holds', 'username_key', 'SELECT') THEN -1
+        ELSE 1 END"""
+
+    def name_held(self, cur, username):
+        cur.execute(self.HELD_NAME)
+        state = cur.fetchone()[0]
+        if state == 0:
+            return False
+        if state < 0:
+            LOG.error("public.account_username_holds is not readable by this role: re-run signup-db.sql; "
+                      "sign-ups are refused until then")
+            return True
+        cur.execute("SELECT 1 FROM public.account_username_holds WHERE username_key = lower(%s)", (username,))
+        return cur.fetchone() is not None
+
     def name_or_email_taken(self, cur, username, email_lower):
         cur.execute("SELECT 1 FROM public.accounts WHERE lower(username) = %s OR (email <> '' AND lower(email) = %s) LIMIT 1",
                     (username, email_lower))
         if cur.fetchone():
+            return True
+        if self.name_held(cur, username):
             return True
         # Forget emails of accounts that no longer exist (deleted by a GM), so the address can be used again.
         cur.execute("""DELETE FROM signup.account_emails e WHERE e.email_lower = %s
@@ -756,6 +778,25 @@ STATUS = {200: "200 OK", 303: "303 See Other", 400: "400 Bad Request", 401: "401
           429: "429 Too Many Requests", 500: "500 Internal Server Error", 503: "503 Service Unavailable"}
 MAX_BODY = 8192
 
+# Read-only content pages (site redesign 2026-11-19): exact path -> (template, nav section).
+# An allowlist: a template name is never built from the request path.
+CONTENT_PAGES = {
+    "/download": ("download.html", "download"),
+    "/news": ("news.html", "news"),
+    "/guides": ("guides.html", "guides"),
+    "/guides/getting-started": ("guide_start.html", "guides"),
+    "/guides/classes": ("guide_classes.html", "guides"),
+    "/guides/factions": ("guide_factions.html", "guides"),
+    "/guides/rank-effects": ("guide_rank.html", "guides"),
+    "/guides/events": ("guide_events.html", "events"),
+    "/guides/cursed-zone": ("guide_cursed.html", "events"),
+    "/instances": ("instances.html", "instances"),
+    "/instances/medusa": ("inst_medusa.html", "instances"),
+    "/instances/atlantis": ("inst_atlantis.html", "instances"),
+    "/instances/wonderland": ("inst_wonderland.html", "instances"),
+    "/instances/bay-under-attack": ("inst_bay.html", "instances"),
+}
+
 # Settings sync. Files from the client's Settings/User folder, except the two that belong to one
 # computer (its last server and its screen settings).
 SETTINGS_NAME_RE = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,39}\.xml")
@@ -823,6 +864,7 @@ class App:
         ctx.setdefault("server_name", self.cfg.server_name)
         ctx.setdefault("download_url", self.cfg.download_url)
         ctx.setdefault("mail_enabled", self.cfg.mail_enabled)
+        ctx.setdefault("nav", "")
         body = self.jinja.get_template(template).render(**ctx).encode("utf-8")
         headers = [("Content-Type", "text/html; charset=utf-8"), ("Content-Length", str(len(body))),
                    ("Cache-Control", "no-store"), ("X-Content-Type-Options", "nosniff"),
@@ -834,14 +876,17 @@ class App:
     def message(self, start, status, title, text, retry=True):
         return self.render(start, status, "message.html", title=title, text=text, retry=retry)
 
-    def signup_form(self, start, environ, status=200, error=None, values=None, field=None):
+    def signup_form(self, start, environ, status=200, error=None, values=None, field=None,
+                    template="signup.html", nav="register"):
+        """The sign-up form: the compact panel on the home page, or the full page (/register, and
+        every refused POST, so the message sits right above the form)."""
         cookie = self.cookie(environ)
         headers = []
         if not cookie:
             cookie = secrets.token_urlsafe(32)
             headers.append(self.set_cookie(cookie))
-        return self.render(start, status, "signup.html", headers, form=self.forms.new(cookie),
-                           error=error, field=field, v=values or {}, closed=self.closed())
+        return self.render(start, status, template, headers, form=self.forms.new(cookie),
+                           error=error, field=field, v=values or {}, closed=self.closed(), nav=nav)
 
     def closed(self):
         return bool(self.cfg.closed_flag) and os.path.exists(self.cfg.closed_flag)
@@ -873,9 +918,13 @@ class App:
 
     def route(self, environ, start):
         method, path = environ.get("REQUEST_METHOD", "GET"), environ.get("PATH_INFO", "/")
-        if path == "/" or path == "/signup":
+        if path in ("/", "/signup", "/register"):
             if method in ("GET", "HEAD"):
+                if path == "/":
+                    return self.signup_form(start, environ, template="home.html", nav="home")
                 return self.signup_form(start, environ)
+            if path == "/register":
+                return self.message(start, 405, "Not allowed", "That request is not allowed here.", retry=False)
             if method == "POST":
                 return self.post_signup(environ, start)
             return self.message(start, 405, "Not allowed", "That request is not allowed here.", retry=False)
@@ -891,6 +940,9 @@ class App:
             if method != "POST" or not self.cfg.settings_sync:
                 return self.text(start, 405 if self.cfg.settings_sync else 404, "not available\n")
             return self.api_settings(environ, start, path.rsplit("/", 1)[1])
+        page = CONTENT_PAGES.get(path[:-1] if len(path) > 1 and path.endswith("/") else path)
+        if page and method in ("GET", "HEAD"):
+            return self.render(start, 200, page[0], nav=page[1])
         if path == "/rankings" and method in ("GET", "HEAD"):
             return self.rankings(start)
         if path == "/healthz" and method in ("GET", "HEAD"):
@@ -1005,7 +1057,7 @@ class App:
             return boards
 
     def rankings(self, start):
-        return self.render(start, 200, "rankings.html", boards=self.ranking_boards())
+        return self.render(start, 200, "rankings.html", boards=self.ranking_boards(), nav="rankings")
 
     def static(self, rel, start):
         full = os.path.realpath(os.path.join(self.static_dir, rel))

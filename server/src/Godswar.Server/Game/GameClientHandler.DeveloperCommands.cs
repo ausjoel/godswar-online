@@ -36,6 +36,22 @@ internal sealed partial class GameClientHandler
             return true;
         }
 
+        // B21: player command (any account) from client 1.5.4's warehouse box buttons: /whpage N.
+        if (await HandlePlayerWarehousePageCommandAsync( // B21
+                packet,
+                cancellationToken))
+        {
+            return true;
+        }
+
+        // RANK-DISPLAY player command (any account): /rank.
+        if (await HandlePlayerRankDisplayCommandAsync(
+                packet,
+                cancellationToken))
+        {
+            return true;
+        }
+
         if (await HandleDeveloperProgressionCommandAsync(
                 packet,
                 cancellationToken))
@@ -73,6 +89,14 @@ internal sealed partial class GameClientHandler
         {
             Console.WriteLine(
                 $"[developer-item] denied account={_account.Id} character={_character.Name}");
+            return true;
+        }
+
+        if (await RefuseSwitchedOffCommandAsync( // W5B
+                packet,
+                Godswar.Server.Application.Operators.GmPowerPolicy.CommandKeyOfLine(text, DeveloperCommandText.FindBodyOffset(text)),
+                cancellationToken))
+        {
             return true;
         }
 

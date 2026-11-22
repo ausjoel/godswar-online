@@ -57,10 +57,31 @@
       };
       search.oninput=draw;select.onchange=update;draw();
       this.body.append(h("div",{class:"gw-buff-layout"},h("div",null,search,select),h("div",null,details,h("label",null,"Duration (seconds) ",duration),button)),
-        !(this.online||{}).online?h("p",{class:"gw-dim"},"Log this character into the game to apply a session buff."):h("p",{class:"gw-dim"},"Applied effects appear immediately in the game. EXP events are managed under World & content."));
+        !(this.online||{}).online?h("p",{class:"gw-dim"},"Log this character into the game to apply a session buff, or queue it for the next login below."):h("p",{class:"gw-dim"},"Applied effects appear immediately in the game. EXP events are managed under World & content."));
+      // W4-B: queue the chosen buff for this character's next login (offline characters).
+      const queueBtn=h("button",{class:"gw-btnx",type:"button",disabled:!d.writable||null,onclick:async()=>{
+        const row=C.buffs.find(x=>x.statusId===Number(select.value));if(!row)return;
+        const seconds=Number(duration.value);
+        if(!Number.isInteger(seconds)||seconds<1||seconds>C.maxDurationSeconds){GW.status("Enter a valid duration in seconds.","err");return;}
+        const ctx=this.ctx,cid=this.cid;
+        const ok=await GW.confirm({title:"Queue buff for the next login?",message:row.name+" for "+seconds+" seconds, starting when "+d.character.name+" next enters the world. It ends at logout like every editor buff."});
+        if(!ok||this.ctx!==ctx||this.cid!==cid)return;
+        try{const r=await ctx.api("queue/"+cid,{status_id:row.statusId,duration_seconds:seconds});GW.writeDone(r,row.name+" queued for the next login");if(this.ctx===ctx)this.renderQueued();}
+        catch(e){await GW.writeError(e);}
+      }},"Queue for next login");
+      this.queuedBox=h("div",{class:"gw-buff-queued"});
+      this.body.append(h("div",{class:"gw-buff-queue"},queueBtn,this.queuedBox));this.renderQueued();
       this.pick=statusId=>{search.value="";draw();select.value=String(statusId);update();select.scrollIntoView({block:"center"});};
       this.activeBox=h("section",{class:"gw-buff-active"});this.body.append(this.activeBox,this.libraryBox);this.renderActive();this.renderLibrary(this.libOpen);
 
+    },
+    async renderQueued(){
+      const ctx=this.ctx,cid=this.cid,box=this.queuedBox;if(!box)return;
+      let r;try{r=await ctx.api("queued/"+cid);}catch(e){GW.clear(box).append(h("span",{class:"gw-dim"},e.message));return;}
+      if(this.ctx!==ctx||this.cid!==cid)return;GW.clear(box);
+      if(!r.supported){box.append(h("span",{class:"gw-dim"}," Queuing needs the W4-B server release."));return;}
+      const waiting=r.rows.filter(q=>!q.applied_at);
+      box.append(h("span",{class:"gw-dim"},waiting.length?" Waiting for the next login: "+waiting.map(q=>q.name+(q.duration_seconds?" ("+q.duration_seconds+" s)":"")).join(", ")+". Cancel them on the Login awards page.":" Nothing queued."));
     },
     renderLibrary(startOpen){
       const box=GW.clear(this.libraryBox),self=this;

@@ -101,3 +101,4 @@
 .gwg-pc-row .sub, .gwg-pc-row .g { font-size: 11px; color: #9fb6c8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gwg-pc-row .g { color: #ff9900; }
 .gw-mod-guild .gwg-page.gwg-loading { opacity: .5; pointer-events: none; }
+.gwg-maxlist label { display: block; margin: .25rem 0; }   /* B21 item 21: the Max guild dialog (a modal, outside .gw-mod-guild) */

@@ -68,7 +68,7 @@ internal sealed partial class GameClientHandler
             return;
         }
 
-        var gmSkips = await HasOperatorAuthorityAsync(cancellationToken);
+        var gmSkips = await HasOperatorPowerAsync(Godswar.Server.Application.Operators.GmPowerPolicy.GateBypass, cancellationToken);
         if (!gmSkips && _character.Level < GatheringTables.MinimumLevel)
         {
             await _session.SendAsync(PacketBuilder.NpcFunctionActionResponse(npc.InteractionId,

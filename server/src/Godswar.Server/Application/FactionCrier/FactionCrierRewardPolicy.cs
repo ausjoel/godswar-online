@@ -115,6 +115,30 @@ internal static class FactionCrierRewardPolicy
             }
         };
 
+    public const string SilverPerGoldKey = "crier.silver_per_gold"; // B21 item 15
+
+    /// <summary>
+    /// B21 item 15 (the admin: price the Crier by its multiplier at 1,500,000 silver = 1,000 gold, gold = B-Gold).
+    /// With crier.silver_per_gold = N &gt; 0, a Gold or B-Gold option costs the same per "X" as that level's
+    /// silver option: (silver price / silver multiplier) x option multiplier / N, rounded, at least 1. The silver
+    /// options are 6X (three plates) and 12X (all six). 0 = the fixed prices of the balance table (312 / 459 /
+    /// 936 / 1,377), as before.
+    /// </summary>
+    internal static int? GoldPriceByMultiplier(FactionCrierBalanceOption option, FactionCrierBalanceTier tier, bool allSix) =>
+        GoldPriceByMultiplier(option, tier, allSix, ServerRates.Current.Absolute(SilverPerGoldKey));
+
+    internal static int? GoldPriceByMultiplier(
+        FactionCrierBalanceOption option, FactionCrierBalanceTier tier, bool allSix, long silverPerGold)
+    {
+        if (silverPerGold <= 0 || option.Currency is not (FactionCrierCurrency.Gold or FactionCrierCurrency.BoundGold))
+            return null;
+        var silver = allSix ? tier.AllSixSilverCost : tier.TripleSilverCost;
+        var silverMultiplier = allSix ? 12m : 6m;
+        var price = decimal.Round(silver / silverMultiplier * option.Multiplier / silverPerGold, 0,
+            MidpointRounding.AwayFromZero);
+        return (int)Math.Clamp(price, 1m, int.MaxValue);
+    }
+
     public static FactionCrierBalanceSnapshot CreateReviewedDefault() =>
         new(
             Revision: 0,
@@ -324,7 +348,7 @@ internal static class FactionCrierRewardPolicy
         var cost = option.Currency == FactionCrierCurrency.Silver &&
             option.Cost == 0
                 ? allSix ? tier.AllSixSilverCost : tier.TripleSilverCost
-                : option.Cost;
+                : GoldPriceByMultiplier(option, tier, allSix) ?? option.Cost; // B21 item 15
         var experience = option.RewardKind is
             FactionCrierRewardKind.Experience or
             FactionCrierRewardKind.ExperienceAndTalentPoints

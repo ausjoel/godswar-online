@@ -124,6 +124,19 @@ internal interface IGameStore : IAsyncDisposable
         CancellationToken cancellationToken = default) =>
         Task.FromResult<CharacterWalletResult?>(null);
 
+    /// <summary>
+    /// B22 (d32): moves <paramref name="delta"/> of one wallet column ("silver" Money, "gold" Stone, "bgold" BindingGold).
+    /// A negative delta is a charge and happens only if the balance covers it; a positive one is a refund.
+    /// null = not enough (or a store without wallets).
+    /// </summary>
+    Task<TeleportWalletResult?> AdjustTeleportWalletAsync(
+        int accountId,
+        int characterId,
+        string currency,
+        int delta,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<TeleportWalletResult?>(null);
+
     Task<ZodiacSkillGridActivationResult?> ActivateZodiacSkillGridAsync(
         int accountId,
         int characterId,

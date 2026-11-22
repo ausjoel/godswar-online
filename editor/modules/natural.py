@@ -26,6 +26,15 @@ NOT_CHECKED = [
 ]
 
 
+def _attr_name(a):
+    """B21: 'Damage Absorbed (attribute 104)' instead of 'attribute 104'."""
+    try:
+        n = common.CATALOG.name("appendattr", int(a))
+    except Exception:      # noqa: BLE001 - an id the client does not know
+        n = None
+    return "%s (attribute %s)" % (n, a) if n and not str(n).startswith("#") else "Unknown attribute %s" % a
+
+
 def _f(out, severity, rule, where, message):
     out.append({"severity": severity, "rule": rule, "where": where, "message": message})
 
@@ -114,10 +123,11 @@ def _item_checks(b, rows, meta_of, client_items, attributes, equip_location, out
                 continue
             lv = r.get("attribute_level%d" % i)
             mx = int((attributes.get(str(a)) or {}).get("max") or 1)
+            name = _attr_name(a)    # B21 item 30: the attribute's name, not its number
             if lv is not None and int(lv) > mx:
-                _f(out, "impossible", "attribute-level", where, "Attribute %s at level %s; its maximum is %d." % (a, lv, mx))
+                _f(out, "impossible", "attribute-level", where, "%s at level %s; its maximum is %d." % (name, lv, mx))
             if allowed and int(a) not in allowed:
-                _f(out, "unnatural", "attribute", where, "Attribute %s can't roll on this item." % a)
+                _f(out, "unnatural", "attribute", where, "%s can't roll on this item." % name)
         sockets = int(r.get("holy_socket_count") or 0)
         if sockets > SOCKETS_MAX:
             _f(out, "impossible", "sockets", where, "%d holy sockets; the client has %d." % (sockets, SOCKETS_MAX))

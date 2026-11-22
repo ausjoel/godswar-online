@@ -229,8 +229,21 @@ internal static class WarriorTrainingGroundChecks
                 DynamicDungeonContentMapPolicy.IsDynamicDungeonMap(ground.MapId) &&
                 DynamicDungeonContentMapPolicy.IsWarriorTrainingGroundMap(ground.MapId) &&
                 TrainingGroundPolicy.IsTrainingGroundMap(ground.MapId) &&
-                GameSessionRegistry.MonsterRespawnPolicyForMap(ground.MapId) == MonsterRespawnPolicy.Timed,
-                $"map {ground.MapId} is an exact-instance Training Ground map with timed respawn");
+                GameSessionRegistry.MonsterRespawnPolicyForMap(ground.MapId) ==
+                    (ServerRates.Current.Absolute(ServerRateKeys.TrainingGroundOneClear) == 1 // B21
+                        ? MonsterRespawnPolicy.Never : MonsterRespawnPolicy.Timed),
+                $"map {ground.MapId} is an exact-instance Training Ground map (B21: never respawns while one clear is on)");
+            // B21: the generated layout (72 normals, 10 elites, 2 bosses) is worth 142, below the 200 target.
+            var layout = Enumerable.Repeat("A_normalE_boar_006", 72)
+                .Concat(ground.EliteKeys.Concat(ground.EliteKeys).Take(10)).Concat(ground.BossKeys);
+            var groundDefinition = ground.ToDefinition();
+            var full = layout.Sum(groundDefinition.Score);
+            var run = groundDefinition.WithFullClearTarget(full);
+            Check.True(full == 142 && run.TargetScore == 142 &&
+                    run.Reward(142, TimeSpan.FromMinutes(14)) == groundDefinition.Reward(200, TimeSpan.FromMinutes(14)) &&
+                    run.Reward(114, null) == groundDefinition.Reward(160, null) &&
+                    run.Reward(113, null) == groundDefinition.Reward(159, null),
+                $"B21: ground {ground.Ground} one clear = 142 points, rewards scaled to the wiki table");
             Check.True(ground.BossKeys.Contains(ground.GroundBossKey) &&
                 ground.BossKeys.Any(WarriorTrainingGroundPolicy.IsMagmaScorpion) &&
                 ground.BossKeys.All(static key => WarriorTrainingGroundPolicy.ScoreFor(key) == 10) &&

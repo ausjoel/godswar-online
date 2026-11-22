@@ -27,7 +27,7 @@
     sourceRows.append(table);
    }
    async function loadShelf(){const r=await ctx.api('list');favourites=r.favourites;shelf.replaceChildren();if(!favourites.length)shelf.append(h('p',{class:'gw-dim'},'No favourites saved yet.'));
-    for(const f of favourites)shelf.append(h('div',{style:'margin:8px 0'},h('b',{},f.name),' · '+f.items.length+' rows ',h('button',{class:'gw-btnx',onclick:()=>prepare(f.id)},'Preview for selected player')));
+    for(const f of favourites)shelf.append(h('div',{style:'margin:8px 0'},h('b',{},f.name),' · '+f.items.length+' rows ',h('button',{class:'gw-btnx',onclick:()=>prepare(f.id)},'Preview for selected player'),' ',h('button',{class:'gw-btnx','data-help':'Plain copies (item, quantity, quality, grade, binding) wait in the Prize Chest by the warehouse; works while the player is online.',onclick:()=>action(async()=>{if(!await GW.confirm({title:'Send to the Prize Chest?',message:f.name+' ('+f.items.length+' rows) to the selected player. Attributes and sockets are not copied.'}))return;const r=await GW.api('/api/m/favourites/give-chest',{target,favourite:f.id});GW.writeDone(r,'Sent '+r.sent+' row(s) to the Prize Chest'+(r.online&&r.online.note?' \u00b7 '+r.online.note:''));})},'Send to Prize Chest')));
    }
    async function save(){await action(async()=>{await ctx.api('capture',{...selection(),name:name.value});await loadShelf();GW.status('Favourite saved.','ok');});}
    async function prepare(id){await action(async()=>{

@@ -32,14 +32,14 @@ internal static class InventorySortChecks
         // The client sends "Name:text"; a sort must be recognised behind the speaker prefix and nowhere else.
         foreach (var (line, expected) in new (string, InventorySortTarget)[]
         {
-            ("TestChar:/sort", InventorySortTarget.Bag), ("TestChar: /sortwh", InventorySortTarget.Warehouse),
-            ("/sort", InventorySortTarget.Bag), ("<TestChar>/sort bag", InventorySortTarget.Bag)
+            ("Tester1:/sort", InventorySortTarget.Bag), ("Tester1: /sortwh", InventorySortTarget.Warehouse),
+            ("/sort", InventorySortTarget.Bag), ("<Tester1>/sort bag", InventorySortTarget.Bag)
         })
         {
             Check.True(InventorySortCommand.TryParseChatLine(line, out var t) && t == expected, $"chat line '{line}' is the {expected} sort");
         }
 
-        foreach (var line in new[] { "TestChar:sort", "TestChar:hello /sort", "TestChar:/sorted", "Vpst est:/sort", ":/sort", "" })
+        foreach (var line in new[] { "Tester1:sort", "Tester1:hello /sort", "Tester1:/sorted", "Test er1:/sort", ":/sort", "" })
         {
             Check.True(!InventorySortCommand.TryParseChatLine(line, out _), $"chat line '{line}' stays ordinary chat");
         }

@@ -41,6 +41,14 @@ button.gw-cellx { cursor: pointer; }
 /* ---------- tooltip (UIHelper / ItemView) */
 .gw-tip-box { position: fixed; z-index: 1000; pointer-events: none; max-width: 330px; }
 .gw-tt, .gw-help { max-width: 320px; white-space: normal; }
+/* shared help text (GW.helpNode): long text wraps, lists are lists, facts have a highlighted label */
+.gw-help { overflow-wrap: anywhere; word-break: normal; }
+.gw-help .tt-list { margin: 2px 0 2px 0; padding: 0 0 0 14px; list-style: disc; }
+.gw-help .tt-list li { margin: 1px 0; }
+.gw-help .tt-gap { margin-top: 6px; }
+.gw-help .tt-key { color: #6bccfe; }
+.gw-help .tt-note { color: #8aa3b0; margin-top: 5px; }
+.gw-help .tt-name.tt-left { color: var(--gw-yellow-textcolor, #ffff00); margin-bottom: 2px; }
 .gw-tooltip .tt-line { margin: 1px 0; }
 .gw-tooltip .tt-name.tt-left { text-align: left; }
 .gw-tooltip .tt-col { color: #8aa3b0; font-weight: 400; font-size: 11px; }
@@ -120,6 +128,10 @@ button.gw-cellx { cursor: pointer; }
 .gw-online.off { color: #c9f5d2; border-color: #2e8a46; background: #0b2414; }
 .gw-online.on { color: #ffd6d2; border-color: #b4483d; background: #2a0f0c; }
 .gw-online.warn, .gw-online.loading { color: #c9d6dc; border-color: #46555e; background: #10181d; }
+.gw-logincheck { padding: 8px 10px; border-radius: 3px; border: 1px solid; margin: 0 0 10px; font: 13px var(--gw-font); }
+.gw-logincheck.stops { color: #ffd6d2; border-color: #b4483d; background: #2a0f0c; }
+.gw-logincheck.hides { color: #ffe9b0; border-color: #a8842c; background: #241b08; }
+.gw-logincheck ul { margin: 4px 0 6px 18px; padding: 0; } .gw-logincheck a { color: inherit; text-decoration: underline; }
 .gw-online-why { text-decoration: underline dotted; cursor: help; }
 .gw-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; background: #555; flex: none; }
 .gw-dot.on { background: #4cff7a; box-shadow: 0 0 6px #4cff7a; }
@@ -153,3 +165,36 @@ button.gw-cellx { cursor: pointer; }
 .gw-coming { max-width: 620px; margin: 50px auto 0; position: relative; padding: 14px 20px 8px; }
 .gw-coming-body { padding: 8px 10px 4px; text-align: center; }
 .gw-coming-big { font: 700 26px var(--gw-font); color: var(--gw-title); margin: 6px 0 10px; letter-spacing: 2px; }
+
+/* Drop/respawn-tier pages share the normal editor table and button styles. */
+.gw-tier-table { border-collapse: collapse; margin: 12px 0 18px; }
+.gw-tier-table th, .gw-tier-table td { padding: 6px 10px; text-align: left; border-bottom: 1px solid #293c46; }
+.gw-tier-table td { vertical-align: top; }
+.gw-tier-table td:first-child { min-width: 130px; }
+.gw-tier-table button + button { margin-left: 5px; }
+.gw-tier-number { width: 100px; }
+.gw-tier-note { width: 200px; max-width: 100%; }
+.gw-tier-new { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin: 16px 0; }
+.gw-tier-new label { display: flex; flex-direction: column; gap: 4px; }
+.gw-tier-warning { color: #e9c778; }
+.gw-tier-error:empty { display: none; }
+/* damage calculator (static/shared/damage_calc.js) */
+.gw-dc { display: flex; flex-direction: column; gap: 8px; }
+.gw-dc-who { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.gw-dc-who .gw-dc-src { margin: 0; }
+.gw-dc-fields { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.gw-dc-scroll { overflow-x: auto; max-height: 620px; overflow-y: auto; border: 1px solid #2e5468; }
+.gw-dc-t { border-collapse: collapse; width: 100%; font-size: 12px; }
+.gw-dc-t th, .gw-dc-t td { padding: 3px 6px; border-bottom: 1px solid #1d3442; text-align: left; vertical-align: top; }
+.gw-dc-t thead th { position: sticky; top: 0; background: #0b1a22; z-index: 1; }
+.gw-dc-t thead tr:nth-child(2) th { top: 21px; }
+.gw-dc-t th.grp { text-align: center; color: var(--gw-title); border-left: 1px solid #2e5468; }
+.gw-dc-t td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gw-dc-t td.bad { color: #ff6b5e; font-weight: 700; }
+.gw-dc-t td.warn { color: #f5c542; }
+.gw-dc-t tr.boss td:first-child { color: #ff9a8f; }
+.gw-dc-t tr.ally td { opacity: .6; }
+.gw-mod-curves .gw-cv-calc { margin-top: 18px; }
+.gw-mod-curves .gw-dc-wl { align-items: flex-end; }
+.gw-mod-curves .gw-cv-calc .on { outline: 2px solid #f5c542; }
+.gw-dc-t td.grp { border-left: 1px solid #2e5468; }

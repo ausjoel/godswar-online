@@ -241,6 +241,7 @@ internal sealed partial class GameSessionRegistry
         PendingMemberEntryJoin join,
         string reason)
     {
+        ForgetWonderlandLateReservation(join.ReservationId);
         if (MemberEntryAdmissionStore is { } store)
         {
             await store.ReleaseAsync(join.ReservationId, CancellationToken.None);

@@ -49,7 +49,7 @@
       this.body = h("div", { class: "gw-ch-body" });
       this.bar = GW.saveBar({ title: "Save these changes?", onSave: () => this.save(), onDiscard: () => this.reload() });
       this.last = h("div", { class: "gw-ch-last" });
-      el.append(this.banner, this.tabs, this.last, this.body, this.bar.el);
+      el.append(this.banner, GW.loginCheckBanner(ctx.cid), this.tabs, this.last, this.body, this.bar.el);
       this.offChange = GW.on("change", () => { if (this.tab === "account" && this.acct) this.showAccount(this.acct.id, true); });
       await this.reload();
     },
@@ -170,6 +170,10 @@
     },
     // a number field bound to a character_base column (glossary range, help, applies chip, live chip)
     nf(col, opts) {
+      // W4A: the legal range (sheet.limits, with its source) unless the caller gives one
+      const lim = (this.d.limits || {})[col];
+      // a stored value above the game limit (earned under higher rates) is shown as it is, never forced down
+      if (lim && !(opts && ("min" in opts || "max" in opts))) opts = Object.assign({ min: lim.min, max: Math.max(lim.max, num(this.d.base[col]) || 0) }, opts || {});
       const o = Object.assign({ field: F(col), value: num(this.d.base[col]), onChange: (v, ok) => { if (ok && v !== null) this.set(col, v); else if (v === null) this.set(col, this.d.base[col]); if (o.after) o.after(v, ok); } }, opts || {});
       const preciseCounter = ["fighter_job_exp", "Money", "Stone", "BindingGold", "medusa_honor_points", "exchange_point", "exchange_medal", "SkillPoint", "zodiac_energy", "consortia_contribute"].includes(col);
       if (preciseCounter) o.slider = false;
@@ -180,7 +184,68 @@
         el.append(toggle);
       }
       el.classList.add("gw-ch-nf");
+      if (lim && lim.why) el.append(h("span", { class: "gw-ch-limit gw-dim", "data-help": "Legal range " + fmt(lim.min) + " .. " + fmt(lim.max) + ": " + lim.why }, "max " + fmt(lim.max)));
       return this.reg(col, el);
+    },
+    // ---- W4A: faction / gender / class change (plan -> confirm -> apply)
+    async identity(op, target) {
+      const b = this.d.base, cid = this.cid;
+      if (this.online && this.online.online) { await GW.alert(b.name + " is online. Log the character out (Kick on the banner) first.", "Cannot change now"); return; }
+      if (op === "class" && target === undefined) {
+        const I = (this.d.identity || {}).classes || {};
+        const pick = h("select", { class: "gw-ch-input", "aria-label": "New class" }, Object.entries(I).filter(([k]) => Number(k) !== Number(b.profession)).map(([k, v]) => h("option", { value: k }, v)));
+        if (!await GW.confirm({ title: "Change class", el: h("div", { class: "gw-mod-character" }, h("p", null, b.name + " is a " + I[b.profession] + ". New class:"), pick), ok: "Next" })) return;
+        target = Number(pick.value);
+      }
+      let plan;
+      try { plan = await this.ctx.api("identity/" + cid, { op, target }); } catch (e) { await GW.writeError(e); return; }
+      const ok = !plan.blockers.length;
+      const go = await GW.confirm({ title: (op === "class" ? "Class" : op === "faction" ? "Faction" : "Gender") + ": " + plan.before + " -> " + plan.after, danger: true, ok: ok ? "Change it" : "Close",
+        el: h("div", { class: "gw-mod-character" }, h("ul", null, plan.what.map(x => h("li", null, x))),
+          plan.blockers.length ? h("div", null, h("p", { class: "tt-bad" }, "Cannot change now:"), h("ul", null, plan.blockers.map(x => h("li", { class: "tt-bad" }, x)))) : null,
+          plan.warnings.length ? h("ul", { class: "gw-dim" }, plan.warnings.map(x => h("li", null, x))) : null,
+          h("p", { class: "gw-dim" }, "Applies at the next login. Undo is in the change log.")) });
+      if (!go || !ok) return;
+      try { const r = await this.ctx.api("identity/" + cid, { op, target: plan.target, apply: true, expected: plan.expected }); this.done(r); await this.reload(); }
+      catch (e) { await GW.writeError(e); }
+    },
+    // ---- W4A: hair / face picker (a window of clickable pictures instead of a number slider)
+    lookPicker(col, label) {
+      const L = this.d.looks || {}, S = L.sheet || { x0: 4, y0: 22, dx: 132, dy: 146, tile: 128, cols: 5 };
+      const val = h("b", { class: "gw-value" });
+      const thumb = h("span", { class: "gw-ch-look", "aria-hidden": "true" });
+      const tileStyle = (set, gender, part, idx, size) => {
+        const k = size / S.tile, col = idx % S.cols, row = Math.floor(idx / S.cols);
+        return "background-image:url(/static/avatar-previews/" + set + "_" + gender + "_" + part + ".png);background-size:" + Math.round(664 * k) + "px auto;" +
+          "background-position:-" + Math.round((S.x0 + col * S.dx) * k) + "px -" + Math.round((S.y0 + row * S.dy) * k) + "px;width:" + size + "px;height:" + size + "px";
+      };
+      const gender = () => (this.pending.gender || this.d.base.gender) === "female" ? "female" : "male";
+      const draw = v => {
+        val.textContent = col === "hair_style" ? "style " + Math.floor(v / 10) + ", colour " + (v % 10) + " (#" + v + ")" : "face " + v;
+        const list = col === "hair_style" ? ((L.hair_by_gender || {})[gender()] || {}).old || [] : (L.faces || []);
+        const idx = list.indexOf(Number(v));
+        thumb.setAttribute("style", idx >= 0 ? tileStyle("old", gender(), col === "hair_style" ? "hair" : "faces", idx, 40) : "width:40px;height:40px");
+      };
+      let cur = num(this.d.base[col]);
+      draw(cur);
+      const open = async () => {
+        const g = gender(), part = col === "hair_style" ? "hair" : "faces";
+        const sets = col === "hair_style" ? (L.hair_by_gender || {})[g] || { old: [], new: [] } : { old: L.faces || [], new: [] };
+        const grid = h("div", { class: "gw-ch-lookgrid", role: "listbox", "aria-label": label });
+        let m = null;
+        for (const id of Array.from(new Set(sets.old.concat(sets.new))).sort((a, b) => a - b)) {
+          const inOld = sets.old.includes(id), idx = inOld ? sets.old.indexOf(id) : sets.new.indexOf(id);
+          grid.append(h("button", { class: "gw-ch-looktile" + (id === cur ? " on" : "") + (inOld ? "" : " off"), type: "button", role: "option", "aria-selected": id === cur ? "true" : "false",
+            disabled: inOld ? null : true, "data-help": inOld ? (col === "hair_style" ? "Hair " + id + ": style " + Math.floor(id / 10) + ", colour " + (id % 10) : "Face " + id)
+              : "Hair " + id + " exists only in the client's 'new models' set (Characters_New); the shipped client draws the Original set, so it cannot be chosen.",
+            onclick: () => { cur = id; this.set(col, id); draw(id); if (m) m.close(); } },
+            h("span", { style: tileStyle(inOld ? "old" : "new", g, part, idx, 72) }), h("span", { class: "gw-ch-lookno" }, String(id))));
+        }
+        m = GW.modal(h("div", { class: "gw-mod-character" }, h("p", { class: "gw-dim" }, (col === "hair_style" ? "Hair styles for a " + g + " character (number = style x 10 + colour). Greyed: only in the unused 'new models' set." : "Faces for a " + g + " character.") + " Click one; then Review & save."), grid),
+          { title: label + " (" + g + ")", wide: true });
+      };
+      return this.reg(col, h("div", { class: "gw-ch-row" }, h("span", { class: "gw-label", "data-field": F(col) }, label), thumb, val, " ",
+        h("button", { class: "gw-btnx small gw-ch-edit", type: "button", onclick: open }, "Choose...")));
     },
     async save() {
       const vals = Object.assign({}, this.pending);
@@ -210,7 +275,7 @@
 
     appliesLine() {
       return h("div", { class: "gw-ch-applies" }, GW.appliesChip("next_login", "changes apply at the next login"), " ",
-        h("span", { class: "gw-dim", "data-help": "Fields marked 'live' are changed by the running game server while the player is online (round-2 server). Everything else is written to the database and the game reads it when the character next enters the world." }, "(or live where marked)"));
+        h("span", { class: "gw-dim", "data-help": "Fields marked 'live' are changed by the running game server while the player is online. Everything else is saved to the database, and the game reads it when the character next enters the world." }, "(or live where marked)"));
     },
     // ---------------------------------------------------------------- the character window
     drawSheet() {
@@ -267,13 +332,17 @@
         h("div", { class: "gw-ch-split" },
           h("div", null,
             this.reg("belief", h("div", { class: "gw-ch-row" }, h("span", { class: "gw-label", "data-field": F("belief") }, "Faith"), faith)),
-            row("Class", "profession", h("span", { class: "gw-ch-ro", "data-help": "Read-only: " + (d.fields.profession.why || "") }, d.names.class), " ",
-              h("span", { class: "gw-ch-ro", "data-field": F("camp") }, "· " + d.names.camp)),
-            row("Repu", "prestige", h("span", { class: "gw-ch-ro", "data-help": "Prestige " + fmt(b.prestige) + ". Read-only: " + (d.fields.prestige.why || "not read by this server") }, fmt(b.prestige))),
+            row("Class", "profession", h("span", { class: "gw-ch-ro" }, d.names.class),
+              h("button", { class: "gw-btnx small gw-ch-edit", type: "button", "data-help": "Change the class the way the game's Class Shifter does: nothing may be worn, the old talents become talent points, skills the new class cannot use are sealed.", onclick: () => this.identity("class") }, "Change"), " ",
+              h("span", { class: "gw-ch-ro", "data-field": F("camp") }, "· " + d.names.camp),
+              h("button", { class: "gw-btnx small gw-ch-edit", type: "button", "data-help": "Move to the other faction the way the game's Faction Changer does: not in a guild, moved to the new capital, portal skills swapped.", onclick: () => this.identity("faction") }, "Change")),
+            row("Repu", "medusa_honor_points", h("span", { class: "gw-value", "data-help": "Reputation is the Honor balance: the Reputation exchange and the Honor shop spend it. Add to it below. (Prestige " + fmt(b.prestige) + " is not read by this server.)" }, fmt(b.medusa_honor_points))),
             this.reg("selected_title_id", h("div", { class: "gw-ch-row" }, titleBtn, titleTxt))),
           h("div", { class: "gw-ch-camp" }, h("span", { class: "gw-sprite " + (CAMP_CLASS[b.camp] || ""), "data-field": F("camp"), role: "img", "aria-label": d.names.camp }))),
         h("div", { class: "gw-ch-cols3" },
-          this.nf("medusa_honor_points", { label: "Honor" }),
+          h("div", null, this.nf("medusa_honor_points", { label: "Honor (Reputation)" }),
+            h("span", { class: "gw-ch-quick", "data-help": "Add reputation (Honor)." }, [["+100", 100], ["+1k", 1e3], ["+10k", 1e4], ["+100k", 1e5]].map(([t, v]) =>
+              h("button", { class: "gw-chipbtn gw-ch-edit", type: "button", onclick: () => { const f = this.fields.medusa_honor_points.el; const n = Math.min(2147483647, Number(f.value || 0) + v); f.value = n; this.set("medusa_honor_points", n); } }, t)))),
           this.nf("exchange_point", { label: "Point" }),
           this.nf("exchange_medal", { label: "Medal" })));
 
@@ -314,7 +383,7 @@
       const seal = this.reg("fighter_level_sealed", h("div", { class: "gw-ch-row" }, sealBox, h("span", { class: "gw-label", "data-field": F("fighter_level_sealed") }, "Level seal"), h("span", { class: "gw-dim" }, " the character stops gaining levels")));
       const lvQuick = h("span", { class: "gw-ch-quick" }, [1, 30, 50, 80, 100, 120, 150, 200].map(n => h("button", { class: "gw-chipbtn gw-ch-edit", type: "button", "data-help": "Set level " + n, onclick: () => { lvF.value = n; curLv = n; this.set("fighter_job_lv", n); const nx = nextOf(); if (!(curSealed || curLv >= L.cap) && curExp >= nx) { curExp = 0; expF.value = 0; this.set("fighter_job_exp", 0); } liveLvExp(); upd(); } }, String(n))));
       this.fields["fighter_job_lv_quick"] = { el: lvQuick };
-      const level = panel(null, lvF, lvQuick, expF, h("div", { class: "gw-ch-row" }, h("span", { class: "gw-label", "data-help": "EXP the character needs for the next level (reborn PlayerExperienceCatalog: level 1 needs 200, level 199 needs 584,435,250; level cap " + L.cap + ")." }, "Next"), h("span", { class: "gw-value" }, nextTxt)), expBar, seal);
+      const level = panel(null, lvF, lvQuick, expF, h("div", { class: "gw-ch-row" }, h("span", { class: "gw-label", "data-help": "EXP the character needs for the next level (level 1 needs 200, level 199 needs 584,435,250; level cap " + L.cap + ")." }, "Next"), h("span", { class: "gw-value" }, nextTxt)), expBar, seal);
       upd();
 
       // ---- vitals: HP / MP bars + values
@@ -385,7 +454,9 @@
       // ---- looks + pet shed + facts
       const gBtns = h("span", { class: "gw-ch-quick" });
       let gen = b.gender;
-      const drawG = () => { GW.clear(gBtns).append(...["male", "female"].map(x => h("button", { class: "gw-btnx small gw-ch-edit" + (gen === x ? " on" : ""), type: "button", onclick: () => { gen = x; this.set("gender", x); drawG(); this.applyLock(); } }, x === "male" ? "Male" : "Female"))); };
+      // W4A: a gender change goes through the game's own guard (worn fashion / one-gender models) and hair remap
+      const drawG = () => { GW.clear(gBtns).append(h("b", { class: "gw-value" }, gen === "male" ? "Male" : "Female"), " ",
+        h("button", { class: "gw-btnx small gw-ch-edit", type: "button", "data-help": "Change the gender like the game's plastic surgeon: refused while fashion or a one-gender model is worn; a hair style the new gender lacks becomes its colour's base style.", onclick: () => this.identity("gender") }, "Change gender")); };
       drawG();
       const shed = h("div", { class: "gw-ch-shed" });
       let cap = num(b.pet_shed_capacity) || 2;
@@ -402,7 +473,7 @@
         ["Earl rank", "earl_rank", fmt(b.earl_rank)], ["GM flag", "GM", String(b.GM)], ["Kit bags", "bag_num", fmt(b.bag_num)]];
       const looks = h("section", { class: "gw-frame-normalwindow gw-win gw-ch-looks" }, h("div", { class: "gw-wtitle" }, "Looks, pets and facts"), this.appliesLine(),
         this.reg("gender", h("div", { class: "gw-ch-row" }, h("span", { class: "gw-label", "data-field": F("gender") }, "Gender"), gBtns)),
-        this.nf("hair_style", { label: "Hair style" }), this.nf("face_shap", { label: "Face" }),
+        this.lookPicker("hair_style", "Hair style"), this.lookPicker("face_shap", "Face"),
         h("a", { href: "/static/avatars.html", target: "_blank", rel: "noopener", class: "gw-ch-row" }, "Pictures of hair and faces"),
         this.reg("pet_shed_capacity", h("div", { class: "gw-ch-row" }, h("span", { class: "gw-label", "data-field": F("pet_shed_capacity") }, "Pet shed"), shed)),
         h("table", { class: "gw-ch-facts" }, facts.map(([l, c, v]) => h("tr", null, h("th", { "data-field": F(c) }, l), h("td", { class: "gw-ch-ro", "data-help": (d.fields[c] && d.fields[c].why) ? "Read-only: " + d.fields[c].why : null }, v)))));
@@ -500,29 +571,35 @@
       const list = h("div", { class: "gw-ch-acclist", role: "list" });
       const search = h("input", { class: "gw-ch-input", type: "search", placeholder: "Search user name, e-mail or character", "aria-label": "Search accounts" });
       const count = h("span", { class: "gw-dim" });
+      // W4A: deleted accounts (restorable for 30 days) are hidden unless asked for
+      const showDel = h("input", { type: "checkbox", "aria-label": "Show deleted accounts" });
+      const delLabel = h("label", { class: "gw-dim", "data-help": "Accounts deleted in the editor stay for 30 days (nobody can log in, the name stays taken) and can be restored. Tick to list them." }, showDel, " Show deleted");
+      const holdsBox = h("details", { class: "gw-ch-holds" }, h("summary", { "data-help": "User names nobody can register again: the old names of renamed accounts, the names of deleted accounts and names reserved by hand. The game's first-login registration, the sign-up site and this editor all refuse them." }, "Held user names"));
+      holdsBox.addEventListener("toggle", () => { if (holdsBox.open) this.loadHolds(holdsBox); });
       this.accDetail = h("section", { class: "gw-frame-normalwindow gw-win gw-ch-accdetail" }, h("div", { class: "gw-wtitle" }, "Account"));
       const newBtn = h("button", { class: "gw-btnx", type: "button", disabled: !this.d.writable || null, "data-help": "Make a new login (user name + password), written exactly like the game server's own first-login registration." }, "+ New account");
       newBtn.addEventListener("click", () => this.newAccount());
       this.body.append(h("div", { class: "gw-ch-accgrid" },
         h("section", { class: "gw-frame-normalwindow gw-win gw-ch-accleft" }, h("div", { class: "gw-wtitle" }, "Accounts"),
-          h("div", { class: "gw-ch-acctools" }, newBtn, search, count), list),
+          h("div", { class: "gw-ch-acctools" }, newBtn, search, count, delLabel), list, holdsBox),
         this.accDetail));
       this.accList = list; this.accCount = count;
       let t = null;
       search.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => this.loadAccounts(search.value), 250); });
+      showDel.addEventListener("change", () => { this.showDeleted = showDel.checked; this.loadAccounts(search.value); });
       this.loadAccounts("");
       this.showAccount(this.d.base.account_id);
     },
     async loadAccounts(q) {
       let r;
-      try { r = await this.ctx.api("accounts?q=" + encodeURIComponent(q || "")); } catch (e) { GW.clear(this.accList).append(h("div", { class: "tt-bad" }, e.message)); return; }
+      try { r = await this.ctx.api("accounts?q=" + encodeURIComponent(q || "") + (this.showDeleted ? "&deleted=1" : "")); } catch (e) { GW.clear(this.accList).append(h("div", { class: "tt-bad" }, e.message)); return; }
       this.userRule = r.user_rule;
-      this.accCount.textContent = r.accounts.length + " account" + (r.accounts.length === 1 ? "" : "s");
+      this.accCount.textContent = r.accounts.length + " account" + (r.accounts.length === 1 ? "" : "s") + (r.hidden_deleted ? " (" + r.hidden_deleted + " deleted hidden)" : "");
       GW.clear(this.accList);
       for (const a of r.accounts) {
         this.accList.append(h("button", { class: "gw-ch-accrow" + (this.acct && this.acct.id === a.id ? " on" : ""), type: "button", role: "listitem", "data-id": a.id, onclick: () => this.showAccount(a.id) },
           h("span", { class: "gw-dot " + (a.online ? "on" : "off"), "data-help": a.online ? "logged in now" : "logged out" }),
-          h("span", { class: "nm" }, a.username, a.banned ? h("span", { class: "gw-chip restart" }, "banned") : null,
+          h("span", { class: "nm" }, a.username, a.deleted ? h("span", { class: "gw-chip never", "data-help": "Deleted in the editor: restorable until the purge timer removes it." }, "deleted") : a.banned ? h("span", { class: "gw-chip restart" }, "banned") : null,
             a.donator_tier ? h("span", { class: "gw-chip login" }, a.tier_name) : null,
             a.game_safe_name ? null : h("span", { class: "gw-chip never", "data-help": "This user name has capital letters or symbols: the 2.51 game client cannot log in with it. Rename it (" + r.user_rule + ")." }, "client cannot log in")),
           h("span", { class: "sub" }, "#" + a.id + " · " + (a.characters.length ? a.characters.map(c => c.name).join(", ") : "no characters yet"))));
@@ -549,7 +626,15 @@
         kv("Password", "password", a.hashed ? "stored as a secure hash (nobody can read it back)" : "stored in an old format: set a new one"),
         kv("Last login", "last_login_time", when(a.last_login_time)), kv("Last logout", "last_logout_time", when(a.last_logout_time)),
         kv("Time online", "total_online_time", fmt(a.total_online_time) + " s"),
-        kv("Realm", null, (a.realms || []).map(r => h("span", { class: "gw-chip never", "data-help": "account_realm: the server adds it at the first character; character_lifecycle_version " + r.character_lifecycle_version + ", slot limit " + r.character_slot_limit }, "realm " + r.realm_id)))));
+        kv("Realm", null, (a.realms || []).map(r => h("span", { class: "gw-chip never", "data-help": "The account is known on this realm (added with its first character).\nCharacter slots: " + r.character_slot_limit }, "realm " + r.realm_id)))));
+
+      // ---- W4A: a deleted account (restorable)
+      if (a.deleted) {
+        const d = a.deletion || {};
+        D.append(h("div", { class: "gw-ch-deleted", role: "status" },
+          h("p", { class: "tt-bad" }, "Deleted " + when(d.deleted_at) + ". Nobody can log in with it and its name stays taken. The purge timer removes it for good after " + when(d.purge_after) + "."),
+          h("button", { class: "gw-btnx", type: "button", disabled: ro || null, "data-help": "Undo the delete: the account can log in again" + (d.previous_status === 1 ? " (it stays banned, as it was before)." : "."), onclick: () => this.restoreAccount(a) }, "Restore account")));
+      }
 
       // ---- characters (delete / restore the game's way)
       const chars = h("div", { class: "gw-ch-acchars" });
@@ -562,7 +647,9 @@
           deleted ? h("span", { class: "gw-chip restart", "data-help": "Deleted " + when(c.deleted_at) + "; restorable until " + when(c.restore_until) + "; the server purges it after " + when(c.purge_after) + "." }, c.restorable ? "deleted, restorable" : "deleted") : null,
           !deleted ? h("button", { class: "gw-btnx small danger", type: "button", disabled: ro || null, "data-help": "Delete this character the game's way: it can be restored for 30 days, then the server removes it for good.",
             onclick: () => this.lifecycle(c, "delete") }, "Delete") : null,
-          deleted && c.restorable ? h("button", { class: "gw-btnx small", type: "button", disabled: ro || null, "data-help": "Bring the character back (only while the account has no other active character).", onclick: () => this.lifecycle(c, "restore") }, "Restore") : null));
+          deleted && c.restorable ? h("button", { class: "gw-btnx small", type: "button", disabled: ro || null, "data-help": "Bring the character back (only while the account has no other active character).", onclick: () => this.lifecycle(c, "restore") }, "Restore") : null,
+          deleted && c.restorable && a.characters.some(o => o.state === "active" && o.realm === c.realm) ? h("button", { class: "gw-btnx small", type: "button", disabled: ro || null,
+            "data-help": "One active character per account: delete the active one the game's way (restorable for 30 days) and restore this one, in one step.", onclick: () => this.swapChar(c, a.characters.find(o => o.state === "active" && o.realm === c.realm)) }, "Swap in") : null));
       }
       if (!a.characters.length) chars.append(h("div", { class: "gw-dim" }, "No characters yet: the player makes one at the character screen after logging in."));
       D.append(h("h3", null, "Characters"), chars, h("p", { class: "gw-dim gw-ch-note" }, "One active character per account (the server's rule)."));
@@ -576,7 +663,9 @@
           h("span", { class: "gw-ch-line" }, userIn, h("button", { class: "gw-btnx small", type: "button", disabled: ro || null, onclick: () => this.rename(a, userIn.value) }, "Rename")),
           h("label", { "data-field": "accounts.password" }, "New password"),
           h("span", { class: "gw-ch-line" }, pw.el, h("button", { class: "gw-btnx small", type: "button", disabled: ro || null, onclick: () => this.password(a, pw) }, "Set password"))),
-        h("p", { class: "gw-dim gw-ch-note" }, "User name: " + (a.user_rule || "") + ". Password: 4-32 characters; stored the way the server stores it (PBKDF2 of the MD5 the client sends), never kept by the editor."));
+        h("p", { class: "gw-dim gw-ch-note" }, "User name: " + (a.user_rule || "") + ". Password: 4-32 characters; stored the way the server stores it (PBKDF2 of the MD5 the client sends), never kept by the editor." +
+          ((a.w4 || {}).holds ? " A rename holds the old name: nobody can register it again." : "")),
+        (a.holds || []).length ? h("p", { class: "gw-dim gw-ch-note" }, "Names held for this account: ", (a.holds || []).map(x => h("span", { class: "gw-chip never", "data-help": x.reason + " " + when(x.held_at) + (x.note ? " - " + x.note : "") }, x.username))) : null);
 
       // ---- e-mail, donator, ban
       const email = h("input", { class: "gw-ch-input", type: "email", value: a.email || "", maxlength: 255, "aria-label": "E-mail" });
@@ -584,7 +673,8 @@
       const exp = h("input", { class: "gw-ch-input", type: "date", value: a.donator_expires_at ? String(a.donator_expires_at).slice(0, 10) : "", "aria-label": "Donator tier ends" });
       D.append(h("h3", null, "Details"),
         h("div", { class: "gw-ch-fgrid" },
-          h("label", { "data-field": "accounts.email" }, "E-mail"), email,
+          h("label", { "data-field": "accounts.email" }, "E-mail"), h("span", null, email,
+            a.signup_email ? h("span", { class: "gw-dim", "data-help": "The sign-up website's copy of the e-mail. Changing the e-mail here resets its verification." }, a.signup_email.verified_at ? "  verified " + when(a.signup_email.verified_at) : "  not verified") : null),
           h("label", { "data-field": "accounts.donator_tier" }, "Donator tier"), tier,
           h("label", { "data-field": "accounts.donator_expires_at" }, "Tier ends"), h("span", null, exp, h("span", { class: "gw-dim" }, " empty = never"))),
         h("div", { class: "gw-ch-line" }, GW.appliesChip("next_login"),
@@ -618,14 +708,21 @@
       }
       if (!(a.entitlements || []).length) ents.append(h("div", { class: "gw-dim" }, "No perks."));
       const bpEnd = h("input", { class: "gw-ch-input", type: "date", "aria-label": "Battle pass ends" });
-      D.append(h("h3", { "data-help": "account_entitlements: perks the server checks at each use. " + ((a.entitlement_keys || {}).battle_pass || "") }, "Perks (entitlements)"), ents,
+      D.append(h("h3", { "data-help": "Perks the game server checks each time they are used. " + ((a.entitlement_keys || {}).battle_pass || "") }, "Perks (entitlements)"), ents,
         h("div", { class: "gw-ch-line" }, h("span", { class: "gw-label" }, "Battle pass ends"), bpEnd, h("span", { class: "gw-dim" }, "empty = never"),
           h("button", { class: "gw-btnx small", type: "button", disabled: ro || null, "data-help": (a.entitlement_keys || {}).battle_pass, onclick: () => this.entitlement(a, { op: "grant", key: "battle_pass", expires_at: bpEnd.value || null }) }, "Grant battle pass"),
           GW.appliesChip("now", "applies at the next use")));
 
       // ---- delete (the plan is read separately: it walks every foreign key of the database)
       const delBox = h("div", { class: "gw-ch-delbox" }, h("p", { class: "gw-dim" }, "Checking what a delete would remove ..."));
-      D.append(h("h3", { class: "tt-bad" }, "Delete"), delBox);
+      const softOk = (a.w4 || {}).holds && (a.w4 || {}).deletions;
+      D.append(h("h3", { class: "tt-bad" }, "Delete"),
+        a.deleted ? null : h("div", { class: "gw-ch-line" },
+          h("button", { class: "gw-btnx danger", type: "button", disabled: ro || !softOk || null,
+            "data-help": softOk ? "Hide the account and make it unusable. It can be restored for 30 days; then the purge timer removes it for good (after a database backup). The user name can never be registered again." : "Needs the server release with migration 240 (name holds and deletions).",
+            onclick: () => this.deleteAccount(a, "soft") }, "Delete account (restorable 30 days)"),
+          softOk ? null : h("span", { class: "gw-dim" }, "needs the server update (migration 240)")),
+        h("details", null, h("summary", null, "Delete now, for good (advanced)"), delBox));
       this.ctx.api("account/" + a.id + "/delete-plan").then(P => {
         if (!this.acct || this.acct.id !== a.id) return;
         a._notRestorable = P.not_restorable || [];
@@ -693,23 +790,52 @@
       try { const r = await this.ctx.api("lifecycle/" + c.id + "/" + op, body); this.done(r); this.afterAccount(r); }
       catch (e) { await GW.writeError(e); }
     },
+    async swapChar(c, act) {
+      const inp = h("input", { class: "gw-ch-input", "aria-label": "Type the active character's name", autocomplete: "off" });
+      if (!await GW.confirm({ title: "Swap in " + c.name + "?", danger: true, ok: "Swap", el: h("div", { class: "gw-mod-character" },
+        h("p", null, act.name + " is deleted the game's way (restorable for 30 days) and " + c.name + " comes back as it was."),
+        h("p", null, "Type ", h("b", null, act.name), " to confirm:"), inp) })) return;
+      try { const r = await this.ctx.api("lifecycle/" + c.id + "/swap", { confirm: inp.value }); this.done(r); this.afterAccount(r); }
+      catch (e) { await GW.writeError(e); }
+    },
     async deleteAccount(a, mode) {
       const inp = h("input", { class: "gw-ch-input", "aria-label": "Type the user name", autocomplete: "off" });
       const text = mode === "wipe"
         ? "Account " + a.username + " is wiped: the account, all its characters (" + (a.characters.map(c => c.name).join(", ") || "none") + ") and every kill, loot and claim record it has are removed for good. A backup is taken first; Undo in the change log puts it all back" + ((a._wipeNotRestorable || a._notRestorable || []).length ? ", except " + (a._wipeNotRestorable || a._notRestorable).join(", ") + " (kept in the backup file only)." : ".")
+        : mode === "soft"
+        ? "Account " + a.username + " is deleted: nobody can log in with it, it is hidden from the account list and its name can never be registered again. Restore it within 30 days (Show deleted); after that the purge timer removes it and its characters (" + (a.characters.map(c => c.name).join(", ") || "none") + ") for good."
         : mode === "delete"
         ? "Account " + a.username + " and everything that belongs to it (" + a.characters.map(c => c.name).join(", ") + ") is removed for good. A backup is taken first; Undo in the change log puts it back" + ((a._notRestorable || []).length ? ", except " + a._notRestorable.join(", ") + " (kept in the backup file only)." : ".")
         : "Every active character of " + a.username + " is deleted the game's way (restorable for 30 days) and the account is banned." + (a.ban_effective ? "" : " The server running now ignores the ban until the round-2 update.");
-      const ok = await GW.confirm({ title: (mode === "wipe" ? "Wipe " : mode === "delete" ? "Delete " : "Retire ") + a.username + "?", danger: true, ok: mode === "wipe" ? "Wipe for good" : mode === "delete" ? "Delete for good" : "Retire",
+      const ok = await GW.confirm({ title: (mode === "wipe" ? "Wipe " : mode === "delete" || mode === "soft" ? "Delete " : "Retire ") + a.username + "?", danger: true, ok: mode === "wipe" ? "Wipe for good" : mode === "delete" ? "Delete for good" : mode === "soft" ? "Delete" : "Retire",
         el: h("div", { class: "gw-mod-character" }, h("p", null, text), h("p", null, "Type ", h("b", null, a.username), " to confirm:"), inp) });
       if (!ok) return;
       try {
         const r = await this.ctx.api("account/" + a.id + "/delete", { confirm: inp.value, mode });
         this.done(r);
-        if (r.note) GW.alert(r.note, mode === "wipe" ? "Account wiped" : mode === "delete" ? "Account deleted" : "Account retired");
+        if (r.note) GW.alert(r.note, mode === "wipe" ? "Account wiped" : mode === "delete" || mode === "soft" ? "Account deleted" : "Account retired");
         if (mode === "delete" || mode === "wipe") { await this.loadAccounts(""); GW.clear(this.accDetail).append(h("div", { class: "gw-wtitle" }, "Account"), h("p", { class: "gw-dim" }, "Account " + a.username + " was deleted. Undo is in the change log (and on the bar above).")); }
         else this.afterAccount(r);
       } catch (e) { await GW.writeError(e); }
+    },
+    async restoreAccount(a) {
+      if (!await GW.confirm({ title: "Restore " + a.username + "?", message: "The account can log in again with its old password and characters.", ok: "Restore" })) return;
+      try { const r = await this.ctx.api("account/" + a.id + "/restore", {}); this.done(r); if (r.note) GW.status(r.note, "ok"); this.afterAccount(r); }
+      catch (e) { await GW.writeError(e); }
+    },
+    async loadHolds(box) {
+      let r;
+      for (const x of Array.from(box.children)) if (x.tagName !== "SUMMARY") x.remove();
+      try { r = await this.ctx.api("holds"); } catch (e) { box.append(h("p", { class: "tt-bad" }, e.message)); return; }
+      if (!r.ready) { box.append(h("p", { class: "gw-dim" }, r.note)); return; }
+      const name = h("input", { class: "gw-ch-input", maxlength: 16, "aria-label": "Name to reserve", placeholder: "name to reserve" });
+      box.append(h("table", { class: "gw-ch-deltbl" }, h("tr", null, h("th", null, "Name"), h("th", null, "Why"), h("th", null, "Since"), h("th", null, "")),
+        r.holds.map(x => h("tr", null, h("td", null, x.username), h("td", { "data-help": x.note || "" }, x.reason + (x.account_id ? " (#" + x.account_id + (x.account_exists ? "" : ", gone") + ")" : "")),
+          h("td", null, when(x.held_at)), h("td", null, h("button", { class: "gw-btnx small", type: "button", disabled: !this.d.writable || null, "data-help": "Let this name be registered again.",
+            onclick: async () => { try { const w = await this.ctx.api("holds/release", { username: x.username }); this.done(w); this.loadHolds(box); } catch (e) { await GW.writeError(e); } } }, "Release"))))),
+        r.holds.length ? null : h("p", { class: "gw-dim" }, "No names are held."),
+        h("div", { class: "gw-ch-line" }, name, h("button", { class: "gw-btnx small", type: "button", disabled: !this.d.writable || null,
+          onclick: async () => { try { const w = await this.ctx.api("holds/reserve", { username: name.value.trim() }); this.done(w); this.loadHolds(box); } catch (e) { await GW.writeError(e); } } }, "Reserve")));
     },
     newAccount() {
       const user = h("input", { class: "gw-ch-input", type: "text", maxlength: 16, autocomplete: "off", spellcheck: "false", "aria-label": "User name", id: "gw-ch-user" });

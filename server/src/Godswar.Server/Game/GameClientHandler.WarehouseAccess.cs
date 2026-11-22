@@ -6,6 +6,8 @@ internal sealed partial class GameClientHandler
 {
     private WarehouseAccessContext? _warehouseAccessContext;
     private int _warehouseSelectedPage;
+    // B21: the box whose items the client's 40 physical cells currently show (see SendWarehouseSnapshotAsync).
+    private int _warehouseShownPage;
 
     private void IssueWarehouseAccess(NpcSpawnDefinition npc)
     {

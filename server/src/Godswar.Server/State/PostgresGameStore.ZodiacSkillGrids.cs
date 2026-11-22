@@ -451,7 +451,7 @@ internal sealed partial class PostgresGameStore
             """, connection, transaction);
         command.Parameters.AddWithValue("characterId", characterId);
         command.Parameters.AddWithValue("firstSkillId", first);
-        command.Parameters.AddWithValue("lastSkillId", first + 4);
+        command.Parameters.AddWithValue("lastSkillId", SkillLevelExtension.LastIdOfFamily(first)); // B22
         return Convert.ToBoolean(
             await command.ExecuteScalarAsync(cancellationToken));
     }

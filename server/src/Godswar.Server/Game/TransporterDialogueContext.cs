@@ -13,4 +13,8 @@ internal sealed record TransporterDialogueContext(
     uint NpcInteractionId,
     short SourceMapId,
     WorldInstanceId SourceWorldInstanceId,
-    DateTimeOffset ExpiresAt);
+    DateTimeOffset ExpiresAt)
+{
+    /// <summary>B22 (d32): the buttons this menu actually showed; a click on any other sub-id is refused.</summary>
+    public IReadOnlyList<int>? MenuSubIds { get; init; }
+}

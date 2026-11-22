@@ -134,7 +134,10 @@ internal static class GmNpcDialoguePolicy
             }
         }
 
-        return string.Empty;
+        // B22 G2: the GENERATED Aether Sanctum (map 70) is not in the compiled seed.
+        return mapId == Godswar.Server.Application.WorldInstances.AetherSanctumPolicy.MapId
+            ? Godswar.Server.Application.WorldInstances.AetherSanctumPolicy.SceneKey
+            : string.Empty;
     }
 
     public static List<NpcSpawnDefinition> BuildPlacements(

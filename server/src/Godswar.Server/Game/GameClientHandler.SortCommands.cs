@@ -236,13 +236,14 @@ internal sealed partial class GameClientHandler
             ApplyWarehouseKitBagProjection(final.Character, final.Warehouse.InventoryRevision);
             for (var slot = 0; slot < entries.Length; slot++)
             {
-                if (entries[slot] != "[]" && WarehouseItemState(final.Warehouse, slot) == "[]")
+                if (entries[slot] != "[]" && WarehouseItemState(final.Warehouse, slot) == "[]" &&
+                    WarehousePageCommand.TryToVisibleSlot(slot, _warehouseSelectedPage, out var visibleSlot)) // B21
                 {
                     await _session.SendAsync(
                         PacketBuilder.WarehouseTransferAcknowledgement(
                             new WarehouseTransferIntent(
                                 WarehouseTransferOperation.Withdraw,
-                                slot,
+                                visibleSlot, // B21
                                 WarehouseCapacityPolicy.AutomaticKitBagSlot,
                                 WarehouseCapacityPolicy.AutomaticWarehouseSlot,
                                 0,

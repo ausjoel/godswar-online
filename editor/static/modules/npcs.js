@@ -7,23 +7,40 @@
 
   GW.module("npcs", {
     async mount(el, ctx) {
-      let D = null, filter = "useful", q = "", current = null;
+      let D = null, filter = "useful", q = "", current = null, leftView = "list", menus = null, gates = null;
+      const mapState = { map: null }, gridState = { tab: null, sel: null, drag: null };   // B21 items 27/28
+      let shopView = "grid";
+      try { const v = localStorage.getItem("gw.npcs.shopview"); if (v === "list" || v === "grid") shopView = v; } catch (e) { /* storage blocked */ }
+      if (!window.GWNpcExtra) await new Promise(r => { const sc = document.createElement("script"); sc.src = "/static/modules/npcs-extra.js"; sc.onload = r; sc.onerror = r; document.head.append(sc); });
+      if (!window.GWTeleMenu) await new Promise(r => { const sc = document.createElement("script"); sc.src = "/static/modules/teleport-menu.js"; sc.onload = r; sc.onerror = r; document.head.append(sc); });   // B22 P1 (d32)
+      const X = window.GWNpcExtra;
       const list = h("div", { class: "gw-npc-list" }), pane = h("div", { class: "gw-npc-pane" });
       const search = h("input", { type: "search", placeholder: "search NPC name or key ...", "aria-label": "Search NPCs", oninput: e => { q = e.target.value.toLowerCase(); drawList(); } });
       const kinds = h("select", { "aria-label": "Show", onchange: e => { filter = e.target.value; drawList(); } },
         h("option", { value: "useful" }, "Shops and teleporters"), h("option", { value: "shop" }, "Shops"), h("option", { value: "transporter" }, "Teleporters"), h("option", { value: "all" }, "Every NPC"));
-      el.append(h("div", { class: "gw-npc-bar" }, search, kinds), h("div", { class: "gw-npc-body" }, list, pane));
+      const viewBtn = h("button", { class: "gw-btnx", type: "button", "aria-pressed": "false", onclick: () => { leftView = leftView === "map" ? "list" : "map"; viewBtn.textContent = leftView === "map" ? "Show as list" : "Pick on the map"; viewBtn.setAttribute("aria-pressed", leftView === "map" ? "true" : "false"); drawList(); } }, "Pick on the map");
+      el.append(h("div", { class: "gw-npc-bar" }, search, kinds, X ? viewBtn : null), h("div", { class: "gw-npc-body" }, list, pane));
 
       async function load() {
         [D] = await Promise.all([ctx.api("overview"), GW.catalog.load("item")]);
+        if (!menus) menus = await GW.api("/api/m/npc_dialogue/menus").catch(() => null);   // client option text (teleporter labels)
+        gates = await GW.api("/api/m/gates/overview").catch(() => null);                     // per-destination open / closed
         drawList();
         // #/npcs?shop=<service> (World > Shops & Mall "Edit this shop", Library): open that shop
         const want = ctx.params && ctx.params.get && ctx.params.get("shop");
         if (!current && want) { const n = D.npcs.find(x => x.shop && x.service === want); if (n) { current = n; filter = "shop"; kinds.value = "shop"; drawList(); } else GW.status("The server has no editable shop called " + want + " (the Athens merchants captured from retail are compiled and not editable).", "err"); }
+        // #/npcs?npc=<key>[&map=<id>] (map views, NPC greetings): open that NPC
+        const wantNpc = ctx.params && ctx.params.get && ctx.params.get("npc"), wantMap = ctx.params && ctx.params.get && ctx.params.get("map");
+        if (!current && wantNpc) { const n = D.npcs.find(x => x.key === wantNpc && (wantMap === null || wantMap === undefined || String(x.map) === wantMap)); if (n) { current = n; filter = "all"; kinds.value = "all"; mapState.map = n.map; drawList(); } }
         if (current) open(D.npcs.find(n => n.key === current.key && n.map === current.map) || current);
       }
       function drawList() {
         GW.clear(list);
+        if (leftView === "map" && X) {
+          const shown = D.npcs.filter(n => (filter === "all" || (filter === "useful" && (n.shop || n.transporter)) || (filter === "shop" && n.shop) || (filter === "transporter" && n.transporter)) && (!q || (n.name + " " + n.key).toLowerCase().includes(q)));
+          list.append(X.mapView({ npcs: shown, maps: D.maps, state: mapState, current, redraw: drawList, pick: n => { current = n; drawList(); open(n); } }));
+          return;
+        }
         let map = null;
         for (const n of D.npcs) {
           if (filter === "useful" && !n.shop && !n.transporter && !n.activators) continue;
@@ -38,6 +55,7 @@
       function open(n) {
         GW.clear(pane).append(h("h2", null, n.name), h("p", { class: "gw-dim" }, n.map < 0 ? n.map_name : n.key + " · " + n.map_name + " (" + Math.round(n.x) + ", " + Math.round(n.z) + ")"));
         if (n.activators) return drawActivators();
+        if (n.map >= 0) pane.append(h("p", null, h("a", { href: "#/npc_dialogue?npc=" + encodeURIComponent(n.key) }, "Greeting and option lines of this NPC →")));
         if (n.shop) drawShop(n);
         if (n.transporter) drawTeleports(n);
         if (!n.shop && !n.transporter) pane.append(h("p", null, "This NPC has no shop or teleporter in the server. What an NPC offers is decided by the client's own dialogue scripts, so a shop can't be added to it from here."));
@@ -110,6 +128,12 @@
         const dirty = (redraw = true) => { changed = true; if (redraw) draw(); else if (!/ · not saved$/.test(note.textContent)) note.textContent += " · not saved"; };
         function draw() {
           GW.clear(body);
+          if (shopView === "grid" && X) {
+            note.textContent = rows.length + " items" + (shop.override ? " · edited" : " · original list") + ". Laid out like the game's shop window: " + X.PER_TAB + " slots per tab. Also sold by every NPC running this shop. Saved lists reach the game within 15 seconds (no restart)." + (changed ? " · not saved" : "");
+            drawSummary();
+            body.append(X.shopGrid({ rows, tabs, state: gridState, irow, charge, label, redraw: draw, dirty: () => dirty(), add: t => add(t) }));
+            return;
+          }
           note.textContent = rows.length + " items" + (shop.override ? " · edited" : " · original list") + ". Drag a row (or use the arrows) to change its slot within its tab. Also sold by every NPC running this shop. Saved lists reach the game within 15 seconds (no restart)." + (changed ? " · not saved" : "");
           drawSummary();
           let tab = null;
@@ -157,10 +181,11 @@
             body.append(rowEl);
           });
         }
-        const add = async () => {
+        const add = async (tab) => {
           const picked = await GW.pickMany("item", { title: "Add to " + shop.label, itemUse: "shop", allow: r => !/\b(noclient|noserver)\b/.test(r.flags || ""), max: 200 });
           if (!picked) return;
-          for (const p of picked) rows.push({ item: p.id, price: n.service === "MallAdmin" ? 1 : Math.max(1, Number(p.price) || 1), category: tabs[0] || 0, quality: 1, grade: 1, bound: 0, stack_marker: 1 });
+          const into = tabs.includes(tab) ? tab : (tabs[0] || 0);
+          for (const p of picked) rows.push({ item: p.id, price: n.service === "MallAdmin" ? 1 : Math.max(1, Number(p.price) || 1), category: into, quality: 1, grade: 1, bound: 0, stack_marker: 1 });
           byTab(); dirty();
         };
         const save = async () => {
@@ -175,27 +200,55 @@
           if (!await GW.confirm({ title: "Back to the original list?", message: "Removes your edits to this shop. The change log keeps an Undo.", ok: "Reset" })) return;
           try { GW.writeDone(await ctx.api("shop/reset", { service: n.service, version: shop.version }), "Shop reset"); await load(); } catch (e) { await GW.writeError(e); }
         };
-        pane.append(h("h3", null, shop.label), summary, note, h("div", { class: "gw-inv-btns" },
-          h("button", { class: "gw-btnx", type: "button", onclick: add }, "+ Add items"), h("button", { class: "gw-btnx", type: "button", onclick: save }, "Save shop"),
+        const viewSel = h("select", { "aria-label": "Shop view", onchange: e => { shopView = e.target.value; try { localStorage.setItem("gw.npcs.shopview", shopView); } catch (_) {} draw(); } },
+          h("option", { value: "grid", selected: shopView === "grid" }, "View: game window"), h("option", { value: "list", selected: shopView === "list" }, "View: list"));
+        gridState.tab = null; gridState.sel = null;
+        pane.append(h("h3", null, shop.label), summary, note, h("div", { class: "gw-inv-btns" }, X ? viewSel : null,
+          h("button", { class: "gw-btnx", type: "button", onclick: () => add(gridState.tab) }, "+ Add items"), h("button", { class: "gw-btnx", type: "button", onclick: save }, "Save shop"),
           shop.override ? h("button", { class: "gw-btnx", type: "button", onclick: reset }, "Reset to original") : null), body);
         draw();
       }
       function drawTeleports(n) {
-        pane.append(h("h3", null, "Teleporter buttons"), h("p", { class: "gw-dim" }, "Button text comes from the client, so it keeps its old label if you change where it goes. Points inside walls are refused. Battlefield buttons keep their opening hours and upper level limit."));
-        for (const t of D.teleports.filter(x => x.npc === n.key)) {
-          const o = t.override;
+        // B21 item 27: the buttons in the order the game lists them, with the client's own words, and a map to click
+        // the destination on. Order, words and which buttons exist are fixed by the client and the published menu.
+        const route = ((menus && menus.routes && menus.routes[n.key]) || []).find(r => r.behavior === 14 || r.behavior === 15 || r.behavior === 18) || null;
+        const order = route && route.page ? route.page.options.map(o => o.sub) : (route ? route.subs : []);   // menu, then server-added
+        const opt = sub => route && route.page ? route.page.options.find(o => o.sub === sub) : null;
+        const strip = t => String(t || "").replace(/\|c[0-9A-Fa-f]{8}|\|r/g, "").replace(/^\*/, "");
+        const mine = D.teleports.filter(x => x.npc === n.key).sort((a, b) => ((order.indexOf(a.sub) + 1) || 999) - ((order.indexOf(b.sub) + 1) || 999));
+        pane.append(h("h3", null, "Teleporter destinations"), h("p", { class: "gw-dim" }, "Where each original button goes, with the button words from the client (the menu further down decides which buttons players see, their order and price). Pick a map and click the small map (or type X / Z) to move a destination; points inside walls are refused. Saved buttons reach the game within 15 seconds."),
+          h("p", { class: "gw-dim", "data-help": "The words on each button come from the client's scripts: see NPC greetings to change them (client update)." }, "A destination can be closed on the Gates page. Below: the buttons this teleporter shows, their order and price."));
+        if (window.GWTeleMenu) pane.append(window.GWTeleMenu.panel({ ctx, npc: n.key, maps: D.maps, pointPicker: X ? X.pointPicker : null, onSaved: () => {} }));   // B22 P1 (d32)
+        const listEl = h("div", { class: "gw-npc-teles" });
+        mine.forEach((t, k) => {
+          const o = t.override, op = opt(t.sub);
           const map = h("select", { "aria-label": "Destination map" }, D.maps.map(m => h("option", { value: m.map_id }, m.name + " (" + m.map_id + ")")));
           map.value = String(o ? o.target_map_id : t.target_map);
           const x = num(o ? o.pos_x : (t.x ?? ""), "X"), z = num(o ? o.pos_z : (t.z ?? ""), "Z"), lv = num(o ? o.minimum_level : t.level, "Minimum level", { min: 1, max: 255 });
-          pane.append(h("div", { class: "gw-npc-item" }, h("span", { class: "gw-npc-name" }, h("b", null, t.name), h("span", { class: "gw-dim" }, " → " + (t.target_name || t.target_map) + (o ? " · edited" : ""))),
-            h("label", null, "Map ", map), h("label", null, "X ", x), h("label", null, "Z ", z), h("label", null, "Level ", lv),
-            h("button", { class: "gw-btnx small", type: "button", onclick: async () => {
-              try { const r = await ctx.api("teleport/save", { npc: t.npc, sub: t.sub, map: Number(map.value), x: x.value, z: z.value, level: Number(lv.value), version: t.version }); GW.writeDone(r, "Button saved"); await load(); } catch (e) { await GW.writeError(e); }
-            } }, "Save"),
-            o ? h("button", { class: "gw-btnx small", type: "button", onclick: async () => {
-              try { GW.writeDone(await ctx.api("teleport/reset", { npc: t.npc, sub: t.sub, version: t.version }), "Button reset"); await load(); } catch (e) { await GW.writeError(e); }
-            } }, "Reset") : null));
-        }
+          const picker = X ? X.pointPicker({ map: Number(map.value), x: x.value, z: z.value, onPick: (px, pz) => { x.value = px; z.value = pz; } }) : null;
+          if (picker) { map.addEventListener("change", () => picker.setMap(Number(map.value))); const upd = () => picker.setPoint(x.value, z.value); x.addEventListener("input", upd); z.addEventListener("input", upd); }
+          const gateMode = g => { const m = g.effective && g.effective.schedule_mode; return m && m !== "compiled" ? m : (g.compiled && g.compiled.schedule) || "always"; };
+          const gate = ((gates && gates.gates) || []).find(g => String(g.buttons || "").split(/,\s*/).includes(t.npc + " " + t.sub));
+          const gateEl = gate ? h("a", { href: "#/gates", class: "gw-chip", "data-help": "Open or close this destination, its opening times and its level range are set on the Gates page." },
+            "Gates: " + (gateMode(gate) === "closed" ? "closed" : gateMode(gate) === "windows" ? "set times" : "open") + " →") : null;
+          const fee = t.target_map === 6 ? h("span", { class: "gw-chip gw-cur gw-cur-silver", "data-help": "The original fee of the capitals' Mycenae button; GMs skip it. A price set in the menu below replaces it." }, "20,000 Silver unless the menu sets a price") : null;
+          listEl.append(h("div", { class: "gw-npc-tele" },
+            h("div", { class: "gw-npc-tele-head" }, h("span", { class: "gw-npc-tele-no" }, String(k + 1)),
+              h("span", { class: "gw-npc-tele-label" }, op && op.label ? strip(op.label.text) : t.name), fee, gateEl,
+              op && op.added ? h("span", { class: "gw-chip", "data-help": "Not in the published menu: the game server adds this button after the menu's own buttons." }, "added by the server") : null,
+              route && !order.includes(t.sub) ? h("span", { class: "gw-chip", "data-help": "The server knows this destination, but this NPC's menu does not show a button for it." }, "no button") : null,
+              h("span", { class: "gw-dim" }, " → " + (t.target_name || t.target_map) + (o ? " · edited" : "") + " · button " + t.sub)),
+            h("div", { class: "gw-npc-tele-body" }, picker ? picker.el : null,
+              h("div", { class: "gw-npc-tele-form" }, h("label", null, "Map ", map), h("label", null, "X ", x), h("label", null, "Z ", z), h("label", null, "Minimum level ", lv),
+                h("div", { class: "gw-inv-btns" },
+                  h("button", { class: "gw-btnx small", type: "button", onclick: async () => {
+                    try { const r = await ctx.api("teleport/save", { npc: t.npc, sub: t.sub, map: Number(map.value), x: x.value, z: z.value, level: Number(lv.value), version: t.version }); GW.writeDone(r, "Button saved"); await load(); } catch (e) { await GW.writeError(e); }
+                  } }, "Save"),
+                  o ? h("button", { class: "gw-btnx small", type: "button", onclick: async () => {
+                    try { GW.writeDone(await ctx.api("teleport/reset", { npc: t.npc, sub: t.sub, version: t.version }), "Button reset"); await load(); } catch (e) { await GW.writeError(e); }
+                  } }, "Reset to original") : null)))));
+        });
+        pane.append(listEl);
       }
       try { await load(); } catch (e) { GW.clear(pane).append(h("p", { class: "tt-bad" }, e.message)); }
     }

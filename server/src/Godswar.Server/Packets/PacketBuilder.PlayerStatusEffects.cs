@@ -71,6 +71,9 @@ internal static partial class PacketBuilder
     {
         ArgumentNullException.ThrowIfNull(character);
         ArgumentNullException.ThrowIfNull(effects);
+        // W6-B: server-only account bonuses have no client row (blank icon), and
+        // very long timers wrap in the client. One place covers every sender.
+        effects = ClientStatusWirePolicy.Apply(effects);
         if (effects.Count > PlayerStatusEffectsMaximumCount)
         {
             throw new ArgumentOutOfRangeException(

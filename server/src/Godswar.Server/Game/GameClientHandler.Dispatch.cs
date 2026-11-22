@@ -377,6 +377,12 @@ internal sealed partial class GameClientHandler
                 await HandleStorageItemAsync(packet, cancellationToken);
                 break;
             case Opcodes.WarehouseTransfer:
+                if (PacketBuilder.IsPrizeChestTransfer(packet.Buffer)) // W4-B: the award storage (storage type 1)
+                {
+                    await HandlePrizeChestTransferAsync(packet, cancellationToken);
+                    break;
+                }
+
                 await HandleWarehouseTransferAsync(packet, cancellationToken);
                 break;
             case Opcodes.ServerTimeRequest:
@@ -408,6 +414,7 @@ internal sealed partial class GameClientHandler
                     break;
                 }
                 _enterUiReadyReceived = true;
+                Journey.Mark("ui_ready"); // W6A
                 Console.WriteLine($"[game] EnterUiReady character={_character?.Name ?? "<none>"}");
                 // The panel's guild rows are read before the status bootstrap
                 // below, so the first 10166 of the session already carries the
@@ -436,6 +443,7 @@ internal sealed partial class GameClientHandler
                 await TrySendOfflinePrizeAsync(cancellationToken); // F-131 offline prize (once per connection)
                 await SendProfessionStateAfterUiReadyAsync(cancellationToken); // PROF slice 1: 10334/10336/10339
                 await ResumePetWorkAfterEnterAsync(cancellationToken); // PETWORK: pay offline-finished work, watch the rest
+                await RunLoginAwardsAsync(cancellationToken); // W4-B login awards, queued buffs, Prize Chest reminder (last; never throws)
                 break;
             case Opcodes.GameServerReady:
             case Opcodes.GameServerInfo:

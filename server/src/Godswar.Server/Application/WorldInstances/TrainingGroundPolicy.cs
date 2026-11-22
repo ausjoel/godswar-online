@@ -69,7 +69,8 @@ internal static class TrainingGroundPolicy
 
     /// <summary>Elites hold once per run (they come back after an hour, longer
     /// than any run); normals keep the ordinary 10 s respawn so 300 points can
-    /// be reached on the small map.</summary>
+    /// be reached on the small map. B21: only while instance.training_one_clear
+    /// is 0; with it on (the default) nothing respawns inside a run.</summary>
     public static readonly TimeSpan EliteRespawnInterval = TimeSpan.FromHours(1);
 
     /// <summary>
@@ -199,6 +200,35 @@ internal sealed record TrainingGroundDefinition(
     public required Func<string, bool> IsEliteKill { get; init; }
 
     public int TimeLimitSeconds => checked((int)TimeLimit.TotalSeconds);
+
+    /// <summary>
+    /// B21 (the admin 2026-11-21): the same ground with the points target lowered to one full clear
+    /// (<paramref name="fullClearPoints"/>, the summed score of every monster the run spawned). The reward
+    /// table is unchanged: a score is scaled to this ground's original target first, so the incomplete
+    /// tiers keep their 40 / 60 / 80 % share and reaching the new target pays the clear tiers. A target of
+    /// 0 or at least the original one returns this ground unchanged.
+    /// </summary>
+    public TrainingGroundDefinition WithFullClearTarget(int fullClearPoints) // B21
+    {
+        if (fullClearPoints <= 0 || fullClearPoints >= TargetScore)
+        {
+            return this;
+        }
+        var original = this;
+        return this with
+        {
+            TargetScore = fullClearPoints,
+            Reward = (score, clearedAfter) =>
+                original.Reward(ScaleScore(score, fullClearPoints, original.TargetScore), clearedAfter)
+        };
+    }
+
+    /// <summary>B21: a score against <paramref name="target"/> as the equivalent score against
+    /// <paramref name="originalTarget"/> (rounded down; the target itself maps exactly).</summary>
+    internal static int ScaleScore(int score, int target, int originalTarget) => // B21
+        score <= 0 ? 0
+        : score >= target ? originalTarget
+        : checked((int)((long)score * originalTarget / target));
 }
 
 internal readonly record struct TrainingGroundReward(int Experience, int TalentPoints, string Tier);

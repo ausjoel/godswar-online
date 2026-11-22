@@ -199,9 +199,11 @@ internal static class SecureLoginTicketFlowChecks
         Check.True(
             clearWrites.SequenceEqual(expectedWrites),
             "secure redirect exactly matches the authenticated grant route");
+        // W14 (reversed on purpose): the login server no longer sets accounts.login_status; the game
+        // session does, so a login that never reaches the game port cannot leave a stale online flag.
         Check.True(
-            accountStore.MarkedOnline,
-            "successful secure authentication marks the account online");
+            !accountStore.MarkedOnline,
+            "W14: successful authentication leaves the login flag to the game session");
         Check.True(
             PasswordVerifierRecord.IsVersionedCandidate(
                 accountStore.Verifier),

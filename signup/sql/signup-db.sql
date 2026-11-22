@@ -83,13 +83,19 @@ SELECT format('GRANT SELECT, INSERT, DELETE ON signup.account_emails TO %I', :'r
 -- password), checked against reborn's PBKDF2 verifier, so the verifier column is readable here.
 SELECT format('GRANT SELECT (password) ON public.accounts TO %I', :'role') \gexec
 SELECT format('GRANT SELECT, INSERT, UPDATE ON signup.account_settings TO %I', :'role') \gexec
+-- W4A: user names held after a rename or an account delete (server migration 240). Read only, and only when the
+-- server has created the table; re-run this file after that server release.
+SELECT format('GRANT SELECT (username_key) ON public.account_username_holds TO %I', :'role')
+WHERE to_regclass('public.account_username_holds') IS NOT NULL \gexec
 
 -- Rankings page: only these columns of ordinary characters, never accounts or staff characters.
 CREATE OR REPLACE VIEW signup.public_rankings WITH (security_barrier = true) AS
   SELECT name::text AS name, fighter_job_lv::bigint AS level, profession::int AS profession, camp::int AS camp,
          prestige::bigint AS prestige, "Money"::bigint AS money
   FROM public.character_base
-  WHERE lifecycle_state = 'active' AND "GM" = 0 AND fighter_job_lv >= 2;
+  WHERE lifecycle_state = 'active' AND "GM" = 0 AND fighter_job_lv >= 2
+    -- W4A: characters of an account deleted in the editor (status 2, kept 30 days for Restore) are hidden
+    AND NOT EXISTS (SELECT 1 FROM public.accounts a WHERE a.id = character_base.account_id AND a.status = 2);
 SELECT format('GRANT SELECT ON signup.public_rankings TO %I', :'role') \gexec
 
 -- Show the result.

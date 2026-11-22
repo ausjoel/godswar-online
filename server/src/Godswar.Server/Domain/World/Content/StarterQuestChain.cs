@@ -270,7 +270,7 @@ internal static class StarterQuestChain
         new(569, SpartaCamp, "Parnassus_002", "Parnassus_002", 40000, 0, 0, 0, 70, 89, false, 3, 0, string.Empty, false, 0, false, 68, 68, false, false),
         new(570, SpartaCamp, "Parnassus_002", "Parnassus_002", 50000, 0, 0, 0, 70, 89, false, 3, 0, string.Empty, false, 0, false, 68, 68, false, false),
         new(571, SpartaCamp, "Parnassus_002", "Parnassus_002", 60000, 0, 0, 0, 70, 89, false, 3, 0, string.Empty, false, 0, false, 68, 68, false, false),
-        new(1406, SpartaCamp, "QuestScroll", "Argolis_All_012", 0, 0, 0, 0, 70, 200, false, 1, 0, string.Empty, true, 0, false, -1, 16, false, false),
+        new(1406, AthensCamp, "QuestScroll", "Argolis_All_012", 0, 0, 0, 0, 70, 200, false, 1, 0, string.Empty, true, 0, false, -1, 16, false, false), // B21: camp from client Quest.xml Faction (spy quest into enemy land; was mis-camped by the NPC-region guess)
         new(253, SpartaCamp, "QuestScroll", "Argolis_All_001", 146050, 3, 0, 0, 71, 120, false, 1, 2, string.Empty, true, 0, false, -1, 16, false, false),
         new(461, SpartaCamp, "QuestScroll", "Argolis_All_001", 1320000, 27, 0, 0, 71, 120, false, 1, 0, string.Empty, true, 0, false, -1, 16, false, false),
         new(89, SpartaCamp, "Argolis_All_003", "Nemea_1_001", 15000, 3, 0, 0, 72, 120, false, 0, 2, string.Empty, false, 0, true, 16, 5, false, false),
@@ -614,7 +614,7 @@ internal static class StarterQuestChain
         new(1223, AthensCamp, "Athens_038", "Megara_All_005", 0, 0, 0, 0, 48, 62, false, 4, 2, string.Empty, false, 0, false, 1, 18, false, false),
         new(1072, AthensCamp, "Parnitha_1_003", "Parnitha_1_002", 4160, 3, 0, 0, 49, 120, false, 0, 2, string.Empty, false, 0, true, 3, 3, false, false),
         new(1146, AthensCamp, "Athens_098", "Athens_098", 0, 0, 4500, 0, 49, 66, false, 3, 2, string.Empty, false, 0, false, 1, 1, false, false),
-        new(171, AthensCamp, "Nemea_1_005", "Megara_All_012", 27500, 8, 0, 0, 50, 120, false, 2, 1, string.Empty, false, 0, false, 5, 18, false, false),
+        new(171, SpartaCamp, "Nemea_1_005", "Megara_All_012", 27500, 8, 0, 0, 50, 120, false, 2, 1, string.Empty, false, 0, false, 5, 18, false, false), // B21: camp from client Quest.xml Faction (spy quest into enemy land; was mis-camped by the NPC-region guess)
         new(1073, AthensCamp, "Parnitha_1_002", "Parnitha_1_004", 4160, 3, 0, 0, 50, 120, false, 0, 2, string.Empty, false, 0, true, 3, 3, false, false),
         new(1110, AthensCamp, "Parnitha_1_018", "Parnitha_1_018", 25200, 7, 0, 0, 50, 120, false, 0, 2, string.Empty, false, 0, false, 3, 3, false, false),
         new(1150, AthensCamp, "Athens_018", "Megara_All_005", 0, 0, 1000, 0, 50, 80, false, 3, 2, string.Empty, false, 0, false, 1, 18, false, false),
@@ -677,7 +677,7 @@ internal static class StarterQuestChain
         new(1214, AthensCamp, "Athens_101", "Athens_101", 10000, 4, 2000, 0, 66, 120, false, 2, 2, string.Empty, false, 0, false, 1, 1, true, false),
         new(1300, AthensCamp, "Athens_098", "Athens_098", 0, 0, 5800, 0, 67, 80, false, 3, 0, string.Empty, false, 0, false, 1, 1, false, false),
         new(1087, AthensCamp, "Megara_All_004", "Megara_All_004", 45000, 8, 0, 0, 68, 120, false, 0, 2, string.Empty, false, 0, true, 18, 18, false, false),
-        new(406, AthensCamp, "QuestScroll", "Megara_All_012", 0, 0, 0, 0, 70, 200, false, 1, 0, string.Empty, true, 0, false, -1, 18, false, false),
+        new(406, SpartaCamp, "QuestScroll", "Megara_All_012", 0, 0, 0, 0, 70, 200, false, 1, 0, string.Empty, true, 0, false, -1, 18, false, false), // B21: camp from client Quest.xml Faction (spy quest into enemy land; was mis-camped by the NPC-region guess)
         new(1088, AthensCamp, "Megara_All_004", "Megara_All_003", 12000, 4, 0, 0, 70, 120, false, 0, 2, string.Empty, false, 0, true, 18, 18, false, false),
         new(1119, AthensCamp, "Athens_015", "Athens_015", 65000, 12, 5000, 0, 70, 120, false, 0, 1, string.Empty, false, 0, false, 1, 1, true, false),
         new(1162, AthensCamp, "Megara_All_003", "Megara_All_003", 24000, 5, 0, 0, 70, 86, false, 1, 2, string.Empty, false, 0, false, 18, 18, false, false),

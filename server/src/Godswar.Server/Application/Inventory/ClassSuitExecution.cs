@@ -115,6 +115,7 @@ internal static class ClassSuitNativeResults
                 ClassSuitCommandOperation.UpgradeTierII => 300,
                 ClassSuitCommandOperation.UpgradeTierIII => 157,
                 ClassSuitCommandOperation.UpgradeTierIV => 169,
+                ClassSuitCommandOperation.UpgradeTierBeyond => 177, // B22 G2
                 _ => GenericWrongSelection
             };
         }
@@ -143,6 +144,8 @@ internal static class ClassSuitNativeResults
                 ResolveTierThreeFailure(status),
             ClassSuitCommandOperation.UpgradeTierIV =>
                 ResolveTierFourFailure(status),
+            ClassSuitCommandOperation.UpgradeTierBeyond =>
+                ResolveTierBeyondFailure(status), // B22 G2
             _ => GenericWrongSelection
         };
     }
@@ -199,6 +202,7 @@ internal static class ClassSuitNativeResults
                 ClassSuitCommandOperation.UpgradeTierII => 300,
                 ClassSuitCommandOperation.UpgradeTierIII => 157,
                 ClassSuitCommandOperation.UpgradeTierIV => 169,
+                ClassSuitCommandOperation.UpgradeTierBeyond => 177, // B22 G2
                 _ => GenericWrongSelection
             };
         }
@@ -240,6 +244,19 @@ internal static class ClassSuitNativeResults
             ClassSuitCommandResultStatus.InvalidMaterial => 154,
             ClassSuitCommandResultStatus.InsufficientMaterial => 155,
             ClassSuitCommandResultStatus.PlayerLevelTooLow => 156,
+            _ => GenericWrongSelection
+        };
+
+    // B22 G2: NpcFunVocation.lua Index 3 lines 173-176 (tools/b22-g2/gen_g2_client.py).
+    private static int ResolveTierBeyondFailure(
+        ClassSuitCommandResultStatus status) =>
+        status switch
+        {
+            ClassSuitCommandResultStatus.SelectionMissing or
+                ClassSuitCommandResultStatus.UnsupportedSource => 173,
+            ClassSuitCommandResultStatus.InvalidMaterial => 174,
+            ClassSuitCommandResultStatus.InsufficientMaterial => 175,
+            ClassSuitCommandResultStatus.PlayerLevelTooLow => 176,
             _ => GenericWrongSelection
         };
 

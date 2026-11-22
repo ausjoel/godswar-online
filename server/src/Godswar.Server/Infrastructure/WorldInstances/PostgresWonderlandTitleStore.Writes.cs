@@ -22,10 +22,12 @@ internal sealed partial class PostgresWonderlandTitleStore
             command.Parameters.AddWithValue("hash", request.RunHash);
             command.Parameters.AddWithValue("policy", WonderlandTitlePolicy.Revision);
             command.Parameters.AddWithValue("started", request.StartedAtUtc.UtcTicks);
-            command.Parameters.AddWithValue("characters", request.AdmittedCharacterIds.ToArray());
-            command.Parameters.AddWithValue("accounts", request.AdmittedMembers.Select(member => member.AccountId).ToArray());
-            command.Parameters.AddWithValue("owners", request.AdmittedMembers.Select(member => member.Ownership.OwnerId).ToArray());
-            command.Parameters.AddWithValue("generations", request.AdmittedMembers.Select(member => member.Ownership.Generation).ToArray());
+            // The run row records the registered party (the roster run_hash covers); late joiners are
+            // fenced per island through their own admission reservation instead.
+            command.Parameters.AddWithValue("characters", request.PartyCharacterIds.ToArray());
+            command.Parameters.AddWithValue("accounts", request.PartyMembers.Select(member => member.AccountId).ToArray());
+            command.Parameters.AddWithValue("owners", request.PartyMembers.Select(member => member.Ownership.OwnerId).ToArray());
+            command.Parameters.AddWithValue("generations", request.PartyMembers.Select(member => member.Ownership.Generation).ToArray());
             await command.ExecuteNonQueryAsync(token);
         }
         await using var read = new NpgsqlCommand("""

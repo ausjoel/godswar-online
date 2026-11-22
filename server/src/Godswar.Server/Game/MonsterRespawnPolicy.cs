@@ -67,6 +67,13 @@ internal static class MonsterRespawnPolicyRules
         // the kill path draws a fresh 30-60 minute delay (MycenaeBossPolicy), this value is only the hydration default.
         foreach (var boss in Godswar.Server.Application.North.MycenaeBossPolicy.TemplateKeys) // FINALISE2
             intervals[(Godswar.Server.Application.North.MycenaeBossPolicy.MapId, boss)] = TimeSpan.FromMinutes(45); // FINALISE2
+        // B22 G2 (d36): Aether Sanctum bosses come back after an hour, elites after 15 minutes (GENERATED), so Crests
+        // and Primal gems cannot be farmed at normal-monster speed. B23-S: keys = the Sanctum's own Bay Under Attack
+        // copies (AetherSanctumPolicy.BossKeys / EliteKeys, tools/b22-g2/gen_sanctum_sql.py).
+        foreach (var key in Godswar.Server.Application.WorldInstances.AetherSanctumPolicy.BossKeys)
+            intervals[(Godswar.Server.Application.WorldInstances.AetherSanctumPolicy.MapId, key)] = TimeSpan.FromHours(1);
+        foreach (var key in Godswar.Server.Application.WorldInstances.AetherSanctumPolicy.EliteKeys)
+            intervals[(Godswar.Server.Application.WorldInstances.AetherSanctumPolicy.MapId, key)] = TimeSpan.FromMinutes(15);
         return intervals;
     }
 

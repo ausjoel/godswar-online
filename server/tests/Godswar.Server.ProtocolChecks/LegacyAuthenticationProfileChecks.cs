@@ -56,6 +56,61 @@ internal static class LegacyAuthenticationProfileChecks
         }
     }
 
+    // ROUND-CLIENTBUILD: the stamped build is read, kept on the journey (-> session_health.client_build) and logged,
+    // with the gate off (the default) and on; plus the patch.vn label the log and the editor show.
+    public static async Task RunClientBuildRecordingAsync()
+    {
+        Check.Equal("4108034 (2.54.017, release 17)", ClientBuildPolicy.Describe(4108034u), "stamped release label");
+        Check.Equal("4108000 (2.54.000, unstamped)", ClientBuildPolicy.Describe(4108000u), "unstamped 1.5.6 label");
+        Check.Equal("4102004 (2.51.002, stock 2.51.002)", ClientBuildPolicy.Describe(4102004u), "stock label");
+        Check.Equal("7", ClientBuildPolicy.Describe(7u), "odd value is raw");
+        Check.Equal("none", ClientBuildPolicy.Describe(null), "missing build");
+        Check.True(ClientBuildPolicy.TryRead(new byte[136], out _), "136-byte payload carries a build");
+        Check.True(!ClientBuildPolicy.TryRead(new byte[135], out var none) && none == 0, "135-byte payload has none");
+
+        foreach (var (length, build, minimum, accepted) in new[]
+        {
+            (140, 4108034u, 0u, true),       // stamped release 17, gate off
+            (140, 4108000u, 0u, true),       // every release up to 1.5.6, gate off: nothing changes for players
+            (68, 0u, 0u, true),              // 2008-shaped login, gate off
+            (140, 4108034u, 4108034u, true), // gate on at release 17
+            (140, 4108000u, 4108034u, false) // gate on refuses an unstamped client, build still recorded
+        })
+        {
+            var bytes = LoginPacket(Opcodes.Login, "test2", "password", length);
+            if (length >= 140)
+            {
+                BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(136, 4), build);
+            }
+            var authentication = new FixedPasswordAccountAuthenticator();
+            var transport = new ScriptedLegacyByteTransport();
+            await using var session = new ClientSession(transport, endpointRole: NetworkEndpointRole.Login);
+            var options = LocalOptions();
+            options.MinimumClientBuild = minimum;
+            var handler = new LoginClientHandler(session, options, authentication,
+                legacyAuthenticationAccess: LocalAccess(options));
+            var log = new StringWriter();
+            var previous = Console.Out;
+            Console.SetOut(log);
+            try
+            {
+                await InvokeAsync(handler, "HandleLoginAsync", new GamePacket(bytes));
+            }
+            finally
+            {
+                Console.SetOut(previous);
+            }
+            var journey = (Godswar.Server.Operations.Health.SessionJourney)typeof(LoginClientHandler)
+                .GetField("_journey", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(handler)!;
+            long? expected = length >= 140 ? build : null;
+            Check.True(journey.ClientBuild == expected, $"journey records build {build} (len {length}, min {minimum})");
+            Check.Equal(accepted ? "accepted" : "refused", journey.Outcome, "login outcome");
+            Check.True(log.ToString().Contains("[login] client build=" + ClientBuildPolicy.Describe((uint?)expected)),
+                "login logs the client build");
+            Check.Equal(accepted ? 1 : 0, authentication.Calls, "gate decides before authentication");
+        }
+    }
+
     private static async Task CheckRawLoginCapabilityAsync()
     {
         var packet = LoginPacket(

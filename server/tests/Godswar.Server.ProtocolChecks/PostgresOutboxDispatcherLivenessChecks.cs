@@ -17,6 +17,8 @@ internal static class PostgresOutboxDispatcherLivenessChecks
         await using var dataSource = NpgsqlDataSource.Create(
             "Host=127.0.0.1;Port=1;Database=unused;" +
             "Username=unused;Password=unused;Timeout=1");
+        CheckIdlePollOptions();
+        await CheckIdleBackoffAsync(dataSource);
         await CheckFailedPassDoesNotHeartbeatAsync(dataSource);
         await CheckDeterministicErrorFaultsAsync(dataSource);
         CheckTerminalStatesRejectHeartbeat();
@@ -87,6 +89,106 @@ internal static class PostgresOutboxDispatcherLivenessChecks
         Check.True(
             !denied.IsTransient,
             "outbox permission denial is deterministic");
+    }
+
+    // W5A: the idle back-off only ever lengthens an empty pass's delay.
+    private static void CheckIdlePollOptions()
+    {
+        var defaults = new PostgresOutboxDispatcherOptions();
+        defaults.Validate();
+        Check.Equal(
+            1_000,
+            defaults.IdlePollIntervalMilliseconds,
+            "idle outbox poll defaults to one second");
+        Check.True(
+            defaults.IdlePollInterval < TimeSpan.FromSeconds(15),
+            "idle outbox poll stays under the readiness heartbeat age");
+        var slowPoll = new PostgresOutboxDispatcherOptions
+        {
+            PollIntervalMilliseconds = 2_000
+        };
+        Check.True(
+            slowPoll.IdlePollInterval == slowPoll.PollInterval,
+            "idle outbox poll is never shorter than the normal poll");
+        try
+        {
+            new PostgresOutboxDispatcherOptions
+            {
+                IdlePollIntervalMilliseconds = 10_001
+            }.Validate();
+            throw new InvalidOperationException(
+                "Expected an over-long idle outbox poll to be rejected.");
+        }
+        catch (InvalidDataException)
+        {
+        }
+
+        Check.True(
+            !ServerIdleSignal.NoClientsConnected,
+            "an unbound idle signal reports not idle");
+    }
+
+    private static async Task CheckIdleBackoffAsync(
+        NpgsqlDataSource dataSource)
+    {
+        // Poll 50 ms, idle poll 2 s, observed for 600 ms.
+        var idleEmpty = await CountPassesAsync(
+            dataSource, noClients: true, processedPerPass: 0);
+        var busyEmpty = await CountPassesAsync(
+            dataSource, noClients: false, processedPerPass: 0);
+        var idleWorking = await CountPassesAsync(
+            dataSource, noClients: true, processedPerPass: 1);
+        Check.Equal(
+            1,
+            idleEmpty,
+            "an empty pass with no client connected waits the idle interval");
+        Check.True(
+            busyEmpty >= 3,
+            "an empty pass with a client connected keeps the normal interval");
+        Check.True(
+            idleWorking >= 3,
+            "a pass that did work keeps the normal interval with no client");
+        Check.True(
+            PostgresCommandMetrics.GetSnapshot().State ==
+                OutboxDispatcherState.Stopped,
+            "cancelling an idle outbox worker stops cleanly");
+    }
+
+    private static async Task<int> CountPassesAsync(
+        NpgsqlDataSource dataSource,
+        bool noClients,
+        int processedPerPass)
+    {
+        var dispatcher = new PostgresOutboxDispatcher(
+            dataSource,
+            [new NoopConsumer()],
+            new PostgresOutboxDispatcherOptions
+            {
+                BatchSize = 1,
+                PollIntervalMilliseconds = 50,
+                IdlePollIntervalMilliseconds = 2_000,
+                LeaseMilliseconds = 1_000,
+                MaximumDeliveryAttempts = 1,
+                BaseRetryDelayMilliseconds = 50,
+                MaximumRetryDelayMilliseconds = 50,
+                GapRetryDelayMilliseconds = 50,
+                CommandTimeoutMilliseconds = 100
+            },
+            noClientsConnected: () => noClients);
+        var passes = 0;
+        using var shutdown = new CancellationTokenSource();
+        var run = dispatcher.RunAsync(
+            _ =>
+            {
+                Interlocked.Increment(ref passes);
+                return Task.FromResult(processedPerPass);
+            },
+            shutdown.Token);
+        await Task.Delay(600);
+        var observed = Volatile.Read(ref passes);
+        shutdown.Cancel();
+        await run.WaitAsync(TimeSpan.FromSeconds(2));
+        return observed;
     }
 
     private static async Task CheckFailedPassDoesNotHeartbeatAsync(

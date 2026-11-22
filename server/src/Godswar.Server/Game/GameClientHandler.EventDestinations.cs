@@ -108,7 +108,7 @@ internal sealed partial class GameClientHandler
             return;
         }
 
-        var gmSkips = GateRules.GmMaySkip(GateKeys.TreasureLand) && await HasOperatorAuthorityAsync(cancellationToken);
+        var gmSkips = GateRules.GmMaySkip(GateKeys.TreasureLand) && await HasOperatorPowerAsync(Godswar.Server.Application.Operators.GmPowerPolicy.GateBypass, cancellationToken);
         if (!gmSkips && !GateSchedules.IsOpen(GateKeys.TreasureLand, _realmCalendar, DateTimeOffset.UtcNow))
         {
             await SendEventDestinationReplyAsync(npc, E.TreasureLandClosedResult, "treasure-land", "closed", cancellationToken);
@@ -168,7 +168,7 @@ internal sealed partial class GameClientHandler
         }
 
         var realm = _realmCalendar.ToRealmTime(DateTimeOffset.UtcNow).DateTime;
-        var gmSkips = GateRules.GmMaySkip(GateKeys.Sicily) && await HasOperatorAuthorityAsync(cancellationToken);
+        var gmSkips = GateRules.GmMaySkip(GateKeys.Sicily) && await HasOperatorPowerAsync(Godswar.Server.Application.Operators.GmPowerPolicy.GateBypass, cancellationToken);
         var band = GateRules.Band(GateKeys.Sicily, E.SicilyMinimumLevel, E.SicilyMaximumLevel);
         if (!gmSkips && (_character.Level < band.Minimum || _character.Level > band.Maximum))
         {

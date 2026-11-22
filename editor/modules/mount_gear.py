@@ -45,7 +45,8 @@ def gear(ctx,cid):
         meta=rb.item_meta(row['prop_id'])
         if meta.get('kind') in KINDS and row['item_location'] in (0,1,3):
             rows.append({'location':row['item_location'],'slot':row['slot_index'],'name':meta['name'],
-                         'kind':meta['kind'],'row':{k:row.get(k) for k in I.CMP_FIELDS}})
+                         'kind':meta['kind'],'row':{k:row.get(k) for k in I.CMP_FIELDS},
+                         'sprite':(ctx.catalog.file('items').get(str(row['prop_id'])) or {}).get('sprite')})
     targets=[{'id':int(k),'name':v.get('name'),'kind':v.get('kind'),'min_level':v.get('minlv')}
              for k,v in rb.cat()['items'].items() if v.get('kind') in KINDS and str(k) in ctx.catalog.file('items')]
     return {'items':rows,'targets':sorted(targets,key=lambda t:(t['kind'],t['min_level'] or 0,t['id'])),

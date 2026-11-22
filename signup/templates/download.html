@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% import "_downloads.html" as dl %}
+{% block title %}Download{% endblock %}
+{% block main %}
+<div class="pagehead">
+  <div class="container">
+    <p class="crumbs"><a href="/">Home</a> › Download</p>
+    <h1>Download GodsWar</h1>
+    <p>Get the launcher for your computer. It downloads the game, keeps it up to date and starts it. You need a <a href="/register">free account</a> to log in.</p>
+  </div>
+</div>
+<section class="band">
+  <div class="container">
+    {{ dl.cards() }}
+  </div>
+</section>
+<section class="band alt">
+  <div class="container grid2">
+    <div class="panel">
+      <h2>First time on a Mac</h2>
+      <ol>
+        <li>Unzip <b>GodsWar-Launcher-mac.zip</b> and double-click <b>GodsWar Launcher</b>.</li>
+        <li>macOS refuses the first time. Open <b>System Settings → Privacy &amp; Security</b>, scroll down and click <b>Open Anyway</b>.</li>
+        <li>On an Apple Silicon Mac, install Rosetta once if macOS asks.</li>
+        <li>Wait for the first download. The game opens when it is ready.</li>
+      </ol>
+      <p class="small">Hold <kbd>Option</kbd> while the game opens to change the window size or save your account. Full steps: <a href="/static/player-guide.html">install help</a>.</p>
+    </div>
+    <div class="panel">
+      <h2>First time on Windows</h2>
+      <ol>
+        <li>Run <b>GodsWar-Launcher-windows.exe</b> from anywhere.</li>
+        <li>If Windows says it protected your PC, click <b>More info</b>, then <b>Run anyway</b>. Allow it through the firewall if asked.</li>
+        <li>Wait for the first download. The game opens when it is ready.</li>
+      </ol>
+      <p class="small">Game closes straight away or mentions MSVCR80 or d3dx9? Install Microsoft's Visual C++ 2005 Redistributable (x86) and the DirectX End-User Runtime. Full steps: <a href="/static/player-guide.html">install help</a>.</p>
+    </div>
+  </div>
+</section>
+{% endblock %}

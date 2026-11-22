@@ -71,6 +71,8 @@ internal static partial class Program
             (GmMallChecks.CheckName, GmMallChecks.RunAsync),
             (MallOverrideChecks.CheckName, MallOverrideChecks.RunAsync),
             (NpcBattlefieldTeleportChecks.CheckName, NpcBattlefieldTeleportChecks.RunAsync),
+            (TransporterMenuPolicyChecks.CheckName, TransporterMenuPolicyChecks.RunAsync), // B22
+            (TransporterHandlerChecks.MenuEditorCheckName, TransporterHandlerChecks.RunMenuEditorAsync), // B22
             (PotionUsePolicyChecks.CheckName, PotionUsePolicyChecks.RunAsync),
             (PotionReceiptChecks.CheckName, PotionReceiptChecks.RunAsync),
             (PotionHandlerChecks.CheckName, PotionHandlerChecks.RunAsync),
@@ -105,6 +107,7 @@ internal static partial class Program
             (ChatChannelChecks.CheckName, ChatChannelChecks.RunAsync),
             ("Native local-player scene-change packet", MapSceneChangePacketChecks.RunAsync),
             ("Quest chain completion and history reset planner", QuestChainPlannerChecks.RunAsync), // ROUND-QUESTRESET
+            (PostgresLegacyGameLoginHandoffStoreChecks.CheckName, PostgresLegacyGameLoginHandoffStoreChecks.RunAsync), // ROUND-SHAREDHANDOFF
             (PostgresNpcDialogueSuccessorIntegrationChecks.CheckName, PostgresNpcDialogueSuccessorIntegrationChecks.RunAsync), // ROUND-NPCSUCCESSOR
             ("Player combat and committed-progression ECS parity", PlayerCombatEcsParityChecks.RunAsync),
             ("Live reversible player-combat ECS adapter", PlayerCombatEcsLiveAdapterChecks.RunAsync),
@@ -141,15 +144,31 @@ internal static partial class Program
             (KelsisContestChecks.WiringCheckName, KelsisContestChecks.RunWiringAsync), // KELSIS F-15
             (GuildStoneChanceChecks.CheckName, GuildStoneChanceChecks.RunAsync), // GUILDSTONE
             (MagicBellSourceChecks.CheckName, MagicBellSourceChecks.RunAsync), // F-143 Magic Bell sources
+            (SkillLevelExtensionChecks.CheckName, SkillLevelExtensionChecks.RunAsync), // B22 K1 skill levels 6-10
+            (ClassFieldSkillChecks.CheckName, ClassFieldSkillChecks.RunAsync), // B22 B23-F class field skills
             (CorpseLootLimitChecks.CheckName, CorpseLootLimitChecks.RunAsync), // F-166 corpse loot cap
             (CorpseLootPagingChecks.CheckName, CorpseLootPagingChecks.RunAsync), // LOOT PAGING drop.corpse_pages
             (ServerNextChecks.PotionCheckName, ServerNextChecks.RunPotionsAsync), // NEXT potions
             (ServerNextChecks.ExpiryCheckName, ServerNextChecks.RunExpiryAsync), // NEXT expiry
             (ServerNextChecks.MedalCheckName, ServerNextChecks.RunMedalAsync), // NEXT b06
             (EconomyMedalChecks.CheckName, EconomyMedalChecks.RunAsync), // ECONOMY r10
+            (WonderlandIslandScaleChecks.CheckName, WonderlandIslandScaleChecks.RunAsync), // WL-SLIDERS
+            (PostgresWonderlandTitleChecks.CheckName, PostgresWonderlandTitleChecks.RunAsync), // S5: was never registered
+            (PostgresWonderlandTitleChecks.LateJoinerCheckName, PostgresWonderlandTitleChecks.RunLateJoinerAsync), // S5 late joiner
+            (InstanceCallerHandlerChecks.WonderlandLateJoinerCheckName, InstanceCallerHandlerChecks.RunWonderlandLateJoinerAsync), // S5 registry side
             (OperatorAuthorityChecks.CheckName, OperatorAuthorityChecks.RunAsync),
+            (GmPowerPolicyChecks.CheckName, GmPowerPolicyChecks.RunAsync), // W5B
+            (W6BWellAndStatusChecks.CheckName, W6BWellAndStatusChecks.RunAsync), // W6B
+            (B21ServerSettingsChecks.CheckName, B21ServerSettingsChecks.RunAsync), // B21 S2
+            (B22W11ShopChecks.CheckName, B22W11ShopChecks.RunAsync), // B22 W11
+            (B22G2Checks.GemCheckName, B22G2Checks.RunGemsAsync), // B22 G2 rare gems
+            (B22G2Checks.ClassSuitCheckName, B22G2Checks.RunClassSuitAsync), // B22 G2 Class Suit V-VII
+            (B22G2Checks.MedalCheckName, B22G2Checks.RunMedalsAsync), // B22 G2 medal drops
+            (B22G2Checks.SanctumCheckName, B22G2Checks.RunSanctumAsync), // B22 G2 Aether Sanctum
+            (B23SanctumChecks.CheckName, B23SanctumChecks.RunAsync), // B23-S Sanctum bosses
             (Round2Checks.CheckName, Round2Checks.RunAsync), // ROUND2
             ("Minimum client build login gate", LegacyAuthenticationProfileChecks.RunClientBuildAsync), // ROUND3
+            ("Client build number recorded and logged", LegacyAuthenticationProfileChecks.RunClientBuildRecordingAsync), // ROUND-CLIENTBUILD
             (SpyInvasionChecks.CheckName, SpyInvasionChecks.RunAsync), // SPIES
             (PartyKillShareChecks.CheckName, PartyKillShareChecks.RunAsync), // PARTY (r02)
             (EconomyMentorChecks.CheckName, EconomyMentorChecks.RunAsync), // ECONOMY mentor
@@ -159,6 +178,8 @@ internal static partial class Program
             (PanChainChecks.CheckName, PanChainChecks.RunAsync), // PAN CHAIN
             (PanChainSpawnChecks.CheckName, PanChainSpawnChecks.RunAsync), // PAN CHAIN slice 2
             (HeraLabyrinthChecks.CheckName, HeraLabyrinthChecks.RunAsync), // HERA'S LABYRINTH (F-161)
+            (EventOpeningNoticeChecks.CheckName, EventOpeningNoticeChecks.RunAsync), // W4F
+            (GameLimitProfileChecks.CheckName, GameLimitProfileChecks.RunAsync), // W4F
             (LelantineFarmRoundChecks.CheckName, LelantineFarmRoundChecks.RunAsync),
             (PlayerTradeChecks.CheckName, PlayerTradeChecks.RunAsync), // TRADE
             (BattlefieldRewardChecks.CheckName, BattlefieldRewardChecks.RunAsync), // BATTLEFIELD

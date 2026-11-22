@@ -78,6 +78,8 @@ def overview(ctx):
     ready = _columns_ready(ctx)
     notes = W._q(ctx, "(SELECT coalesce(json_object_agg(gate, note), '{}') FROM %s)" % TABLE) if ready else {}
     for g in doc["gates"]:
+        if isinstance(g.get("evidence"), str):       # the server's own note on the default: shown without owner notes / ids
+            g["evidence_stored"], g["evidence"] = g["evidence"], common.plain_note(g["evidence"])
         g["note"] = (notes or {}).get(g["key"], "")
         g["version"] = W._version(ctx, _parts(g["key"], g["window_activity"])) if ready else None
     doc.update(ready=ready, applies="hot_reload",

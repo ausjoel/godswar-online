@@ -165,11 +165,27 @@ internal static class ForgeCompoundChecks
         Check.Equal(0, BinaryPrimitives.ReadInt32LittleEndian(refusal.AsSpan(8)), "refusals use kind 0 (no local apply)");
         Check.Equal((byte)0, refusal[4], "refusal success byte");
 
-        // Trans tab pick hook: stock clients send 0 -> random index kept.
+        // Trans tab pick (W6-D): the stock client sends the clicked preview
+        // button index; the server resolves it against the unfiltered preview
+        // list (client button order) and makes exactly that item.
         uint[] targets = [2801, 2802, 3500];
-        Check.Equal(1, EquipmentTransformPick.ChooseIndex(targets, 0, 1), "no candidate keeps the random pick");
-        Check.Equal(2, EquipmentTransformPick.ChooseIndex(targets, 3500, 0), "a valid candidate is honoured");
-        Check.Equal(0, EquipmentTransformPick.ChooseIndex(targets, 9999, 0), "an unknown candidate falls back to random");
+        Check.Equal(1, EquipmentTransformPick.ChooseIndex(targets, 0, 1), "no pick (switch off) keeps the random pick");
+        Check.Equal(2, EquipmentTransformPick.ChooseIndex(targets, 3500, 0), "a picked target is honoured");
+        Check.Equal(-1, EquipmentTransformPick.ChooseIndex(targets, 9999, 0), "an unpublished pick is refused, not re-rolled");
+        // 2800 Gloves: RltID 2800,2801,...,2809,2812,2810,2811,2813,3500 -> buttons 0..13.
+        Check.Equal(2801u, EquipmentTransformPick.ResolvePick(2800, 0), "button 0 = first entry (2801)");
+        Check.Equal(2812u, EquipmentTransformPick.ResolvePick(2800, 9), "button 9 = 2812 (client order, not sorted)");
+        Check.Equal(3500u, EquipmentTransformPick.ResolvePick(2800, 13), "button 13 = 3500, the same-level magical gloves");
+        Check.Equal(0u, EquipmentTransformPick.ResolvePick(2800, 14), "an empty button picks nothing");
+        Check.Equal(0u, EquipmentTransformPick.ResolvePick(2800, 23), "last button, empty");
+        Check.Equal(3500u, EquipmentTransformPick.ResolvePick(2800, 3500), "an item id from a patched client");
+        Check.Equal(0u, EquipmentTransformPick.ResolvePick(2800, 1013), "an id outside the list picks nothing");
+        Check.Equal(0u, EquipmentTransformPick.ResolvePick(4252, 0), "a non-transformable source picks nothing");
+        // 3003 Crocodile Girdle: the source sits in the middle of its RltID; it is skipped.
+        Check.Equal(3011u, EquipmentTransformPick.ResolvePick(3003, 7), "button 7 skips the source (3003)");
+        Check.Equal(3013u, EquipmentTransformPick.ResolvePick(3003, 12), "button 12 = 3013, the last entry");
+        // 2130 elite breastplate: physical -> magical at the same level.
+        Check.Equal(2230u, EquipmentTransformPick.ResolvePick(2130, 0), "2130 button 0 = 2230 (magical)");
         Check.True(EquipmentTransformPick.Enabled, "pick hook on with GODSWAR_AMETHYST_PICK=1 (RELEASE: opt-in; set by Program.Main)");
 
         return Task.CompletedTask;

@@ -3,27 +3,76 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="dark">
+<meta name="color-scheme" content="light dark">
 <meta name="robots" content="noindex">
 {% if no_referrer %}<meta name="referrer" content="same-origin">
 {% endif %}
-<title>{% block title %}Create your account{% endblock %} · {{ server_name }}</title>
+<title>{% block title %}Free revival server{% endblock %} · {{ server_name }}</title>
+<meta name="description" content="{% block description %}A fan-run revival of GodsWar Online. Free account, Mac and Windows launcher, guides and instances.{% endblock %}">
 <link rel="icon" type="image/png" href="/static/favicon.png">
-<link rel="stylesheet" href="/static/style.css?v=3">
+<link rel="stylesheet" href="/static/style.css?v=5">
 </head>
 <body>
-<div class="sky" aria-hidden="true"></div>
-<main class="wrap">
-  <header class="brand">
-    <img class="logo" src="/static/logo.png" width="512" height="268" alt="GodsWar">
-    <p class="tagline">{{ server_name }} · free account</p>
-  </header>
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <div class="container">
+    <a class="wordmark" href="/" aria-label="{{ server_name }} home">
+      <img src="/static/emblem.svg" width="40" height="40" alt="">
+      <span><b>GodsWar</b><small>Revival server</small></span>
+    </a>
+    <nav class="mainnav" aria-label="Main">
+      <a href="/"{% if nav == 'home' %} class="on" aria-current="page"{% endif %}>Home</a>
+      <a href="/news"{% if nav == 'news' %} class="on" aria-current="page"{% endif %}>News</a>
+      <a href="/guides"{% if nav == 'guides' %} class="on" aria-current="page"{% endif %}>Guides</a>
+      <a href="/instances"{% if nav == 'instances' %} class="on" aria-current="page"{% endif %}>Instances</a>
+      <a href="/guides/events"{% if nav == 'events' %} class="on" aria-current="page"{% endif %}>Events</a>
+      <a href="/rankings"{% if nav == 'rankings' %} class="on" aria-current="page"{% endif %}>Rankings</a>
+      <a href="/download" class="cta{% if nav == 'download' %} on{% endif %}"{% if nav == 'download' %} aria-current="page"{% endif %}>Download</a>
+    </nav>
+  </div>
+</header>
+<main id="main">
+{% block main %}
+<div class="narrow">
   {% block content %}{% endblock %}
-  <footer class="foot">
-    <p><a href="/">Sign up</a> · <a href="/static/player-guide.html">How to play</a> · <a href="/rankings">Rankings</a>{% if mail_enabled %} · <a href="/forgot">Forgot password</a> · <a href="/forgot-username">Forgot username</a>{% endif %}</p>
-    <p>A fan-run revival server. Not connected with IGG.</p>
-  </footer>
+</div>
+{% endblock %}
 </main>
+<footer class="foot">
+  <div class="container">
+    <div class="about">
+      <h4>{{ server_name }} revival</h4>
+      <p>A fan-run revival server for GodsWar Online, kept alive for friends, family and old players. Not connected with IGG.</p>
+      <p>Questions about the game: <a href="mailto:admin@YOUR-DOMAIN.example">admin@YOUR-DOMAIN.example</a></p>
+    </div>
+    <div>
+      <h4>Play</h4>
+      <ul>
+        <li><a href="/register">Create account</a></li>
+        <li><a href="/download">Download</a></li>
+        <li><a href="/static/player-guide.html">Install help</a></li>
+        <li><a href="/rankings">Rankings</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>Learn</h4>
+      <ul>
+        <li><a href="/guides/getting-started">Getting started</a></li>
+        <li><a href="/guides/classes">Classes</a></li>
+        <li><a href="/instances">Instances</a></li>
+        <li><a href="/guides/events">Event calendar</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>Account</h4>
+      <ul>
+        <li><a href="/register">Sign up</a></li>
+        {% if mail_enabled %}<li><a href="/forgot">Forgot password</a></li>
+        <li><a href="/forgot-username">Forgot username</a></li>{% endif %}
+      </ul>
+    </div>
+  </div>
+</footer>
 {% block scripts %}{% endblock %}
 </body>
 </html>

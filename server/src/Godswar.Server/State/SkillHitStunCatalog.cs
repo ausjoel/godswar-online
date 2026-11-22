@@ -26,7 +26,9 @@ internal static class SkillHitStunCatalog
 
     public static bool TryGet(int skillId, out uint statusId, out int durationMilliseconds)
     {
-        if (Definitions.TryGetValue(skillId, out var value))
+        if (Definitions.TryGetValue(skillId, out var value) ||
+            // B22: levels 6-10 stun like the family's level 5 (same status and duration)
+            SkillLevelExtension.TryGetLevelFive(skillId, out var five, out _) && Definitions.TryGetValue(five, out value))
         {
             (statusId, durationMilliseconds) = value;
             return true;

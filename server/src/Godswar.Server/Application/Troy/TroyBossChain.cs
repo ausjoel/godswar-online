@@ -73,22 +73,26 @@ internal sealed class TroyBossChain
     [
         new(BossesSwitch, TroyEvent.Category, "Troy heroes and chests (five-boss sequence)", "0/1",
             ServerRateKind.Absolute, 1m, 0m, 1m, 1m, 8, "Game/GameClientHandler.TroyBosses.cs",
-            "1 = while the event is open, the five Trojan heroes appear on map 44 one at a time (Pandarus, Sarpedon, " +
-            "Lycaon on the beach, then Paris and Hector inside Troy), each a short delay after the previous falls; their " +
-            "chests pay Exp Pills, Achilles' Rage and a chance of a recipe to those who fought them; the Troy " +
-            "Transporter opens after the three beach heroes. Needs troy-spawns.sql for the NPCs. 0 = no heroes, chests silent."),
+            "Runs the five Trojan heroes. On: during the event they appear one after another " +
+            "(Pandarus, Sarpedon and Lycaon on the beach, then Paris and Hector inside Troy); " +
+            "their chests pay Exp Pills, Achilles' Rage and sometimes a recipe to those who " +
+            "fought, and the way into Troy opens after the three beach heroes. Off: no heroes, " +
+            "and the chests give nothing. The Troy NPCs must be loaded on the server first."),
         new(BossHpPercent, TroyEvent.Category, "Hero HP", "%", ServerRateKind.Absolute, 100m, 10m, 1000m, 10m, 9,
             "Application/Troy/TroyLayout.Generated.cs",
-            "100 = the generated hero HP (2008 base HP curve x 40: Pandarus about 148,000 ... Hector about 384,000)."),
+            "Health of the Trojan heroes, as a percent of our own base values (about 148,000 for " +
+            "Pandarus up to 384,000 for Hector at 100)."),
         new(BossDelaySeconds, TroyEvent.Category, "Next hero after", "s", ServerRateKind.Absolute, 30m, 0m, 600m, 5m, 10,
             "Application/Troy/TroyBossChain.cs",
-            "Seconds between a hero's death and the next hero (checked on the 20 s player tick)."),
+            "Seconds between one hero's death and the next hero appearing. The server checks " +
+            "every 20 seconds, so the real wait can be a little longer."),
         new(ChestPills, TroyEvent.Category, "Chest Exp Pills (first hero)", "pills", ServerRateKind.Absolute, 10m, 0m,
             99m, 1m, 11, "Application/Troy/TroyBossChain.cs",
-            "Exp Pills from Pandarus' chest; each later chest gives 5 more (10/15/20/25/30). Scaled by Reward size."),
+            "Exp Pills in the first hero's chest. Each later chest holds 5 more. Multiplied by " +
+            "the Troy 'Reward size' setting."),
         new(ChestRecipePercent, TroyEvent.Category, "Chest recipe chance", "%", ServerRateKind.Absolute, 10m, 0m,
             100m, 1m, 12, "Application/Troy/TroyBossChain.cs",
-            "Chance that a chest also holds one random profession recipe (NF_L0_TR208 'rare Profession recipe').")
+            "Chance that a hero's chest also holds one random profession recipe.")
     ];
 
     public static int PillsFor(int stage) =>

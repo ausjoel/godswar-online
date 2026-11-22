@@ -84,10 +84,25 @@ internal static partial class PostgresGameplayContentPublisher
                     cancellationToken);
             }
 
-            return await EnsureChampionTalentAuthorityAsync(
+            // B22: skill levels 6-10 publish on top of the Champion-corrected revision.
+            // B22 G2: then the Aether Sanctum map (map 70) on top of that.
+            // B22 B23-F: then the class field skills and their books.
+            return await EnsureClassFieldExtensionAsync(
                 connection,
                 transaction,
-                current,
+                await EnsureAetherSanctumExtensionAsync(
+                connection,
+                transaction,
+                await EnsureSkillLevelExtensionAsync(
+                    connection,
+                    transaction,
+                    await EnsureChampionTalentAuthorityAsync(
+                        connection,
+                        transaction,
+                        current,
+                        cancellationToken),
+                    cancellationToken),
+                cancellationToken),
                 cancellationToken);
         }
 

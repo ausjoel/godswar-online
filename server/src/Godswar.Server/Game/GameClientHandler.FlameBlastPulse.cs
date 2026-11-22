@@ -22,6 +22,12 @@ internal sealed partial class GameClientHandler
             !ReferenceEquals(character, source.Context.Character) ||
             !RevalidateCurrentWorldEffectOwnership("flame_blast_pulse") ||
             !_registry.IsCurrentFlameBlastSource(source)) return false;
+        // B22 B23-F: a class field also burns enemy players in it (combat.field_pvp_percent), monsters or not.
+        if (Godswar.Server.Application.Combat.ClassFieldSkills.IsField(combat.SkillId))
+        {
+            await HitPvpPlayersInClassFieldAsync(combat, centerX, centerZ, "pulse=" + pulseOrdinal, cancellationToken);
+            if (!_registry.IsCurrentFlameBlastSource(source)) return false;
+        }
         if (!_registry.TryCaptureFlameBlastTargets(source, out var captured, out var authority))
             return _registry.IsCurrentFlameBlastSource(source);
 
@@ -46,6 +52,8 @@ internal sealed partial class GameClientHandler
             targetStats = _registry.AdjustPveMonsterTargetStats(_session, target, observedAt, targetStats);
             var resolution = SkillCombatResolver.ResolveDamage(
                 character, combat, targetStats, eventId, index, modifiers);
+            // B21 item 18: per-class area skill damage (combat.aoe_*, default x1 = unchanged).
+            resolution = Godswar.Server.Application.Combat.AreaSkillBalance.Apply(character.Profession, resolution);
             resolution = _registry.AdjustPveOutgoingResolution(_session, character, target,
                 CombatEventProvenance.DirectSkill, observedAt, resolution, pulseScope);
             if (!resolution.Hit || resolution.Damage == 0) continue;

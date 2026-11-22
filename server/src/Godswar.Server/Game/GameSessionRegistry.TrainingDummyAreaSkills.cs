@@ -24,7 +24,9 @@ internal sealed partial class GameSessionRegistry
             Func<long> nextAdmittedCombatRevision,
             DateTimeOffset now,
             CancellationToken cancellationToken,
-            bool pvpSecondaryPass = false)
+            bool pvpSecondaryPass = false,
+            (float X, float Z)? groundFieldCenter = null, // B22 B23-F: class field pass, centred on the field
+            decimal playerDamagePercent = 100m) // B22 B23-F: combat.field_pvp_percent
     {
         ArgumentNullException.ThrowIfNull(attackingSession);
         ArgumentNullException.ThrowIfNull(nextAdmittedCombatRevision);
@@ -35,7 +37,15 @@ internal sealed partial class GameSessionRegistry
         {
             return TrainingDummyAreaSkillDecision.NotApplicable();
         }
-        if (!TrainingDummyDamageSkillPolicy.IsAuthoritativeArea(
+        // B22 B23-F: a class field (ground target) is admitted only on the PvP pass, never for dummies.
+        var groundField = groundFieldCenter is not null;
+        if (groundField && (!pvpPlayers || playerDamagePercent <= 0m))
+        {
+            return TrainingDummyAreaSkillDecision.NotApplicable();
+        }
+        if (groundField
+                ? !TrainingDummyDamageSkillPolicy.IsAuthoritativeGroundField(_gameplayCatalogs, authoredSkill)
+                : !TrainingDummyDamageSkillPolicy.IsAuthoritativeArea(
                 _gameplayCatalogs,
                 authoredSkill,
                 allowCastTime: pvpSecondaryPass))
@@ -48,7 +58,10 @@ internal sealed partial class GameSessionRegistry
             return TrainingDummyAreaSkillDecision.Reject(
                 TrainingDummySkillRejectionReason.InvalidCasterObject);
         }
-        var animation = TrainingDummySkillAnimationProjection.Create(
+        // B22 B23-F: a ground field's cast packet names no self target and the PvP pass never draws it.
+        TrainingDummySkillAnimationProjection? animation = groundField
+            ? null
+            : TrainingDummySkillAnimationProjection.Create(
             clientSkillCastPacket,
             casterObjectId,
             casterObjectId,
@@ -121,7 +134,10 @@ internal sealed partial class GameSessionRegistry
                     TrainingDummySkillRejectionReason.AttackerIsTrainingDummy,
                     currentMana);
             }
-            var skillRejection = TrainingDummyDamageSkillPolicy.ValidateArea(
+            var skillRejection = groundField // B22 B23-F
+                ? TrainingDummyDamageSkillPolicy.ValidateGroundField(
+                    _gameplayCatalogs, authoredSkill, attacker.Character.Profession)
+                : TrainingDummyDamageSkillPolicy.ValidateArea(
                 _gameplayCatalogs,
                 authoredSkill,
                 attacker.Character.Profession,
@@ -153,8 +169,8 @@ internal sealed partial class GameSessionRegistry
                 }
                 if (current.Character.CurrentHp > 0 &&
                     SkillCombatResolver.IsWithinArea(
-                        attacker.Character.PositionX,
-                        attacker.Character.PositionZ,
+                        groundFieldCenter?.X ?? attacker.Character.PositionX, // B22 B23-F
+                        groundFieldCenter?.Z ?? attacker.Character.PositionZ,
                         current.Character.PositionX,
                         current.Character.PositionZ,
                         skill))
@@ -212,8 +228,8 @@ internal sealed partial class GameSessionRegistry
                     if (_trainingDummies.Contains(target.Character) == pvpPlayers ||
                         target.Character.CurrentHp <= 0 ||
                         !SkillCombatResolver.IsWithinArea(
-                            attacker.Character.PositionX,
-                            attacker.Character.PositionZ,
+                            groundFieldCenter?.X ?? attacker.Character.PositionX, // B22 B23-F
+                            groundFieldCenter?.Z ?? attacker.Character.PositionZ,
                             target.Character.PositionX,
                             target.Character.PositionZ,
                             skill))
@@ -327,6 +343,20 @@ internal sealed partial class GameSessionRegistry
                             skill,
                             actionRevision,
                             now)).ToArray();
+                    // B22 B23-F: a class field deals combat.field_pvp_percent of its damage to players.
+                    if (groundField && playerDamagePercent < 100m)
+                    {
+                        for (var index = 0; index < resolved.Length; index++)
+                        {
+                            var raw = resolved[index].Resolution;
+                            var scaled = Godswar.Server.Application.Combat.ClassFieldSkills.ScaleForPlayers(
+                                playerDamagePercent, raw);
+                            resolved[index] = resolved[index] with { Resolution = scaled };
+                            Console.WriteLine(
+                                $"[pvp-field] skill={skill.SkillId} target={plans[index].Target.Character.Name} " +
+                                $"hit={raw.Hit} raw={raw.Damage} percent={playerDamagePercent:0.##} applied={scaled.Damage}");
+                        }
+                    }
                 }
                 catch
                 {

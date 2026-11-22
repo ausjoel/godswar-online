@@ -18,7 +18,7 @@ internal sealed partial class GameClientHandler
         {
             return;
         }
-        if (!WarehouseWireProtocol.TryReadTransfer(packet, out var intent))
+        if (!WarehouseWireProtocol.TryReadTransfer(packet, out var physicalIntent))
         {
             await SendWarehouseTransferSecureResultAsync(
                 packet.ClientOperationId,
@@ -28,6 +28,8 @@ internal sealed partial class GameClientHandler
                 cancellationToken);
             return;
         }
+        // B21: the client's 40 physical cells show the selected logical box (client 1.5.4 box buttons).
+        var intent = WarehousePageCommand.ToLogical(physicalIntent, _warehouseSelectedPage); // B21
         if (!TryAuthorizeWarehouseTransfer(out var warehouseNpc))
         {
             await SendWarehouseTransferSecureResultAsync(

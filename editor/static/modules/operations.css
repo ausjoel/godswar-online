@@ -1,0 +1,33 @@
+.gw-mod-operations .ops-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 14px}
+.gw-mod-operations .ops-tabs .gw-btnx.on{outline:2px solid #6bccfe}
+.gw-mod-operations .ops-panel{padding:14px 16px;margin:0 0 16px}
+.gw-mod-operations .ops-panel h2{margin:0 0 10px;font-size:17px}
+.gw-mod-operations .ops-panel h3{margin:14px 0 8px;font-size:15px}
+.gw-mod-operations .ops-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin:8px 0}
+.gw-mod-operations .ops-card{background:#0a2333;border:1px solid #315366;padding:8px 10px;min-width:0}
+.gw-mod-operations .ops-card-t{font-size:12px;color:#a9bbc5;text-transform:uppercase;letter-spacing:.04em}
+.gw-mod-operations .ops-card-v{font-size:20px;font-variant-numeric:tabular-nums;margin:2px 0}
+.gw-mod-operations .ops-card-s{font-size:12px;overflow-wrap:anywhere}
+.gw-mod-operations .ops-spark{display:block;width:100%;height:40px;margin-top:6px}
+.gw-mod-operations .ops-spark path{fill:none;stroke:#6bccfe;stroke-width:1.5;vector-effect:non-scaling-stroke}
+.gw-mod-operations .ops-spark.mem path{stroke:#d7dd80}
+.gw-mod-operations .ops-spark.players path{stroke:#39d8b8}
+.gw-mod-operations .ops-spark.net path{stroke:#faa955}
+.gw-mod-operations .ops-table td .ops-spark{width:160px;height:28px;margin:0}
+.gw-mod-operations .ops-line{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
+.gw-mod-operations .ops-out{white-space:pre-wrap;overflow:auto;max-height:420px;background:#05121b;border:1px solid #315366;padding:10px;font-size:12px}
+.gw-mod-operations .ops-table{border-collapse:collapse;width:100%;margin:6px 0}
+.gw-mod-operations .ops-table th,.gw-mod-operations .ops-table td{border-bottom:1px solid #315366;padding:4px 8px;text-align:left;vertical-align:middle}
+.gw-mod-operations .ops-table th{color:#a9bbc5;font-weight:normal;font-size:12px}
+.gw-mod-operations .ops-ok{color:#5fd068}
+.gw-mod-operations .ops-bad{color:#ff6b6b}
+.gw-mod-operations .ops-players{margin:6px 0}
+.gw-mod-operations .ops-auto{display:inline-flex;gap:6px;align-items:center;margin-bottom:6px}
+.gw-mod-operations .ops-realm-form{max-width:560px}
+.gw-mod-operations .ops-realm-form label{display:block;margin:8px 0}
+.gw-mod-operations .ops-realm-form input[type=text],.gw-mod-operations .ops-realm-form input[type=number]{display:block;width:100%;box-sizing:border-box;margin-top:4px}
+.gw-mod-operations .ops-realm-form .ops-chk{display:flex;gap:6px;align-items:center}
+@media(max-width:700px){.gw-mod-operations .ops-table{display:block;overflow-x:auto}}
+.gw-mod-operations .ops-realm-form select{display:block;width:100%;box-sizing:border-box;margin-top:4px}
+.gw-mod-operations .ops-steps{margin:8px 0;padding-left:22px}
+.gw-mod-operations .ops-steps li{margin:2px 0;overflow-wrap:anywhere}

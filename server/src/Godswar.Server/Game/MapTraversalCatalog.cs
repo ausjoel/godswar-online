@@ -365,7 +365,7 @@ internal sealed class MapTraversalCatalog
             }
         }
 
-        if (requireCompleteMapSet && !actual.SetEquals(expected))
+        if (requireCompleteMapSet && !Godswar.Server.Application.World.GameplayMapSet.IsValid(actual)) // B22 G2: + map 70
         {
             throw new InvalidDataException(
                 "Map traversal catalog must contain IDs 0-69 and 200-210 exactly.");

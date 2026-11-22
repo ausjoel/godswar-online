@@ -16,7 +16,8 @@ internal enum ClassSuitWireOperation
     UpgradeTierTwo = 105,
     UpgradeTierThree = 106,
     AddFifthAttribute = 107,
-    UpgradeTierFour = 108
+    UpgradeTierFour = 108,
+    UpgradeTierBeyond = 109 // B22 G2 (d36): Class Suit IV -> Titan -> Primordial -> Aether
 }
 
 internal readonly record struct ClassSuitWireIntent(
@@ -53,6 +54,14 @@ internal static class ClassSuitProtocol
     public static readonly int[] InitialMenuSubIds =
     [100, 101, 102, 103, 104, 105, 106, 107, 108];
 
+    /// <summary>B22 G2 (d36): the published menu (100-108) plus 109 "Upgrade to Class Suit V-VII", shown while
+    /// the Class Suit IV switch is on (limits.original_gw = 0), like the IV option's own rule.</summary>
+    public static int[] MenuWithTierBeyond(IReadOnlyList<int> published) =>
+        Godswar.Server.Application.Limits.GameLimitProfile.ClassSuitTierIVAllowed &&
+        !published.Contains((int)ClassSuitWireOperation.UpgradeTierBeyond)
+            ? [.. published, (int)ClassSuitWireOperation.UpgradeTierBeyond]
+            : [.. published];
+
     public static bool IsNpcKey(string npcKey) =>
         npcKey is "Sparta_070" or "Athens_070";
 
@@ -66,7 +75,8 @@ internal static class ClassSuitProtocol
             (int)ClassSuitWireOperation.ConvertToCommon or
             (int)ClassSuitWireOperation.UpgradeTierTwo or
             (int)ClassSuitWireOperation.UpgradeTierThree or
-            (int)ClassSuitWireOperation.UpgradeTierFour;
+            (int)ClassSuitWireOperation.UpgradeTierFour or
+            (int)ClassSuitWireOperation.UpgradeTierBeyond; // B22 G2
 
     public static bool TryResolveOperation(
         int subId,
@@ -265,6 +275,8 @@ internal static class ClassSuitProtocol
             ClassSuitWireOperation.AddFifthAttribute => new[] { 123 },
             ClassSuitWireOperation.UpgradeTierFour =>
                 new[] { 140, 141, 142 },
+            ClassSuitWireOperation.UpgradeTierBeyond => // B22 G2
+                new[] { 170, 171, 172 },
             _ => throw new ArgumentOutOfRangeException(nameof(operation))
         };
         return PacketBuilder.NpcFunctionActionResponse(

@@ -118,7 +118,7 @@ internal sealed partial class GameClientHandler
         }
 
         if (Godswar.Server.Application.Gates.GateRules.GmMaySkip(Godswar.Server.Application.Npc.LevelBandGates.LelantineFarm) &&
-            await HasOperatorAuthorityAsync(cancellationToken))
+            await HasOperatorPowerAsync(Godswar.Server.Application.Operators.GmPowerPolicy.GateBypass, cancellationToken))
         {
             return;
         }

@@ -1,0 +1,45 @@
+# Template for the game process of an ADDITIONAL realm (instance name = realm id, 2..255). Installed by the lead
+# (INSTALL.md, helper v3); started, enabled and removed only by /usr/local/sbin/godswar251-realm.
+# Same binary, appsettings.json and database as the main game (godswar251.service); only the numbers in the
+# settings file differ. The drop-in directory godswar251-realm@.service.d is a LINK to godswar251.service.d, so both
+# processes run with the same feature switches.
+[Unit]
+Description=GodsWar 2.51 extra realm %i (second game process)
+After=network-online.target postgresql.service godswar251.service
+Wants=network-online.target
+Requires=postgresql.service
+# a release stops/restarts godswar251.service: the extra realms stop and restart with it (never an old dll in memory)
+PartOf=godswar251.service
+ConditionPathExists=/etc/godswar251-realms/realm-%i.env
+
+[Service]
+Type=simple
+User=godswar251
+Group=godswar251
+WorkingDirectory=/opt/godswar251/server
+Environment=GODSWAR_RUNTIME_PROFILE=LocalDevelopment
+Environment=GODSWAR_LOCAL_GAMEPLAY_LOGS=true
+Environment=GODSWAR_AUTH_ALLOW_LEGACY_RAW_AUTHENTICATION=true
+Environment=DOTNET_CLI_TELEMETRY_OPTOUT=1
+Environment=DOTNET_NOLOGO=1
+# written by godswar251-realm; EnvironmentFile wins over Environment= and over the shared drop-ins
+EnvironmentFile=/etc/godswar251-realms/realm-%i.env
+# the main process applies schema migrations and owns the login port: wait until it is ready
+ExecStartPre=/usr/local/sbin/godswar251-realm wait-main
+ExecStart=/opt/godswar251/server/Godswar.Server /opt/godswar251/appsettings.json
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=240
+TimeoutStopSec=30
+StandardOutput=append:/opt/godswar251/logs/realm-%i.log
+StandardError=append:/opt/godswar251/logs/realm-%i.log
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/godswar251
+
+[Install]
+# enabled = wanted by the main game: whenever godswar251.service is started (boot, a release's stop + start, a
+# restore), this realm starts after it. PartOf above covers stop and restart.
+WantedBy=godswar251.service

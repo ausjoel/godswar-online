@@ -48,13 +48,13 @@ internal static class PriestHealingSkillCatalog
         int skillId,
         out PriestHealingSkillKind kind)
     {
-        if (skillId is >= 750 and <= 754)
+        if (skillId is >= 750 and <= 759) // B22: + Heal 6-10
         {
             kind = PriestHealingSkillKind.SingleTarget;
             return true;
         }
 
-        if (skillId is >= 760 and <= 764)
+        if (skillId is >= 760 and <= 769) // B22: + Area Heal 6-10
         {
             kind = PriestHealingSkillKind.Area;
             return true;

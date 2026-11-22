@@ -10,8 +10,26 @@
     async mount(el, ctx) {
       el.append(GW.onlineBanner(ctx.cid));
       const list = h("div", { class: "gw-gs-list" }), pane = h("div", { class: "gw-gs-pane" });
+      // B21 item 26: the worn gear, bag and warehouse as in-game slots (hover = the game tooltip, click = edit that piece)
+      const slots = h("div", { class: "gw-gs-slots" });
+      const loadGearUI = () => GW.gearUI ? Promise.resolve() : new Promise((res, rej) => { const s = document.createElement("script"); s.src = "/static/modules/_gear_ui.js"; s.onload = res; s.onerror = () => rej(new Error("cannot load the item slots")); document.body.append(s); });
+      let whPage = 0;
+      async function drawSlots() {
+        GW.clear(slots);
+        try { await loadGearUI(); await GW.catalog.load("item"); } catch (e) { slots.append(h("p", { class: "tt-bad" }, e.message)); return; }
+        const at = loc => D.items.filter(i => i.location === loc);
+        const byRow = it => Object.assign({ prop_id: it.item, sprite: it.sprite, name: it.name, slot_index: it.slot }, it.row);
+        const worn = {}; for (const it of at(0)) if (it.slot < 12) worn[it.slot] = byRow(it);
+        const pick = (loc, s) => { const it = D.items.find(x => x.location === loc && x.slot === s); if (it && it.guide_type) { current = it; load(); } else if (it) GW.status(it.why_not || "This item has no legal stats to choose.", "err"); };
+        const mark = (loc) => (s, row) => row && current && current.location === loc && current.slot === s ? "gw-gearui-on" : row && !(D.items.find(x => x.location === loc && x.slot === s) || {}).guide_type ? "gw-gearui-off" : "";
+        const UI = GW.gearUI;
+        slots.append(h("div", { class: "gw-gearui-row" },
+          UI.doll({ title: "Worn", rows: worn, mark: mark(0), onClick: s => pick(0, s) }),
+          h("div", null, h("div", { class: "gw-gearui-dolltitle" }, "Kit bag (gear only)"), UI.bag({ rows: at(1).map(byRow), mark: mark(1), onClick: s => pick(1, s) })),
+          at(3).length ? h("div", null, h("div", { class: "gw-gearui-dolltitle" }, "Warehouse (gear only)"), UI.bag({ rows: at(3).map(byRow), label: "Box", pages: 9, page: whPage, mark: mark(3), onClick: s => pick(3, s) })) : null));
+      }
       el.append(h("p", { class: "gw-dim" }, "Pick a piece of gear. The menu offers only the attributes IGG's Enhancement guide (2011, acid=229) lists for that slot. New choices use the maximum supported Quartz strength. Existing lower strength is retained until changed; unlevelled stats have no level control. Every amount uses the current gear grade. Writing replaces all of the item's green attributes (the 5th is cleared). The character must be logged out."),
-        h("div", { class: "gw-gs-body" }, list, pane));
+        slots, h("div", { class: "gw-gs-body" }, h("details", { class: "gw-gs-listbox" }, h("summary", null, "All gear as a list"), list), pane));
       let D = null, current = null;
       async function load() {
         D = await ctx.api("gear/" + ctx.cid);
@@ -25,6 +43,11 @@
             GW.cell({ sprite: it.sprite, name: it.name, tipType: "item", tipId: it.item }), h("span", null, it.name, h("span", { class: "gw-dim" }, " · " + (it.guide_type || "not enhanceable") + " · " + attrs + " attr"))));
         }
         if (!D.items.length) list.append(h("p", { class: "gw-dim" }, "This character has no gear."));
+        drawSlots();
+        if (!current && ctx.params && ctx.params.get && ctx.params.get("slot") !== null) {   // opened from Worn gear presets: that worn piece
+          const want = D.items.find(x => x.location === 0 && String(x.slot) === String(ctx.params.get("slot")) && x.guide_type);
+          if (want) current = want;
+        }
         if (current) { const again = D.items.find(x => x.location === current.location && x.slot === current.slot); if (again) { current = again; await open(again); } }
       }
       async function open(it) {
@@ -55,7 +78,13 @@
               opt ? h("span", { class: "gw-dim", "data-help": opt.note }, " G" + it.row.item_grade + " +" + fmtv((opt.levels.find(l => l.level === p.level) || {}).value, (opt.levels[0] || {}).percent) + (opt.in_client === false ? "  (this item's client list does not roll it)" : "")) : null));
             if (!p) break;            // fill in order
           }
-          GW.clear(preview).append(h("h4", null, "Legal on " + o.guide_type), h("ul", null, o.options.map(x => h("li", { "data-help": x.note }, h("b", null, x.name), " · " + x.label + " · " + (x.levels.length > 1 ? "max Lv5 at G" + it.row.item_grade + " +" + fmtv(x.levels[4].value, x.levels[4].percent) : "G" + it.row.item_grade + " +" + fmtv(x.levels[0].value, x.levels[0].percent))))));
+          const after = Object.assign({}, it.row);
+          for (let i = 1; i <= 5; i++) { after["attribute" + i] = null; after["attribute_level" + i] = null; }
+          picks.forEach((p, i) => { const x = o.options.find(y => y.key === p.key); const lv = x && (x.levels.find(l => l.level === p.level) || x.levels[x.levels.length - 1]); if (lv) { after["attribute" + (i + 1)] = lv.id; after["attribute_level" + (i + 1)] = x.levels.length > 1 ? lv.level : null; } });
+          const cells = GW.gearUI ? h("div", { class: "gw-gs-beforeafter" }, h("span", null, "Now "), GW.gearUI.cell(Object.assign({ sprite: it.sprite, name: it.name, prop_id: it.item }, it.row)),
+            h("span", null, " → after writing "), GW.gearUI.cell(Object.assign({ sprite: it.sprite, name: it.name, prop_id: it.item }, after), { mark: "gw-gearui-changed" }),
+            h("span", { class: "gw-dim" }, " (hover for the game tooltip)")) : null;
+          GW.clear(preview).append(...[cells].filter(Boolean), h("h4", null, "Legal on " + o.guide_type), h("ul", null, o.options.map(x => h("li", { "data-help": x.note }, h("b", null, x.name), " · " + x.label + " · " + (x.levels.length > 1 ? "max Lv5 at G" + it.row.item_grade + " +" + fmtv(x.levels[4].value, x.levels[4].percent) : "G" + it.row.item_grade + " +" + fmtv(x.levels[0].value, x.levels[0].percent))))));
         }
         const write = async () => {
           if (!picks.length) { await GW.alert("Choose at least one stat.", "Nothing chosen"); return; }

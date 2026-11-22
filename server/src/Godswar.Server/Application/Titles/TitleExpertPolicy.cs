@@ -14,8 +14,8 @@ namespace Godswar.Server.Application.Titles;
 /// Page one of function 12 is [1 = leveling title, 2 = attribute title]. Clicking 1 is answered on
 /// page two with the granted title ids (1000-1303, the script appends each one's name) or one
 /// requirement line (501-533) or 600 "all titles of this type". Clicking 2 opens page two's eight
-/// attribute buttons (1-8); a button is answered on page three with the granted ids (3000-3015) or
-/// its requirement line (501/502 HP ... 535/536 absorption) or 600.
+/// attribute buttons (1-8); a button is answered on page three with the granted ids (3000-3015, B22: 3016-3063) or
+/// its requirement line (501/502 HP ... 535/536 absorption; B22: 7000 + class*100 + button*10 + tier) or 600.
 ///
 /// Titles are claimed in order: the next unowned tier is checked, and every tier from it upward that
 /// is met is granted in one click (the script concatenates the names). The stats compared are the
@@ -25,7 +25,7 @@ namespace Godswar.Server.Application.Titles;
 /// characteristics" is GodsArena-only, so these titles are cosmetic. Only the Medusa titles keep their
 /// existing stat bonus (MedusaTitleAttributePolicy), unchanged.
 /// </remarks>
-internal static class TitleExpertPolicy
+internal static partial class TitleExpertPolicy // B22: partial (LadderNames.cs)
 {
     public const int IdentificationFunction = 12;
     public const int RewardFunction = 13;
@@ -122,6 +122,85 @@ internal static class TitleExpertPolicy
         new("Absorb", 900, 1300, 3014, 3015, 535, 536)
     ];
 
+    // B22 (item 12, the admin d39/d40/d41): six more tiers per attribute, per class, ids 3016-3063. Tier 8 is 90 % of
+    // the class's computed maximum (batch-2026-11-21/D1 item12-title-ladder.tsv: MaxSim Lv200 best legal gear);
+    // tiers 3-8 are 40/50/60/70/80/90 % (DEF Mage: geometric from tier 2, today's tiers are high for it).
+    // Cosmetic like tiers 1-2. Names/descriptions are generated (client DesigName/DesigInfo lines from the
+    // b22 title-ladder generator). A class with no row for a stat (ATK for Priest/Mage, MATK for
+    // Warrior/Champion) keeps tiers 1-2 only and gets the "not for your class" line after them.
+    public const uint LadderFirstTitle = 3016; // B22
+    public const uint LadderLastTitle = 3063; // B22
+    public const int LadderTiersPerAttribute = 6; // B22: tiers 3-8
+    public const int LadderLineBase = 7000; // B22: 7000 + profession*100 + button*10 + tier (0 = not for class)
+
+    /// <summary>B22: [button 1-8][profession 0-3] -> tier 3-8 thresholds, or null when the class has none.</summary>
+    private static readonly int[]?[][] LadderThresholds =
+    [
+        // HP: Warrior, Champion, Priest, Mage
+        [[86700, 108400, 130100, 151800, 173500, 195200], [87700, 109600, 131500, 153400, 175300, 197300],
+         [67300, 84200, 101000, 117800, 134600, 151500], [59800, 74800, 89700, 104700, 119600, 134600]],
+        // ATK: physical classes only
+        [[6960, 8700, 10440, 12180, 13920, 15660], [8000, 10000, 12000, 14000, 16000, 18000], null, null],
+        // MATK: magic classes only
+        [null, null, [5650, 7060, 8480, 9890, 11300, 12710], [6030, 7530, 9040, 10550, 12050, 13560]],
+        // DEF
+        [[4430, 5540, 6650, 7750, 8860, 9970], [2900, 3620, 4340, 5070, 5790, 6520],
+         [3200, 4010, 4810, 5610, 6410, 7210], [2940, 3320, 3750, 4240, 4790, 5420]],
+        // MDEF
+        [[3250, 4060, 4880, 5690, 6500, 7320], [2530, 3170, 3800, 4440, 5070, 5700],
+         [3960, 4950, 5940, 6930, 7920, 8910], [3340, 4170, 5010, 5840, 6680, 7510]],
+        // Hit
+        [[930, 1170, 1400, 1630, 1870, 2100], [1360, 1700, 2040, 2380, 2720, 3060],
+         [1040, 1300, 1560, 1820, 2080, 2340], [1250, 1570, 1880, 2190, 2510, 2820]],
+        // Dodge
+        [[920, 1150, 1380, 1610, 1840, 2060], [1130, 1420, 1700, 1990, 2270, 2550],
+         [1240, 1550, 1860, 2170, 2480, 2790], [920, 1150, 1380, 1610, 1840, 2070]],
+        // Absorb
+        [[17800, 22200, 26600, 31100, 35500, 39900], [15000, 18700, 22500, 26200, 29900, 33700],
+         [17500, 21800, 26200, 30500, 34900, 39300], [15300, 19100, 22900, 26700, 30600, 34400]]
+    ];
+
+    /// <summary>One step of an attribute ladder: threshold, title id and the line sent when it is not met.</summary>
+    public readonly record struct AttributeTier(int Tier, int Need, uint TitleId, int RequirementLine); // B22
+
+    /// <summary>B22: title id of tier 3-8 for a button (3016 + 6 per button).</summary>
+    public static uint LadderTitleId(int button, int tier) =>
+        (uint)(LadderFirstTitle + (button - 1) * LadderTiersPerAttribute + (tier - 3));
+
+    /// <summary>B22: the line for "tier N not reached" (tier 3-8), or "not for your class" (tier 0).</summary>
+    public static int LadderLine(byte profession, int button, int tier) =>
+        LadderLineBase + profession * 100 + button * 10 + tier;
+
+    /// <summary>B22: the full ladder (tiers 1-8, or 1-2 when the class has no row) for one button and class.</summary>
+    public static IReadOnlyList<AttributeTier>? AttributeTiersFor(byte profession, int button)
+    {
+        if (AttributeFor(button) is not { } attribute)
+        {
+            return null;
+        }
+
+        var tiers = new List<AttributeTier>(8)
+        {
+            new(1, attribute.First, attribute.FirstTitle, attribute.FirstLine),
+            new(2, attribute.Second, attribute.SecondTitle, attribute.SecondLine)
+        };
+        if (profession < 4 && LadderThresholds[button - 1][profession] is { } needs)
+        {
+            for (var index = 0; index < needs.Length; index++)
+            {
+                var tier = index + 3;
+                tiers.Add(new(tier, needs[index], LadderTitleId(button, tier), LadderLine(profession, button, tier)));
+            }
+        }
+
+        return tiers;
+    }
+
+    /// <summary>B22: true when the class has tiers 3-8 for this button.</summary>
+    public static bool HasLadder(byte profession, int button) =>
+        button >= 1 && button <= AttributeTitles.Length && profession < 4 &&
+        LadderThresholds[button - 1][profession] is not null;
+
     public static AttributeTitle? AttributeFor(int button) =>
         button >= 1 && button <= AttributeTitles.Length ? AttributeTitles[button - 1] : null;
 
@@ -138,40 +217,66 @@ internal static class TitleExpertPolicy
         _ => 0
     };
 
-    public static Claim ResolveAttributeClaim(int button, TitleStats stats, IReadOnlyCollection<uint> owned)
+    // B22: per-class 8-tier ladder. Same claim rule as before: the next unowned tier is checked and every tier
+    // from it upward that is met is granted in one click; the first unmet tier stops the claim.
+    public static Claim ResolveAttributeClaim(
+        byte profession, int button, TitleStats stats, IReadOnlyCollection<uint> owned)
     {
-        if (AttributeFor(button) is not { } attribute)
+        if (AttributeTiersFor(profession, button) is not { } tiers)
         {
             return new([], [ErrorLine]);
         }
 
         var value = AttributeValue(button, stats);
         var grant = new List<uint>();
-        if (!owned.Contains(attribute.FirstTitle))
+        foreach (var tier in tiers)
         {
-            if (value < attribute.First)
+            if (owned.Contains(tier.TitleId))
             {
-                return new([], [attribute.FirstLine]);
+                continue;
             }
 
-            grant.Add(attribute.FirstTitle);
+            if (value >= tier.Need)
+            {
+                grant.Add(tier.TitleId);
+                continue;
+            }
+
+            return grant.Count > 0
+                ? new(grant, [.. grant.Select(static id => (int)id)])
+                : new([], [tier.RequirementLine]);
         }
 
-        if (!owned.Contains(attribute.SecondTitle))
+        if (grant.Count > 0)
         {
-            if (value >= attribute.Second)
-            {
-                grant.Add(attribute.SecondTitle);
-            }
-            else if (grant.Count == 0)
-            {
-                return new([], [attribute.SecondLine]);
-            }
+            return new(grant, [.. grant.Select(static id => (int)id)]);
         }
 
-        return grant.Count > 0
-            ? new(grant, [.. grant.Select(static id => (int)id)])
-            : new([], [AllObtainedLine]);
+        // Every tier this class can earn is owned: the classes without a ladder for this stat hear why.
+        return HasLadder(profession, button) || profession >= 4
+            ? new([], [AllObtainedLine])
+            : new([], [LadderLine(profession, button, 0)]);
+    }
+
+    /// <summary>
+    /// B22: trims a claim so the character never owns more than <paramref name="limit"/> titles (the grants keep
+    /// their order, the reply lists what is granted). Nothing fits: "Operation error" (500), nothing granted.
+    /// </summary>
+    public static Claim FitToTitleLimit(Claim claim, int ownedCount, int limit)
+    {
+        var room = limit - ownedCount;
+        if (claim.Grant.Count <= room)
+        {
+            return claim;
+        }
+
+        if (room <= 0)
+        {
+            return new([], [ErrorLine]);
+        }
+
+        var grant = claim.Grant.Take(room).ToArray();
+        return new(grant, [.. grant.Select(static id => (int)id)]);
     }
 
     /// <summary>

@@ -129,3 +129,49 @@
 .gw-mod-pets .pt-quiet .gw-nf-chip, .gw-mod-pets .gw-nf.pt-quiet .gw-nf-chip { display: none; }
 .gw-mod-pets .pt-q.pt-over { border-style: dashed; opacity: .8; }
 .gw-mod-pets .pt-capwarn { margin: 4px 0; font-size: 11px; max-width: 420px; }
+
+/* skill picker by family (one row per skill, pips = the levels) */
+.gw-mod-pets .pt-famlist { display: flex; flex-direction: column; gap: 2px; max-height: calc(100vh - 300px); overflow-y: auto; min-width: 0; }
+.gw-mod-pets .pt-famrow { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; grid-template-areas: "ic nm ti" "ic on ti"; align-items: center;
+  gap: 0 8px; padding: 2px 6px; border: 1px solid #1d3a4a; border-radius: 3px; background: #0a1820cc; color: #e8f4fa; cursor: pointer;
+  font: 12px var(--gw-font); text-align: left; }
+.gw-mod-pets .pt-famrow > .gw-icon { grid-area: ic; transform: scale(.75); transform-origin: left center; }
+.gw-mod-pets .pt-famrow:hover, .gw-mod-pets .pt-famrow:focus-visible { border-color: #6bccfe; outline: none; }
+.gw-mod-pets .pt-famrow.on { border-color: #ffe066; background: #1b2f3a; }
+.gw-mod-pets .pt-famrow.pt-has .pt-famname { color: #8ff58f; }
+.gw-mod-pets .pt-famname { grid-area: nm; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gw-mod-pets .pt-famonly { grid-area: on; font-size: 10.5px; }
+.gw-mod-pets .pt-famtiers { grid-area: ti; display: inline-flex; gap: 2px; }
+.gw-mod-pets .pt-tierpip { min-width: 18px; padding: 0 3px; border: 1px solid #2e5468; border-radius: 8px; color: #9fc3d4; font: 10px/14px var(--gw-font); text-align: center; }
+.gw-mod-pets .pt-tierpip.cur { border-color: #8ff58f; color: #8ff58f; }
+.gw-mod-pets .pt-tierpip.nobook { text-decoration: line-through; opacity: .55; }
+.gw-mod-pets .pt-libtip .gw-tooltip { position: static; max-width: none; }
+
+/* legal pet mode */
+.gw-mod-pets .pt-legal { padding: 6px 8px; border: 1px solid #2e5468; border-radius: 3px; background: #0a1820; font-size: 11px; display: grid; gap: 3px; }
+.gw-mod-pets .pt-legalwarn { color: #ffc46b; }
+.gw-mod-pets .pt-legallim { margin-top: 3px; }
+
+/* simulator */
+.gw-mod-pets .pt-sim { font: 12px var(--gw-font); color: #fff; }
+.gw-mod-pets .pt-simcols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 14px; align-items: start; }
+@media (max-width: 1000px) { .gw-mod-pets .pt-simcols { grid-template-columns: 1fr; } }
+.gw-mod-pets .pt-simin { display: grid; gap: 10px; min-width: 0; }
+.gw-mod-pets .pt-simcard { padding: 8px 10px; min-width: 0; }
+.gw-mod-pets .pt-simcard .pt-num { width: 64px; }
+.gw-mod-pets .pt-simres { min-width: 0; overflow-x: auto; }
+.gw-mod-pets .pt-sliders { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 4px 12px; }
+.gw-mod-pets .pt-slrow { display: grid; grid-template-columns: 70px minmax(0, 1fr); align-items: center; gap: 6px; }
+.gw-mod-pets .pt-slwrap { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.gw-mod-pets .pt-slider { flex: 1; min-width: 60px; accent-color: #6bccfe; }
+.gw-mod-pets .pt-slval { width: 34px; text-align: right; color: var(--gw-value, #fff77c); }
+.gw-mod-pets .pt-simsteps { margin-top: 6px; }
+.gw-mod-pets .pt-simsteps summary { cursor: pointer; color: var(--gw-label, #6bccfe); }
+.gw-mod-pets .pt-simsteps table { margin-top: 4px; }
+/* B21 item 23: merge-count planner */
+.gw-mod-pets .pt-plan { margin-top: 10px; }
+.gw-mod-pets .pt-planchart { width: 100%; max-width: 560px; height: auto; display: block; margin: 6px 0; }
+.gw-mod-pets .pt-planchart .pt-band { fill: rgba(120, 170, 255, .25); stroke: none; }
+.gw-mod-pets .pt-planchart .pt-line { fill: none; stroke: #e8c46a; stroke-width: 2; }
+.gw-mod-pets .pt-planchart .pt-axis { fill: currentColor; font-size: 11px; opacity: .75; }
+.gw-mod-pets .pt-plantab td, .gw-mod-pets .pt-plantab th { white-space: nowrap; }

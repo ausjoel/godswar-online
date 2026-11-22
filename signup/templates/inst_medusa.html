@@ -1,0 +1,53 @@
+{% extends "_article.html" %}
+{% block title %}Medusa's Island{% endblock %}
+{% block crumb %}<a href="/instances">Instances</a>{% endblock %}
+{% block heading %}Medusa's Island{% endblock %}
+{% block intro %}The Gorgon's island fortress. Fight through her followers, then face the sisters themselves before the 40 minutes run out.{% endblock %}
+{% block slug %}medusa{% endblock %}
+{% block article %}
+<div class="figure"><img src="/static/art-medusa.png" width="238" height="273" alt="Medusa, a woman with snake hair and a serpent's tail"><span>Game model render</span></div>
+<div class="facts-box">
+  <div><b>Level</b><span>90+</span></div>
+  <div><b>Party</b><span>1-5 players</span></div>
+  <div><b>Time</b><span>40 minutes</span></div>
+  <div><b>Entries</b><span>3 a day</span></div>
+  <div><b>Win</b><span>3,000 points</span></div>
+</div>
+<h2>The story</h2>
+<p>Medusa was once famous for her beauty, and vain enough to set herself against Athena. The goddess's curse turned her into a Gorgon whose gaze turns people to stone. Now she rules a jungle island with her sisters Stheno and Euryale and an army of Gorgon warriors, shamans and astrologers. Athena has sent Perseus to end her, but he needs heroes at his side.</p>
+
+<h2>Normal or Advanced</h2>
+<p>The Instance Caller offers two versions. Both use the same daily entries (3 a day in total, not 3 each).</p>
+<ul>
+  <li><b>Normal</b>: the standard island.</li>
+  <li><b>Advanced</b>: the same fight with monsters that have twice the HP and hit harder. It pays more Honour and is the only way to earn the speed titles.</li>
+</ul>
+<p>Monster strength does not change with party size, so a full party of five clears much faster than a small one.</p>
+
+<h2>Scoring</h2>
+<div class="tablewrap"><table>
+  <thead><tr><th>Kill</th><th class="num">Team points</th></tr></thead>
+  <tbody>
+    <tr><td>Normal monster</td><td class="num">1</td></tr>
+    <tr><td>Elite</td><td class="num">50</td></tr>
+    <tr><td>Lesser bosses</td><td class="num">50</td></tr>
+    <tr><td>The two great bosses</td><td class="num">1,000+</td></tr>
+  </tbody>
+</table></div>
+<p>Reach <b>3,000 points</b> to complete the island. Your score shows in the party panel. If you die you come back at the start point; if you leave early you get nothing.</p>
+
+<h2>Rewards</h2>
+<ul>
+  <li><b>Honour</b> for every run, rising with your score. A completed run pays more the faster it was, and Advanced pays more than Normal. Spend Honour at the <b>Point Exchanger</b> in the capitals.</li>
+  <li><b>Titles</b> for completing <b>Advanced</b> quickly. Each title also adds to physical and magic attack and defence while you own it (the best one you own counts):</li>
+</ul>
+<div class="tablewrap"><table>
+  <thead><tr><th>Advanced cleared in</th><th>Title</th><th class="num">Bonus</th></tr></thead>
+  <tbody>
+    <tr><td>under 10 minutes</td><td>Medusa Executioners</td><td class="num">+3%</td></tr>
+    <tr><td>under 15 minutes</td><td>Medusa Slayers</td><td class="num">+2%</td></tr>
+    <tr><td>under 20 minutes</td><td>Medusa Challengers</td><td class="num">+1%</td></tr>
+  </tbody>
+</table></div>
+<p class="generated">On this server Medusa allows 3 entries a day instead of 1.</p>
+{% endblock %}

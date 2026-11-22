@@ -36,7 +36,7 @@ internal static class TreasureLandCaptureChecks
     private static void CheckSwitch()
     {
         ServerRates.ResetToDefaults();
-        Check.True(!TreasureLandCapturePolicy.Enabled, "Treasure Land capture is off by default");
+        Check.True(TreasureLandCapturePolicy.Enabled, "B21: Treasure Land capture is on by default (live is on)");
         Install(1);
         Check.True(TreasureLandCapturePolicy.Enabled, "pet.treasure_land_capture = 1 turns it on");
         Install(0);

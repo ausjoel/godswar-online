@@ -54,8 +54,16 @@ internal sealed class NpcContentSnapshot
         EventContent? events = null,
         IReadOnlyDictionary<string, LevelBandOverride>? levelBands = null,
         IReadOnlyDictionary<(short MapId, string Tier), DropTierOverride>? dropTiers = null,
-        IReadOnlyDictionary<(short MapId, string Tier), RespawnTierOverride>? respawnTiers = null)
+        IReadOnlyDictionary<(short MapId, string Tier), RespawnTierOverride>? respawnTiers = null,
+        IEnumerable<NpcTeleportMenuRow>? teleportMenus = null) // B22
     {
+        // B22 (d32): editor teleporter menus by npc key, in button order. No rows for an NPC = its compiled menu.
+        TeleportMenus = (teleportMenus ?? [])
+            .GroupBy(static row => row.NpcKey, StringComparer.Ordinal)
+            .ToFrozenDictionary(
+                static group => group.Key,
+                static group => (IReadOnlyList<NpcTeleportMenuRow>)group.OrderBy(static r => r.Position).ThenBy(static r => r.SubId).ToArray(),
+                StringComparer.Ordinal);
         DropTiers = (dropTiers ?? new Dictionary<(short, string), DropTierOverride>()).ToFrozenDictionary();
         RespawnTiers = (respawnTiers ?? new Dictionary<(short, string), RespawnTierOverride>()).ToFrozenDictionary();
         LevelBands = (levelBands ?? new Dictionary<string, LevelBandOverride>())
@@ -86,6 +94,9 @@ internal sealed class NpcContentSnapshot
     public FrozenDictionary<(short MapId, string Tier), DropTierOverride> DropTiers { get; }
 
     public FrozenDictionary<(short MapId, string Tier), RespawnTierOverride> RespawnTiers { get; }
+
+    /// <summary>B22 (d32): public.npc_teleport_menu rows by npc key (see <see cref="TransporterMenuPolicy"/>).</summary>
+    public FrozenDictionary<string, IReadOnlyList<NpcTeleportMenuRow>> TeleportMenus { get; }
 }
 
 /// <summary>

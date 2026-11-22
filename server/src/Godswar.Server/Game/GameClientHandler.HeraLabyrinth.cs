@@ -141,7 +141,7 @@ internal sealed partial class GameClientHandler
             return;
         }
 
-        var gmSkips = GateRules.GmMaySkip(GateKeys.HeraLabyrinth) && await HasOperatorAuthorityAsync(cancellationToken);
+        var gmSkips = GateRules.GmMaySkip(GateKeys.HeraLabyrinth) && await HasOperatorPowerAsync(Godswar.Server.Application.Operators.GmPowerPolicy.GateBypass, cancellationToken);
         if (!gmSkips && !GateSchedules.IsOpen(GateKeys.HeraLabyrinth, _realmCalendar, DateTimeOffset.UtcNow))
         {
             await SendEventDestinationReplyAsync(npc, H.ClosedResult, "hera", $"closed window={H.WindowMode}", cancellationToken);

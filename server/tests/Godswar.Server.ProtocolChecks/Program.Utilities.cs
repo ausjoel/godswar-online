@@ -232,6 +232,8 @@ internal static partial class Program
         }
     }
 
+    internal static GameCharacter CreateCharacterForW6B() => CreateCharacter();
+
     private static GameCharacter CreateCharacter()
     {
         return new GameCharacter

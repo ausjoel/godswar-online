@@ -104,7 +104,9 @@ internal static class WildPetCaptureChecks
     private static void CheckSwitch()
     {
         ServerRates.ResetToDefaults();
-        Check.True(!WildPetCapturePolicy.Enabled, "wild capture is off by default");
+        Check.True(WildPetCapturePolicy.Enabled, "B21: wild capture is on by default (live is on)");
+        ServerRates.Install(ServerRatesSnapshot.Create([KeyValuePair.Create(ServerRateKeys.WildPetCapture, 0m)], 1, DateTimeOffset.UtcNow, "check", "test")); // B21: switch now defaults on; this part tests it off
+        Check.True(!WildPetCapturePolicy.Enabled, "pet.wild_capture = 0 turns it off");
         Check.True(!WildPetCapturePolicy.AdmitsAuthoredSpawn(11, "A_normal_male_001"), "switch off: generated pet rows are not admitted");
         Check.True(!WildPetCapturePolicy.TryGetRespawnInterval(2, "A_normal_male_001", out _), "switch off: respawn unchanged");
         var catalog = WorldBossCatalog.Empty;

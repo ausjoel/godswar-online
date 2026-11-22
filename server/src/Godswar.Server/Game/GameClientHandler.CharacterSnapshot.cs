@@ -89,6 +89,7 @@ internal sealed partial class GameClientHandler
         }
         catch (CharacterSnapshotUnavailableException ex)
         {
+            Journey.SetError(ex); // W6A: keep the reason for the health record
             RejectCharacterSnapshot(
                 phase,
                 CharacterSnapshotMetrics.ReasonCode(ex.Reason));
@@ -96,6 +97,7 @@ internal sealed partial class GameClientHandler
         }
         catch (Exception ex)
         {
+            Journey.SetError(ex); // W6A
             RejectCharacterSnapshot(
                 phase,
                 $"unexpected_{ex.GetType().Name}");
@@ -111,6 +113,7 @@ internal sealed partial class GameClientHandler
         _character = null;
         _characterSnapshotLoaded = false;
         _characterSnapshotBootstrapPending = false;
+        Journey.Refuse("character_load:" + phase + ":" + reason); // W6A
         Console.Error.WriteLine(
             $"[character-snapshot] rejected phase={phase} reason={reason}");
         _session.Disconnect();

@@ -24,7 +24,12 @@ internal static class FactionCrierRewardPolicyChecks
         CheckDailyCalendar(balance);
         CheckPhilippineDayBoundary(balance);
         CheckClaimsAndRenewal(balance);
-        CheckTurnIns(balance);
+        // B21 item 15: these turn-ins check the balance table's fixed Gold prices (crier.silver_per_gold = 0);
+        // the per-level pricing at the default 1,500 is checked in B21ServerSettingsChecks.
+        Godswar.Server.Application.Rates.ServerRates.Install(Godswar.Server.Application.Rates.ServerRatesSnapshot.Create(
+            [KeyValuePair.Create(FactionCrierRewardPolicy.SilverPerGoldKey, 0m)], 1, DateTimeOffset.UtcNow, "check", "test"));
+        try { CheckTurnIns(balance); }
+        finally { Godswar.Server.Application.Rates.ServerRates.ResetToDefaults(); }
         CheckBalancePublicationGuards(balance);
         CheckMaximumProgressionReceipt();
         CheckReplayIntent();

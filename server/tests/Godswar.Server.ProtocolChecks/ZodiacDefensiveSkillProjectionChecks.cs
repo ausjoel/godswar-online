@@ -156,7 +156,7 @@ internal static class ZodiacDefensiveSkillProjectionChecks
             grid: ZodiacDefensiveSkillProjection.FlatTrainingFirstGrid,
             level: 50,
             selectedKind: 10_030);
-        var nonmatching = Skill(skillId: 309, flatPower: 1_000m);
+        var nonmatching = Skill(skillId: 310, flatPower: 1_000m); // B22: 305-309 are now family 10030 levels 6-10
         var eventId = FindHittingEvent(nonmatching, defender);
         var baselineSkill = PlayerCombatRules.ResolvePvpSkillDamage(
             Attacker(),

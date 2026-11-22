@@ -57,7 +57,7 @@ internal static class HolyStoneDrillEligibilityPolicy
         CompactItemEntry socketSpell)
     {
         ArgumentNullException.ThrowIfNull(template);
-        if (equipment.SocketCount >= MaximumSockets)
+        if (equipment.SocketCount >= Godswar.Server.Application.Limits.GameLimitProfile.MaximumSockets(MaximumSockets)) // W4F
         {
             return HolyStoneDrillEligibilityFailure.MaximumSockets;
         }

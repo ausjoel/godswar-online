@@ -127,7 +127,6 @@
     for (const [name, err] of Object.entries(r.load_errors || {})) side.append(navLink("#/" + name, GW.icon(null, { name }), name, "failed to load: " + err, "error", name));
     side.append(h("div", { class: "gw-side-h" }, "Library"));
     side.append(navLink("#/library", GW.icon(604), "All items, skills ...", "every entry from your client", "", "library"));
-    side.append(h("a", { class: "gw-nav gw-nav-small", href: "#/kit", "data-key": "kit", "data-help": "The shared editor parts every page uses, on one page (nothing here saves)." }, "Editor parts (demo)"));
     side.append(h("a", { class: "gw-nav gw-nav-small", href: "/api/reborn/selftest?format=text", target: "_blank", rel: "noopener", "data-help": "Reads every character and lists what the database does not enforce. Writes nothing." }, "Self-test (text)"));
   }
   function markNav(page) { for (const a of GW.$$(".gw-nav")) a.classList.toggle("on", a.dataset.key === page); }
@@ -172,7 +171,6 @@
     page.scrollTop = 0;
     if (r.page === "home") return home(page);
     if (r.page === "library") return library(page, r.rest[0] || "item");
-    if (r.page === "kit") return kit(page);
     const info = modsInfo[r.page];
     if (!info) { page.append(h("div", { class: "gw-dim" }, "There is no page '" + r.page + "'. ", h("a", { href: "#/home" }, "Home"))); return; }
     // character pages: the character comes from the route, else the one chosen last
@@ -260,6 +258,7 @@
     const grid = GW.grid({ type, height: "100%", onSelect: async r => {
       GW.clear(detail).append(h("div", { class: "gw-wtitle" }, r.name || "Details"));
       try { detail.append(await GW.render.tooltip(cur, r.id)); } catch (e) { detail.append(GW.render.generic(cur, r)); }
+      if (window.GWArt && ["monster","npc"].includes(cur)) detail.append(window.GWArt.portrait(cur, String(r.id)));
       detail.append(h("div", { class: "gw-dim", style: "margin-top:8px" }, "id " + r.id + (r.key && r.key !== String(r.id) ? " · " + r.key : "")));
     } });
     let cur = type;
@@ -269,36 +268,6 @@
       types.append(b);
     }
     page.append(h("div", { class: "gw-lib" }, h("div", { class: "gw-lib-main" }, types, grid.el), detail));
-  }
-
-  // ------------------------------------------------------------ Editor parts (the shared components, for module authors; saves nothing)
-  function kit(page) {
-    page.append(h("div", { class: "gw-pagehead" }, h("h1", null, "Editor parts"), h("span", { class: "gw-dim" }, "the shared components of static/shared/ (MODULES.md); nothing on this page saves")));
-    const win = (title, ...kids) => h("section", { class: "gw-frame-normalwindow gw-win" }, h("div", { class: "gw-wtitle" }, title), ...kids);
-    const bar = GW.saveBar({ title: "Demo: save these?", onSave: async items => ({ change: { action: "demo (nothing saved): " + items.map(i => i.label).join(", ") }, applies_text: "nothing was written" }) });
-    const money = GW.numberField({ field: "character_base.Money", value: 10000, onChange: (v, ok) => ok ? bar.set("Money", { label: "Silver", from: 10000, to: v, field: "character_base.Money", applies: "next_login" }) : bar.unset("Money") });
-    const lv = GW.numberField({ field: "character_base.fighter_job_lv", value: 1, onChange: (v, ok) => ok ? bar.set("lv", { label: "Level", from: 1, to: v, field: "character_base.fighter_job_lv", applies: "next_login" }) : bar.unset("lv") });
-    const store = GW.numberField({ field: "character_base.store_num", value: 10 });
-    const rate = GW.numberField({ label: "EXP multiplier (example)", value: 1, min: 0, max: 1000000, decimals: 2, unit: "x" });
-    const picked = h("span", { class: "gw-value" });
-    const ids = h("div", { class: "gw-kv" },
-      h("span", { class: "gw-label" }, "Item"), GW.idField("item", 1000, { title: "Pick an item", onChange: (v, r) => { picked.textContent = "picked " + (r ? r.name : "none"); } }),
-      h("span", { class: "gw-label" }, "Weapon only"), GW.idField("item", null, { title: "Pick a weapon", group: "Weapon", filter: r => r.key === "weapon" }),
-      h("span", { class: "gw-label" }, "Skill"), GW.idField("skill", 10), h("span", { class: "gw-label" }, "Pet skill"), GW.idField("petskill", 400),
-      h("span", { class: "gw-label" }, "Buff"), GW.idField("status", 10), h("span", { class: "gw-label" }, "Holy stone"), GW.idField("holystone", 1),
-      h("span", { class: "gw-label" }, "Quest"), GW.idField("quest", 0), h("span", { class: "gw-label" }, "Monster"), GW.idField("monster", "A_Boss_gensbd_002"));
-    const inst = { item_quality: 7, item_grade: 9, bound: 1, attrs: [{ id: 0, level: 5 }, { id: 130, level: 3 }], holy_suit_code: 403, holy_socket_count: 3, sockets: [{ effect: 1, level: 2 }] };
-    const cells = h("div", { style: "display:flex;gap:6px;flex-wrap:wrap" },
-      [1, 3, 5, 7, 9, 10, 12, 20].map(q => GW.cell({ sprite: 107, name: "Short Sword", quality: q, corner: "Q" + q, tipType: "item", tipId: 1000, tipInst: Object.assign({}, inst, { item_quality: q }) })),
-      GW.cell({ sprite: 604, count: 99, tipType: "item", tipId: 4002, tipInst: { item_quality: 0, stack: 99, bound: 0 } }), GW.cell({ empty: true, help: "an empty cell" }), GW.cell({ sprite: 248, locked: true, help: "a locked cell" }));
-    const helpers = h("div", { class: "gw-kv" }, ["Money", "SkillPoint", "checkpoint_owner_id", "wallet_revision", "store_num", "pet_shed_capacity", "zodiac_energy"].map(c =>
-      [h("span", { class: "gw-label", "data-field": "character_base." + c, tabindex: 0 }, c), h("span", { class: "gw-dim" }, "hover the label")]));
-    page.append(h("div", { class: "gw-grid2" },
-      win("Number fields + save bar", h("div", { style: "display:flex;flex-direction:column;gap:8px" }, money, lv, store, rate), bar.el),
-      win("ID fields (every entry, big picker)", ids, picked, h("p", null, h("button", { class: "gw-btnx", type: "button", onclick: async () => { const v = await GW.pick("item", { title: "All items" }); GW.status("picker returned " + v); } }, "Open the item picker"))),
-      win("Cells + game tooltips", cells, h("p", { class: "gw-dim" }, "Hover a cell: the item tooltip in the game's order, with this item at Q1-Q20, grade 9, two append attributes, a Platinum holy suit and holy stones.")),
-      win("Field help (glossary)", helpers, h("p", null, "Applies chips: ", GW.appliesChip("now"), " ", GW.appliesChip("next_login"), " ", GW.appliesChip("after_restart"), " ", GW.appliesChip("never"))),
-      win("Online banner", S.cid !== null ? GW.onlineBanner(S.cid) : h("p", { class: "gw-dim" }, "Choose a character in the top bar to see its banner."))));
   }
 
   // ------------------------------------------------------------ boot
@@ -328,17 +297,4 @@
   boot();
 })();
 
-// Header link shows whether agents are working (static/agent-status.json, published every minute from the Mac).
-(function () {
-  async function pill() {
-    const el = document.getElementById("gw-agent-pill");
-    if (!el) return;
-    try {
-      const a = await (await fetch("/static/agent-status.json", { cache: "no-store" })).json();
-      const stale = (Date.now() - new Date(a.observed_at)) / 1000 > 240;
-      const label = stale ? "Mac not reporting" : { working: "Agents working", quiet: "Agent on a long job", usage_limit: "Paused: usage limit", idle: "No agent active" }[a.state] || a.state;
-      el.textContent = (a.state === "working" && !stale ? "\u25CF " : "") + label;
-    } catch (e) { el.textContent = "Development progress"; }
-  }
-  pill(); setInterval(pill, 30000);
-})();
+// Header link to the development progress page (the agent-status pill and its "Mac not reporting" state are gone).

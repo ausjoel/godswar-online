@@ -1,0 +1,50 @@
+{% extends "_article.html" %}
+{% block title %}Instances{% endblock %}
+{% block crumb %}Instances{% endblock %}
+{% block heading %}Instances{% endblock %}
+{% block intro %}Private dungeons for your party. The leader talks to the Instance Caller in Athens or Sparta, everyone confirms, and the whole party is taken in together.{% endblock %}
+{% block slug %}instances{% endblock %}
+{% block article %}
+<h2>At a glance</h2>
+<div class="tablewrap"><table>
+  <thead><tr><th>Instance</th><th>Level</th><th>Party</th><th>Time</th><th>Entries a day</th><th>Win by</th></tr></thead>
+  <tbody>
+    <tr><td><a href="/instances/bay-under-attack">Bay Under Attack</a></td><td>50-90</td><td>3-5</td><td>30 min</td><td>1</td><td>Clearing the harbour and killing Christina</td></tr>
+    <tr><td><a href="#training">Trials of Hercules</a></td><td>60+</td><td>1-5</td><td>30 min</td><td>1</td><td>Killing every monster once</td></tr>
+    <tr><td><a href="/instances/medusa">Medusa's Island</a></td><td>90+</td><td>1-5</td><td>40 min</td><td>3</td><td>3,000 team points</td></tr>
+    <tr><td><a href="/instances/atlantis">Atlantis</a></td><td>90+</td><td>1-5</td><td>40 min</td><td>3, plus 1 paid retry</td><td>850 team points</td></tr>
+    <tr><td><a href="/instances/wonderland">Wonderland</a></td><td>120+</td><td>1-5</td><td>40 min</td><td>1</td><td>Clearing all eight islands</td></tr>
+  </tbody>
+</table></div>
+<p class="small">Daily entries reset at midnight, Brisbane time. Every member of the party must be inside the level range.</p>
+
+<h2 id="training">Trials of Hercules (training ground)</h2>
+<div class="figure"><img src="/static/art-scorpion.png" width="244" height="262" alt="A giant blue scorpion"><span>Game model render</span></div>
+<p>A cave full of giant spiders and scorpions where heroes train the way Hercules did. It is open to <b>level 60 and up</b>, solo or with a party of up to five, once a day, for <b>30 minutes</b>.</p>
+<ul>
+  <li>Every monster appears once per run and does not come back: normals are worth 1 point, the 8 to 10 elites 10 points each.</li>
+  <li>The monsters are around level 75-90 and much tougher than their cousins outside: normals have five times the usual HP, elites ten times.</li>
+  <li><b>One full clear</b> (every monster in the cave, once) completes the trial. You are paid EXP and talent points for how far you got; a full clear within 22½ minutes pays the most.</li>
+  <li>Revive near the entrance if you fall. Leaving early forfeits the reward; the leader can end the run by a vote and still be paid for the progress made.</li>
+</ul>
+<p class="generated">This trial is our own take on the old Training Ground: the monsters, scoring and timings are designed for this server.</p>
+
+<h2>How entry works</h2>
+<ol>
+  <li>Form a party. The leader walks to the <b>Instance Caller</b> in Athens or Sparta (use <b>Search</b> under the mini-map) and picks the instance.</li>
+  <li>Each member gets an entry button. Click it within the countdown to be taken in. A member who is a little late can still join while the run is open.</li>
+  <li>Entering uses one of the day's entries for each member, whether the run is won or not.</li>
+  <li>If you die inside, you come back at the start point and can keep going.</li>
+  <li>Leaving before the end forfeits the rewards, so stay until the run finishes or the timer runs out.</li>
+</ol>
+<div class="callout"><p>Server restarts: if a restart ends a Bay Under Attack run, the day's entry is given back. For the other instances it is not.</p></div>
+
+<h2>Rewards in short</h2>
+<ul>
+  <li><b>Trials of Hercules</b>: EXP and talent points by progress.</li>
+  <li><b>Bay Under Attack</b>: EXP for how much of the harbour you cleared, and gear with 3 or 4 random attributes from the monsters.</li>
+  <li><b>Medusa's Island</b>: Honour from score and speed, spent at the Point Exchanger, and titles for the fastest clears.</li>
+  <li><b>Atlantis</b>: HardPoints for the team score, also spent at the Point Exchanger, and a completion title.</li>
+  <li><b>Wonderland</b>: Medals for every island, boss loot, island chests and titles.</li>
+</ul>
+{% endblock %}

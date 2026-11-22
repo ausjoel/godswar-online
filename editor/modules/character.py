@@ -36,6 +36,9 @@ import re
 from . import common
 from .common import Bad, Refused, NotFound, Conflict, OnlineRefused, lit, ident
 
+from . import _account_holds as AH       # W4A: soft delete, user-name holds, e-mail verification reset
+from . import _character_identity as CI  # W4A: faction / gender / class change, hair + face, legal limits
+
 try:
     from . import accounts as ACC          # the framework's Accounts module: verifier(), create/password/edit/ban
 except Exception as _e:                    # noqa: BLE001 - the character sheet works without it
@@ -218,7 +221,44 @@ def sheet(ctx, cid):
         "fields": fields, "online": common.online_info(ctx.app, cid),
         "tiers": TIERS, "entitlement_keys": ENTITLEMENTS,
         "gm": {"supported": ctx.caps.get("gm_authority") == "character_flag", "enabled": b.get("GM") == 1},
+        # W4A: the legal range of every number field (sources in modules/_character_identity.py), the hair / face
+        # pickers, and the identity changes (faction, gender, class)
+        "limits": _limits(ctx, b),
+        "looks": {"hair": CI.hair_sets(b.get("gender")), "hair_by_gender": {g: CI.hair_sets(g) for g in ("male", "female")},
+                  "faces": CI.FACES, "sheet": CI.SHEET, "male_only_hair": sorted(CI.MALE_ONLY_HAIR),
+                  "female_only_hair": sorted(CI.FEMALE_ONLY_HAIR)},
+        "identity": {"classes": CI.CLASSES, "camps": CI.CAMPS},
     }
+
+
+def _talent_rate(ctx):
+    try:
+        r = _rb(ctx).pg.json("(SELECT to_jsonb(r) FROM public.server_rates r WHERE r.rate_key = 'cost.talent')")
+        return float((r or {}).get("value") or 1)
+    except Exception:          # noqa: BLE001 - a database without the RATES table prices at stock
+        return 1.0
+
+
+def _class_talents(ctx, profession):
+    try:
+        return int(_rb(ctx).pg.json("(SELECT to_jsonb(count(*)) FROM gameplay_talent_definitions t WHERE t.class_id = %d AND "
+                                    "t.revision = %s)" % (int(profession), CI.GAMEPLAY_REVISION)) or 0)
+    except Exception:          # noqa: BLE001
+        return 0
+
+
+def _limits(ctx, b):
+    """{col: {min, max, why}} - the legal range of each number field; a GM-flagged character may go past the game
+    limits of base max HP / MP and talent points."""
+    gm = b.get("GM") == 1
+    out = {c: {"min": lo, "max": (CI.I32 if gm and c in ("MaxHP", "MaxMP") else hi), "why": why} for c, (lo, hi, why) in CI.LIMITS.items()}
+    n = _class_talents(ctx, b.get("profession") or 0)
+    if n:
+        cap = CI.talent_point_ceiling(n, _talent_rate(ctx))
+        out["SkillPoint"] = {"min": 0, "max": CI.I32 if gm else cap, "why": "every one of the class's %d talents to rank 100 at today's "
+                             "price needs %s points; more cannot be spent" % (n, format(cap, ","))}
+    out["_gm"] = gm
+    return out
 
 
 @M.get(r"map/(\d+)")
@@ -285,6 +325,10 @@ def _validate(ctx, cid, vals, base, extra):
             v = str(v).strip().lower()
             if v not in ("male", "female"):
                 raise Bad("gender must be male or female")
+            if v != base.get("gender"):
+                # W4A: the plain write skipped the game's guard (fashion / one-gender models worn) and its hair remap
+                raise Refused("change the gender with the Gender change button (identity/<cid>): it checks the worn "
+                              "gear and keeps a hair style the new gender has, like the game's plastic surgeon")
         elif kind == "bool":
             if not isinstance(v, bool):
                 v = str(v).strip().lower() in ("1", "true", "yes", "on")
@@ -300,6 +344,16 @@ def _validate(ctx, cid, vals, base, extra):
         out[col] = v
     nb = dict(base)
     nb.update(out)
+    # W4A: legal game limits (modules/_character_identity.py LIMITS, with their sources)
+    gm = base.get("GM") == 1
+    ceiling = extra.get("talent_ceiling")
+    for col in list(out):
+        if col in CI.LIMITS or (col == "SkillPoint" and ceiling):
+            CI.check_limit(col, out[col], gm=gm, ceiling=ceiling, current=base.get(col))
+    if "hair_style" in out:
+        CI.check_hair(nb.get("gender"), out["hair_style"], allow_new=bool(extra.get("allow_new_models")))
+    if "face_shap" in out:
+        CI.check_face(out["face_shap"])
     lv = int(nb["fighter_job_lv"])
     if "fighter_job_lv" in out and not 1 <= lv <= LEVEL_CAP:
         raise Bad("level must be 1..%d (PlayerExperienceCatalog.MaximumLevel)" % LEVEL_CAP)
@@ -372,8 +426,10 @@ def save(ctx, cid):
     r = _base(ctx, cid)
     base = r["base"]
     on = common.online_info(ctx.app, cid)
+    lim = _limits(ctx, base)
     clean = _validate(ctx, cid, vals, base, {"titles": r.get("titles_owned") or [], "pets": r.get("pets_owned"),
-                                             "live": bool(on.get("online"))})
+                                             "live": bool(on.get("online")), "allow_new_models": bool(b.get("allow_new_models")),
+                                             "talent_ceiling": (lim.get("SkillPoint") or {}).get("max") if "SkillPoint" in lim else None})
     # drop values equal to what is stored (a no-op write would only bump revision counters)
     same = [c for c, v in clean.items() if base.get(c) == v or (c in TEXT_COLS and str(base.get(c)) == str(v))
             or (c not in TEXT_COLS and str(_num(base.get(c))) == str(_num(v)))]
@@ -431,9 +487,44 @@ def _account(ctx, aid):
     a["online"] = bool(a["login_status"] or a["presence"] or any(c["online"] for c in a["characters"]))
     a["banned"] = a["status"] == 1
     a["ban_effective"] = bool(ctx.caps.get("available"))
+    # W4A: soft delete (status 2) and the user names held for this account
+    ready = _w4_ready(ctx)
+    a["w4"] = ready
+    a["deleted"] = a["status"] == AH.STATUS_DELETED
+    a["deletion"] = rb.pg.json("(SELECT to_jsonb(d) FROM public.account_deletions d WHERE d.account_id = %d)" % int(aid)) \
+        if ready.get("deletions") else None
+    a["holds"] = rb.pg.json("(SELECT coalesce(json_agg(to_jsonb(h) ORDER BY h.held_at), '[]') FROM public.account_username_holds h "
+                            "WHERE h.account_id = %d)" % int(aid)) if ready.get("holds") else []
+    a["signup_email"] = rb.pg.json("(SELECT json_build_object('email', email, 'verified_at', verified_at) FROM signup.account_emails "
+                                   "WHERE account_id = %d)" % int(aid)) if ready.get("signup") else None
     a["tier_name"] = TIERS.get(a["donator_tier"], "?")
     a["game_safe_name"] = bool(GAME_USER_RX.match(a["username"]))
     return a
+
+
+def _w4_ready(ctx):
+    """Which W4A tables this database has (server migration 240 + the sign-up site's schema)."""
+    try:
+        return _rb(ctx).pg.json(AH.ready_sql()) or {}
+    except Exception:          # noqa: BLE001 - an old database simply has none
+        return {}
+
+
+def _holds(ctx, *names):
+    if not _w4_ready(ctx).get("holds"):
+        return []
+    return _rb(ctx).pg.json(AH.hold_lookup_sql(names)) or []
+
+
+def _hold_scope(*names):
+    keys = sorted({AH.key(n) for n in names if AH.key(n)})
+    return common.scope(AH.HOLDS, "username_key IN (%s)" % ", ".join(lit(k) for k in keys), pk=["username_key"], counters=[], ignore=[])
+
+
+def _refuse_deleted(a, what):
+    if a.get("deleted"):
+        raise Refused("%s: account %s is deleted (restorable until %s). Restore it first." % (
+            what, a["username"], str((a.get("deletion") or {}).get("purge_after") or "")[:16]))
 
 
 def _online_refuse(a, what):
@@ -464,6 +555,9 @@ def accounts_list(ctx):
     """GET /api/m/character/accounts?q= - every account with its characters (the Accounts module's list) plus
     whether each user name can log in from the game client."""
     r = _need_acc().list_accounts(ctx)
+    total = len(r["accounts"])
+    r["accounts"] = AH.hide_deleted(r["accounts"], bool(ctx.q("deleted")))
+    r["hidden_deleted"] = total - len(r["accounts"])
     for a in r["accounts"]:
         a["game_safe_name"] = bool(GAME_USER_RX.match(a["username"]))
         a["tier_name"] = TIERS.get(a["donator_tier"], "?")
@@ -499,6 +593,9 @@ def account_create(ctx):
     rb = _rb(ctx)
     if rb.pg.json("(SELECT to_jsonb(count(*)) FROM accounts WHERE lower(username) = lower(%s))" % lit(user)):
         raise Bad("the user name %s is taken" % user)
+    why = AH.hold_refusal(user, _holds(ctx, user))
+    if why:
+        raise Bad(why)
     ctx.body["username"] = user
     r = _need_acc().create(ctx)
     return r
@@ -517,15 +614,34 @@ def account_rename(ctx, aid):
     rb = _rb(ctx)
     if rb.pg.json("(SELECT to_jsonb(count(*)) FROM accounts WHERE lower(username) = lower(%s) AND id <> %d)" % (lit(new), int(aid))):
         raise Bad("the user name %s is taken" % new)
+    _refuse_deleted(a, "rename")
+    # W4A: a held name (another account's old or deleted name) is refused; the old name is held from now on, so
+    # neither first-login registration nor the sign-up site can create a new account with it. Renaming back to this
+    # account's own old name releases that hold.
+    holds_on = bool(_w4_ready(ctx).get("holds"))
+    why = AH.hold_refusal(new, _holds(ctx, new), account_id=aid)
+    if why:
+        raise Bad(why)
     _online_refuse(a, "rename")
     exp = (ctx.body or {}).get("expected") or a["username"]
-    r = ctx.rows_write([_acc_scope(aid)], "rename account %s -> %s" % (a["username"], new),
-                       lambda before: [_offline_sql(aid), "UPDATE accounts SET username = %s WHERE id = %d" % (lit(new), int(aid))],
+    old = a["username"]
+
+    def build(before):
+        out = [_offline_sql(aid), "UPDATE accounts SET username = %s WHERE id = %d" % (lit(new), int(aid))]
+        if holds_on:
+            if AH.key(new) != AH.key(old):
+                out.append(AH.hold_release_sql(new, aid))
+                out.append(AH.hold_insert_sql(old, aid, "renamed", "renamed to %s in the editor" % new))
+        return out
+    scope = [_acc_scope(aid)] + ([_hold_scope(old, new)] if holds_on else [])
+    r = ctx.rows_write(scope, "rename account %s -> %s" % (old, new), build,
                        fields=["accounts.username"], advanced=True,
                        expected=[{"table": "accounts", "where": {"id": int(aid)}, "values": {"username": exp}}],
-                       applies="next_login", target="account " + a["username"])
+                       applies="next_login", target="account " + old)
     r["account"] = _account(ctx, aid)
-    r["note"] = "Log in as %s from now on (the password is unchanged)." % new
+    r["note"] = "Log in as %s from now on (the password is unchanged).%s" % (
+        new, " The old name %s is held: nobody can register it again." % old if holds_on and AH.key(new) != AH.key(old) else
+        "" if holds_on else " (This database has no name holds yet - server migration 240 - so the old name is free again.)")
     return r
 
 
@@ -539,15 +655,64 @@ def account_password(ctx, aid):
 
 @M.post(r"account/(\d+)/edit")
 def account_edit(ctx, aid):
-    """POST /api/m/character/account/<id>/edit {email?, donator_tier?, donator_expires_at?, expected} - Accounts module."""
-    r = _need_acc().edit(ctx, aid)
+    """POST /api/m/character/account/<id>/edit {email?, donator_tier?, donator_expires_at?, expected} - Accounts module.
+    W4A: a changed e-mail goes through account_email (it also resets the sign-up site's verification)."""
+    b = ctx.body or {}
+    out = None
+    if "email" in b:
+        a = _account(ctx, aid)
+        if str(b.get("email") or "").strip() != (a.get("email") or ""):
+            out = account_email(ctx, aid)
+        b.pop("email", None)
+        if isinstance(b.get("expected"), dict):
+            b["expected"].pop("email", None)
+    if set(b) - {"expected"}:
+        r = _need_acc().edit(ctx, aid)
+        if out:
+            r["email_change"] = out.get("change")
+    elif out:
+        r = out
+    else:
+        raise Bad("nothing to change")
     r["account"] = _account(ctx, aid)
+    return r
+
+
+@M.post(r"account/(\d+)/email")
+def account_email(ctx, aid):
+    """POST /api/m/character/account/<id>/email {email, expected?} - change the e-mail (W4A). The sign-up site's row
+    (signup.account_emails) gets the new address with verified_at = NULL: the address must be verified again. Works
+    while the player is online (nothing in the game reads it)."""
+    a = _account(ctx, aid)
+    b = ctx.body or {}
+    e = AH.check_email(b.get("email"))
+    if e == (a.get("email") or ""):
+        return {"account": a, "note": "the e-mail is unchanged"}
+    rb = _rb(ctx)
+    other = rb.pg.json(AH.email_conflict_sql(aid, e))
+    if other:
+        raise Bad("account #%s %s already uses %s" % (other["id"], other["username"], e))
+    ready = _w4_ready(ctx)
+    if ready.get("signup"):
+        other = rb.pg.json(AH.signup_email_conflict_sql(aid, e))
+        if other:
+            raise Bad("the sign-up site has %s for account #%s" % (e, other["id"]))
+    exp = b.get("expected")
+    exp = exp if isinstance(exp, str) else a.get("email") or ""
+    r = ctx.rows_write([_acc_scope(aid)], "account %s: e-mail %s -> %s (verification reset)" % (a["username"], a.get("email") or "(none)", e or "(none)"),
+                       lambda before: AH.email_sql(aid, e, ready.get("signup")),
+                       fields=["accounts.email"], expected=[{"table": "accounts", "where": {"id": int(aid)}, "values": {"email": exp}}],
+                       applies="now", target="account " + a["username"])
+    r["account"] = _account(ctx, aid)
+    r["note"] = ("E-mail changed%s. Undo puts the old address back in the account, but the sign-up site's row stays "
+                 "unverified." % (" and the sign-up site's verification reset" if ready.get("signup") else ""))
     return r
 
 
 @M.post(r"account/(\d+)/ban")
 def account_ban(ctx, aid):
     """POST /api/m/character/account/<id>/ban {banned} - accounts.status 1 / 0 (Accounts module; round-2 honours it)."""
+    _refuse_deleted(_account(ctx, aid), "ban / unban")        # W4A: unban would silently undelete (status 2 -> 0)
     r = _need_acc().ban(ctx, aid)
     r["account"] = _account(ctx, aid)
     return r
@@ -690,6 +855,33 @@ def lifecycle(ctx, cid, op):
     # route writes them only with the server's own statements (module docstring).
     r = ctx.rows_write(_lifecycle_scope(aid, [cid]), what, lambda before: [_offline_sql(aid), sql],
                        fields=["character_base.*", "accounts.*"], applies="next_login", target="character " + ch["name"])
+    r["account"] = _account(ctx, aid)
+    return r
+
+
+@M.post(r"lifecycle/(\d+)/swap")
+def lifecycle_swap(ctx, cid):
+    """POST /api/m/character/lifecycle/<cid>/swap {confirm: active character's name} - W4A: restore a deleted character
+    while the account has another active one in the realm (one active character per account and realm): the active one
+    is deleted the game's way first (restorable for 30 days), then this one is restored, in one transaction."""
+    ch = _char_account(ctx, cid)
+    aid = ch["account_id"]
+    a = _account(ctx, aid)
+    me = next((c for c in a["characters"] if c["id"] == int(cid)), None)
+    if not me or me["state"] != "deleted" or not me.get("restorable"):
+        raise Bad("%s is not a deleted character inside its restore window" % ch["name"])
+    active = [c for c in a["characters"] if c["state"] == "active" and c.get("realm") == me.get("realm")]
+    if not active:
+        raise Bad("no active character to swap with: use Restore")
+    act = active[0]
+    if str((ctx.body or {}).get("confirm") or "") != act["name"]:
+        raise Bad("type %s to confirm: it is deleted (restorable for %d days) so %s can come back" % (act["name"], RESTORE_DAYS, ch["name"]))
+    _online_refuse(a, "swap %s for %s" % (act["name"], ch["name"]))
+    stmts = [_offline_sql(aid), _tombstone_sql(aid, act["id"]), _restore_sql(aid, cid)]
+    r = ctx.rows_write(_lifecycle_scope(aid, [act["id"], int(cid)]),
+                       "swap characters: delete %s (restorable %d days), restore %s" % (act["name"], RESTORE_DAYS, ch["name"]),
+                       lambda before: stmts, fields=["character_base.*", "accounts.*"], applies="next_login",
+                       target="character " + ch["name"])
     r["account"] = _account(ctx, aid)
     return r
 
@@ -860,7 +1052,10 @@ def _delete_plan(ctx, aid, preview=False):
 
 @M.post(r"account/(\d+)/delete")
 def account_delete(ctx, aid):
-    """POST /api/m/character/account/<id>/delete {confirm: username, mode: "delete"|"wipe"|"retire"}
+    """POST /api/m/character/account/<id>/delete {confirm: username, mode: "soft"|"delete"|"wipe"|"retire"}
+    soft:   (W4A, the admin 2026-11-12, the default) hidden and unusable: accounts.status = 2 (login refused like a ban), the
+            name is held, a row in account_deletions with purge_after = now + 30 days. Restore brings it back; after 30
+            days the VPS timer gw-account-purge removes it for good (DB backup first, same rows as Wipe).
     delete: the account and every row that cascades from it, for good (backup first; Undo re-inserts the rows). Refused
             while online or while evidence rows reference the account.
     wipe:   the same, plus the account's kill / loot / claim evidence rows (WIPE_EVIDENCE). Still refused while online
@@ -874,6 +1069,22 @@ def account_delete(ctx, aid):
         raise Bad("type the account's user name to confirm")
     _online_refuse(a, "delete account")
     mode = b.get("mode") or "delete"
+    ready = _w4_ready(ctx)
+    if mode == "soft":
+        if not (ready.get("holds") and ready.get("deletions")):
+            raise Refused("Delete (restorable) " + AH.NEEDS_SERVER)
+        _refuse_deleted(a, "delete")
+        stmts = [_offline_sql(aid)] + AH.soft_delete_sql(aid, a["username"], a["status"])
+        scope = [_acc_scope(aid), common.scope(AH.DELETIONS, "account_id = %d" % aid, pk=["account_id"], counters=[], ignore=[]),
+                 _hold_scope(a["username"])]
+        r = ctx.rows_write(scope, "delete account %s (restorable for %d days, then purged)" % (a["username"], AH.RESTORE_DAYS),
+                           lambda before: stmts, fields=["accounts.status"], applies="now", target="account " + a["username"])
+        r["account"] = _account(ctx, aid)
+        r["note"] = ("Account %s is deleted: nobody can log in with it and its name cannot be registered again. Restore it from "
+                     "the account list (Show deleted) until %s; after that the purge timer removes it for good." % (
+                         a["username"], str((r["account"].get("deletion") or {}).get("purge_after") or "")[:16]))
+        return r
+    _refuse_deleted(a, "%s" % mode) if mode == "retire" else None
     if mode == "retire":
         active = [c["id"] for c in a["characters"] if c["state"] == "active"]
         stmts = [_offline_sql(aid)] + [_tombstone_sql(aid, c) for c in active] + ["UPDATE accounts SET status = 1 WHERE id = %d" % aid]
@@ -934,6 +1145,10 @@ def account_delete(ctx, aid):
     total = plan["wipe"]["total_rows"] if wipe else plan["total_rows"]
     stmts = ([_offline_sql(aid)] + (["SELECT %s" % WIPE_FUNCTION.replace("(integer)", "(%d)" % aid)] if ev_tables else []) +
              ["DELETE FROM accounts WHERE id = %d" % aid])
+    if ready.get("holds"):
+        # W4A: a deleted name can never be registered again (first-login registration and the sign-up site check it)
+        stmts.append(AH.hold_insert_sql(a["username"], aid, "deleted", "%s in the editor" % mode))
+        scope.append(_hold_scope(a["username"]))
     r = ctx.rows_write(scope, "%s account %s for good (%s; %d rows)" % ("WIPE" if wipe else "DELETE", a["username"], chars, total),
                        lambda before: stmts, fields=["accounts.*"], applies="now", target="account " + a["username"])
     r["deleted"] = {"tables": plan["tables"] + (plan["wipe"]["tables"] if wipe else []), "not_restorable": not_restorable,
@@ -942,6 +1157,198 @@ def account_delete(ctx, aid):
         a["username"], " (with its kill, loot and claim records)" if wipe else "",
         (" (except %s: kept in the backup folder)" % ", ".join(not_restorable)) if not_restorable else ""))
     return r
+
+
+# ------------------------------------------------------------------ W4A: faction / gender / class change
+def _identity_state(ctx, cid):
+    rb = _rb(ctx)
+    return rb.pg.json("""(SELECT json_build_object(
+        'base', (SELECT json_build_object('id', c.id, 'account_id', c.account_id, 'name', c.name, 'gender', c.gender, 'camp', c.camp,
+                 'profession', c.profession, 'level', c.fighter_job_lv, 'hair', c.hair_style, 'consortia', c.consortia,
+                 'points', c."SkillPoint", 'state', c.lifecycle_state, 'map', c."Map")),
+        'worn', (SELECT coalesce(json_agg(json_build_object('slot_index', i.slot_index, 'prop_id', i.prop_id, 'item_location', i.item_location)
+                 ORDER BY i.slot_index), '[]') FROM character_items i WHERE i.user_id = c.id AND i.item_location = 0),
+        'guild_member', EXISTS (SELECT 1 FROM guild_members g WHERE g.character_id = c.id),
+        'quests', (SELECT count(*) FROM character_quests q WHERE q.character_id = c.id),
+        'grids', (SELECT coalesce(json_agg(json_build_object('grid_index', z.grid_index, 'selected_skill_id', z.selected_skill_id)), '[]')
+                  FROM character_zodiac_skill_grids z WHERE z.user_id = c.id),
+        'class_tables', %s AND %s)
+      FROM character_base c WHERE c.id = %%d)""" % (AH._writable("public.character_sealed_skills"),
+                                                   AH._writable("public.character_class_change_receipts")) % int(cid))
+
+
+def _identity_plan(ctx, cid, op, target):
+    st = _identity_state(ctx, cid)
+    if not st:
+        raise NotFound("no character #%s" % cid)
+    b = st["base"]
+    if b["state"] != "active":
+        raise Refused("%s is deleted; restore it first" % b["name"])
+    worn = st["worn"] or []
+    plan = {"op": op, "name": b["name"], "warnings": [], "blockers": [], "expected": {}}
+    if op == "faction":
+        new = 1 - int(b["camp"])
+        plan.update(before=CI.CAMPS.get(b["camp"]), after=CI.CAMPS.get(new), expected={"camp": b["camp"]})
+        if int(b.get("consortia") or 0) or st.get("guild_member"):
+            plan["blockers"].append("in a guild: the game refuses a faction change in a guild; remove the character from it "
+                                    "first (Guild editor)")
+        plan["what"] = ["camp %s -> %s" % (plan["before"], plan["after"]),
+                        "moved to %s's capital (map %d, %s, %s)" % (plan["after"], new, CI.CAPITAL_X, CI.CAPITAL_Z),
+                        "the 'return to capital / suburb' skills swapped for the new faction's"]
+        if st.get("quests"):
+            plan["warnings"].append("%d quest%s carried: the game's Faction Changer keeps them, so does this; quests whose "
+                                    "giver is in the old capital may need finishing or dropping" % (st["quests"], "" if st["quests"] == 1 else "s"))
+        plan["warnings"].append("no Gold is charged and the in-game Faction Changer cooldown does not start")
+    elif op == "gender":
+        cur = b["gender"]
+        tgt = "female" if cur == "male" else "male"
+        hair = CI.hair_for(b["hair"], tgt == "male")
+        plan.update(before=cur, after=tgt, expected={"gender": cur})
+        bad = CI.gender_worn_conflicts(worn, tgt == "male")
+        if bad:
+            plan["blockers"].append("worn: %s - the %s model does not exist; take %s off first" % (
+                ", ".join("%s (slot %s)" % (ctx.catalog.name("item", r["prop_id"]) or r["prop_id"], r["slot_index"]) for r in bad),
+                tgt, "them" if len(bad) > 1 else "it"))
+        plan["what"] = ["gender %s -> %s" % (cur, tgt)] + (["hair %s -> %s (the old style has no %s model)" % (b["hair"], hair, tgt)]
+                                                           if hair != int(b["hair"]) else [])
+    elif op == "class":
+        try:
+            tgt = int(target)
+        except (TypeError, ValueError):
+            raise Bad("choose the new class (0 Warrior, 1 Champion, 2 Priest, 3 Mage)")
+        if tgt not in CI.CLASSES:
+            raise Bad("class must be 0 Warrior, 1 Champion, 2 Priest or 3 Mage")
+        if tgt == int(b["profession"]):
+            raise Bad("%s is a %s already" % (b["name"], CI.CLASSES[tgt]))
+        if not st.get("class_tables"):
+            plan["blockers"].append("the server's class-change tables (character_sealed_skills, character_class_change_receipts) "
+                                    "are missing or the editor's role may not write them: the server creates them at the "
+                                    "first class change; then run editor/sql/w4a-editor-grants.sql")
+        plan.update(before=CI.CLASSES.get(b["profession"]), after=CI.CLASSES[tgt], expected={"profession": b["profession"]}, target=tgt)
+        on = [r for r in worn if int(r["slot_index"]) <= CI.LAST_CHARACTER_SLOT]
+        if on:
+            plan["blockers"].append("%d item%s worn (slots 0-14): the game requires nothing worn for a class change; move them "
+                                    "to the bag first (Inventory)" % (len(on), "" if len(on) == 1 else "s"))
+        rate = _talent_rate(ctx)
+        z = CI.zodiac_to_clear(st.get("grids"), tgt)
+        refund = _rb(ctx).pg.json("""(SELECT json_build_object('n', count(*), 'ranks', coalesce(json_agg(ct.rank), '[]'))
+            FROM character_talents ct JOIN gameplay_talent_definitions tt ON tt.id = ct.talent_id AND tt.revision = %s
+            WHERE ct.user_id = %d AND tt.class_id <> %d AND ct.rank > 0)""" % (CI.GAMEPLAY_REVISION, int(cid), tgt)) or {}
+        cum = CI.talent_refunds(rate)
+        pts = sum(cum[min(CI.TALENT_RANK_CAP, int(r))] for r in refund.get("ranks") or [])
+        plan.update(zodiac=z, rate=rate, refund=pts)
+        plan["what"] = ["class %s -> %s" % (plan["before"], plan["after"]),
+                        "%d talent%s of the old class back to rank 0: +%s talent points (today's price, cost.talent %s)" % (
+                            refund.get("n") or 0, "" if refund.get("n") == 1 else "s", format(pts, ","), rate),
+                        "skills the new class cannot use are sealed (kept, they come back after a shift back); the new class's "
+                        "start skills are granted",
+                        "%d attack zodiac grid selection%s of another class cleared" % (len(z), "" if len(z) == 1 else "s")]
+        plan["warnings"].append("no Class Shift Permit is used; the server refunds the price actually paid when its receipts "
+                                "prove it, the editor always uses today's price")
+    else:
+        raise Bad("op must be faction, gender or class")
+    plan["base"] = b
+    return plan
+
+
+@M.post(r"identity/(\d+)")
+def identity(ctx, cid):
+    """POST /api/m/character/identity/<cid> {op: faction|gender|class, target?, apply?: true} - W4A: change faction,
+    gender or class the way the game does (PostgresCharacterIdentityStore / PostgresCharacterClassChangeStore), with
+    the game's own refusals (guild, worn gear). Without apply: the plan. The character must be logged out."""
+    cid = int(cid)
+    b = ctx.body or {}
+    op = b.get("op")
+    plan = _identity_plan(ctx, cid, op, b.get("target"))
+    base = plan.pop("base")
+    if not b.get("apply"):
+        return plan
+    if plan["blockers"]:
+        raise Refused("; ".join(plan["blockers"]))
+    exp = b.get("expected") or plan["expected"]
+    expected = [{"table": "character_base", "where": {"id": cid}, "values": exp}]
+    label = "%s: %s %s -> %s" % (base["name"], op, plan["before"], plan["after"])
+    if op == "faction":
+        new, stmts = CI.faction_sql(cid, base["camp"])
+        r = ctx.char_write(cid, label, lambda d: stmts, fields=["character_base.*", "character_skills.*"], expected=expected,
+                           cross_bumps=False)
+    elif op == "gender":
+        hair, stmts = CI.gender_sql(cid, base["gender"], plan["after"], base["hair"])
+        r = ctx.char_write(cid, label, lambda d: stmts, fields=["character_base.*"], expected=expected, cross_bumps=False)
+    else:
+        tgt = plan["target"]
+        scope = [common.scope("character_base", "id = %d" % cid),
+                 common.scope("character_skills", "user_id = %d" % cid, pk=["user_id", "skill_id"], counters=[], ignore=[]),
+                 common.scope("character_sealed_skills", "user_id = %d" % cid, pk=["user_id", "skill_id"], counters=[], ignore=[]),
+                 common.scope("character_talents", "user_id = %d" % cid, pk=["user_id", "talent_id"], counters=[], ignore=[]),
+                 common.scope("character_zodiac_skill_grids", "user_id = %d" % cid, pk=["user_id", "grid_index"], counters=[], ignore=[]),
+                 common.scope("character_class_change_receipts", "character_id = %d" % cid, pk=["id"], counters=[], ignore=[])]
+        sql = CI.class_sql(cid, base["account_id"], base["profession"], tgt, base["level"], plan["rate"], plan["zodiac"])
+        r = ctx.rows_write(scope, label, lambda before: [sql], fields=["character_base.*", "character_skills.*", "character_talents.*"],
+                           lock_cids=[cid], expected=expected, applies="next_login", target="character " + base["name"])
+    r["plan"] = plan
+    return r
+
+
+@M.post(r"account/(\d+)/restore")
+def account_restore(ctx, aid):
+    """POST /api/m/character/account/<id>/restore - W4A: undo a soft delete (status back to what it was, the deletion
+    row and the 'deleted' name hold removed). Only while the purge timer has not removed the account."""
+    aid = int(aid)
+    a = _account(ctx, aid)
+    if not a.get("deleted"):
+        return {"account": a, "note": "account %s is not deleted" % a["username"]}
+    d = a.get("deletion") or {}
+    prev = d.get("previous_status", 0)
+    scope = [_acc_scope(aid), common.scope(AH.DELETIONS, "account_id = %d" % aid, pk=["account_id"], counters=[], ignore=[]),
+             _hold_scope(a["username"])]
+    r = ctx.rows_write(scope, "restore deleted account %s" % a["username"], lambda before: AH.restore_sql(aid, a["username"], prev),
+                       fields=["accounts.status"], applies="now", target="account " + a["username"])
+    r["account"] = _account(ctx, aid)
+    r["note"] = "Account %s is back%s." % (a["username"], " (still banned, as before the delete)" if prev == 1 else "")
+    return r
+
+
+@M.get("holds")
+def holds_list(ctx):
+    """GET /api/m/character/holds - every held user name (W4A)."""
+    if not _w4_ready(ctx).get("holds"):
+        return {"holds": [], "ready": False, "note": AH.NEEDS_SERVER}
+    return {"ready": True, "holds": _rb(ctx).pg.json(
+        "(SELECT coalesce(json_agg(to_jsonb(h) || jsonb_build_object('account_exists', EXISTS (SELECT 1 FROM accounts a WHERE "
+        "a.id = h.account_id)) ORDER BY h.held_at DESC), '[]') FROM public.account_username_holds h)")}
+
+
+@M.post("holds/release")
+def holds_release(ctx):
+    """POST /api/m/character/holds/release {username} - let a held name be registered again (W4A). A deleted account
+    that still exists keeps its name anyway (accounts.username is unique)."""
+    name = str((ctx.body or {}).get("username") or "").strip()
+    if not name:
+        raise Bad("which name?")
+    if not _w4_ready(ctx).get("holds"):
+        raise Refused("Release " + AH.NEEDS_SERVER)
+    h = _holds(ctx, name)
+    if not h:
+        raise NotFound("the name %s is not held" % name)
+    return ctx.rows_write([_hold_scope(name)], "release held user name %s" % name, lambda before: [AH.hold_release_sql(name)],
+                          fields=["accounts.*"], applies="now", target="name " + name)
+
+
+@M.post("holds/reserve")
+def holds_reserve(ctx):
+    """POST /api/m/character/holds/reserve {username, note?} - hold a name nobody has (W4A)."""
+    name = str((ctx.body or {}).get("username") or "").strip()
+    if not GAME_USER_RX.match(name):
+        raise Bad("the user name must be " + GAME_USER_RULE)
+    if not _w4_ready(ctx).get("holds"):
+        raise Refused("Reserve " + AH.NEEDS_SERVER)
+    if _rb(ctx).pg.json("(SELECT to_jsonb(count(*)) FROM accounts WHERE lower(username) = lower(%s))" % lit(name)):
+        raise Bad("an account is called %s already" % name)
+    note = str((ctx.body or {}).get("note") or "reserved in the editor")[:200]
+    return ctx.rows_write([_hold_scope(name)], "reserve user name %s" % name,
+                          lambda before: [AH.hold_insert_sql(name, None, "reserved", note)],
+                          fields=["accounts.*"], applies="now", target="name " + name)
 
 
 @M.post(r"gm/(\d+)")

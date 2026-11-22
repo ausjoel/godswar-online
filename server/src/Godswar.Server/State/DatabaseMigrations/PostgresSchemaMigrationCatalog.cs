@@ -382,6 +382,12 @@ internal static partial class PostgresSchemaMigrationCatalog
         CreateActiveCharacterNames(),
         CreateLelantineFarmRounds(),
         CreateLelantineFarmTools(),
-        CreateNpcDialogueSuccessors() // ROUND-NPCSUCCESSOR
+        CreateNpcDialogueSuccessors(), // ROUND-NPCSUCCESSOR
+        CreateLegacyLoginHandoffs(), // ROUND-SHAREDHANDOFF
+        CreateAccountNameHolds(), // W4A
+        CreateLoginAwards(), // W4-B login-window awards, Prize Chest, queued buffs
+        CreateSessionHealth(), // W6A per-connection login and session health
+        CreateClearStaleLoginStatus(), // W14 one-off clear of stale token-less login flags
+        CreateMedusaTitleOrder() // MEDUSA-TITLES fastest Advanced clear = Executioners (+3%)
     ];
 }

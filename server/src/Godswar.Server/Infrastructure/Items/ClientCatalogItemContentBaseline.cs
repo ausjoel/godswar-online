@@ -15,8 +15,11 @@ namespace Godswar.Server.Infrastructure.Items;
 /// </summary>
 internal static class ClientCatalogItemContentBaseline
 {
-    public const int ShippedItemCount = ClientCatalogItemSeeds.ShippedItemCount;
+    // B22: + the generated skill-level books and world-boss skill-book chests (SkillLevelItemSeeds).
+    // B22 B23-F: + the 15 class field skill books (ClassFieldItemSeeds).
+    public const int ShippedItemCount = ClientCatalogItemSeeds.ShippedItemCount + SkillLevelItemSeeds.Count +
+        ClassFieldItemSeeds.Count;
 
     public static IReadOnlyList<ItemTemplateSeed> ItemTemplates { get; } =
-        ClientCatalogItemSeeds.All;
+        ClientCatalogItemSeeds.All.Concat(SkillLevelItemSeeds.All).Concat(ClassFieldItemSeeds.All).ToArray(); // B22, B23-F
 }

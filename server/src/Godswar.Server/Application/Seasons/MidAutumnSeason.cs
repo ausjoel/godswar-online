@@ -128,25 +128,29 @@ internal static class MidAutumnSeason
     public static IReadOnlyList<ServerRateDefinition> Definitions { get; } =
     [
         Absolute(SwitchKey, "Mid-autumn: Lunar Priest, mooncake drops and mooncake EXP", "0/1", 1m, 1m, 10,
-            "1 = while the Mid-autumn season is open the Lunar Priest takes Delicate Mooncakes and monsters drop " +
-            "Mooncake Portions; the Icy / Fruit / Tea / Crystal Mooncakes give their EXP bonus and the Bean / Red " +
-            "Mooncakes their EXP whenever used. 0 = none of it (the mooncakes do nothing, as before)."),
+            "Runs the Mid-autumn event while its season is open. On: the Lunar Priest takes " +
+            "Delicate Mooncakes, monsters drop Mooncake Portions and the mooncakes give their EXP " +
+            "and EXP bonuses when used. Off: none of it; the mooncakes do nothing. Season dates " +
+            "are set on the Events & notices page."),
         Absolute(PortionPercentKey, "Mid-autumn: Mooncake Portion drop chance", "%", 5m, 100m, 11,
-            "While Mid-autumn is open, each monster killed anywhere drops one Mooncake Portion (random of the six) " +
-            "this often (GENERATED). Six of a kind compound into a Mooncake (forge Gems tab)."),
+            "Chance that any monster kill drops one Mooncake Portion while Mid-autumn is open. " +
+            "Six of a kind combine into a Mooncake on the forge's Gems tab. Our own value: the " +
+            "original is unknown."),
         Absolute(DelicatePercentKey, "Mid-autumn: Delicate Mooncake drop chance", "%", 1m, 100m, 12,
-            "Chance of a Delicate Mooncake (the Lunar Priest's item) from the same monsters (GENERATED)."),
+            "Chance that any monster kill drops a Delicate Mooncake, the item the Lunar Priest " +
+            "takes, while Mid-autumn is open. Our own value: the original is unknown."),
         Absolute(ExperiencePerLevelKey, "Mid-autumn: Lunar Priest EXP per cake per level", "EXP", 1_000m, 1_000_000m, 13,
-            "Character EXP for one Delicate Mooncake = this x character level (GENERATED). 5 cakes pay as 6, 10 as 15. " +
-            "The events EXP rate applies on top."),
+            "EXP the Lunar Priest pays for one Delicate Mooncake, per character level. 5 cakes " +
+            "pay as 6 and 10 as 15. The 'Event NPC EXP & Talent' setting multiplies it."),
         Absolute(TalentPointsKey, "Mid-autumn: Lunar Priest Talent Points per cake", "TP", 10m, 10_000m, 14,
-            "Talent Points for one Delicate Mooncake (GENERATED). 5 cakes pay as 6, 10 as 15."),
+            "Talent Points the Lunar Priest pays for one Delicate Mooncake. 5 cakes pay as 6 and " +
+            "10 as 15."),
         Absolute(PetExperiencePerLevelKey, "Mid-autumn: Lunar Priest pet EXP per cake per level", "EXP", 2_000m,
             1_000_000m, 15,
-            "Pet EXP for one Delicate Mooncake = this x character level, to the summoned pet (GENERATED). No pet out " +
-            "= the priest refuses and keeps nothing."),
+            "Pet EXP the Lunar Priest pays for one Delicate Mooncake, per character level, to the " +
+            "summoned pet. With no pet out, the priest refuses and keeps nothing."),
         Absolute(ZodiacEnergyKey, "Mid-autumn: Lunar Priest Zodiac energy per cake", "energy", 20m, 10_000m, 16,
-            "Zodiac energy for one Delicate Mooncake, up to the storage limit of the character's Zodiac level " +
-            "(GENERATED). A full store refuses the exchange and keeps the cakes.")
+            "Zodiac energy the Lunar Priest pays for one Delicate Mooncake. With a full energy " +
+            "store, the priest refuses and keeps nothing.")
     ];
 }

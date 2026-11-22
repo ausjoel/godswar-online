@@ -135,7 +135,8 @@ internal sealed partial class GameClientHandler
             ClassSuitWireOperation.ExchangeTierOne or
                 ClassSuitWireOperation.UpgradeTierTwo or
                 ClassSuitWireOperation.UpgradeTierThree or
-                ClassSuitWireOperation.UpgradeTierFour => 2,
+                ClassSuitWireOperation.UpgradeTierFour or
+                ClassSuitWireOperation.UpgradeTierBeyond => 2, // B22 G2
             ClassSuitWireOperation.AddClassAttribute or
                 ClassSuitWireOperation.DeleteClassAttribute => 3,
             _ => 0

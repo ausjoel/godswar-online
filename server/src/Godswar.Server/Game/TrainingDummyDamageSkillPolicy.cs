@@ -55,6 +55,22 @@ internal static class TrainingDummyDamageSkillPolicy
             SkillCombatResolver.IsHostileMonsterSelfAreaSkill,
             allowCastTime);
 
+    // B22 B23-F: the Warrior / Champion / Priest class fields (ground target) on the PvP pass only.
+    public static bool IsAuthoritativeGroundField(
+        GameplayRuntimeCatalogs catalogs,
+        in SkillCombatDefinition skill) =>
+        Godswar.Server.Application.Combat.ClassFieldSkills.IsField(skill.SkillId) &&
+        IsAuthoritative(catalogs, skill, SkillCombatResolver.IsHostileMonsterGroundAreaSkill, allowCastTime: true);
+
+    public static TrainingDummySkillRejectionReason ValidateGroundField(
+        GameplayRuntimeCatalogs catalogs,
+        in SkillCombatDefinition skill,
+        byte attackerProfession) =>
+        Godswar.Server.Application.Combat.ClassFieldSkills.IsField(skill.SkillId)
+            ? Validate(catalogs, skill, attackerProfession,
+                SkillCombatResolver.IsHostileMonsterGroundAreaSkill, allowCastTime: true)
+            : TrainingDummySkillRejectionReason.UnsupportedSkill;
+
     public static bool IsSupportedScalar(
         GameplayRuntimeCatalogs catalogs,
         in SkillCombatDefinition skill,

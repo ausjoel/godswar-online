@@ -127,7 +127,7 @@ internal static class ZodiacSkillGridSelectionCatalog
         }
 
         var first = SkillFamilyFirstRuntimeId(skillKind);
-        return runtimeSkillId >= first && runtimeSkillId <= first + 4;
+        return runtimeSkillId >= first && runtimeSkillId <= SkillLevelExtension.LastIdOfFamily(first); // B22: levels 6-10
     }
 
     public static int RowStart(int gridIndex)

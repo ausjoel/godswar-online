@@ -201,9 +201,7 @@ internal sealed class AccountAuthenticationService :
                     cancellationToken);
         }
 
-        await _presence.MarkAccountOnlineAsync(
-            account.Id,
-            cancellationToken);
+        // W14: no login_status write here; the game session sets and clears it.
         return new AccountAuthenticationResult(
             AccountAuthenticationStatus.Accepted,
             account,
@@ -267,9 +265,7 @@ internal sealed class AccountAuthenticationService :
                     cancellationToken);
         }
 
-        await _presence.MarkAccountOnlineAsync(
-            stored.Account.Id,
-            cancellationToken);
+        // W14: no login_status write here; the game session sets and clears it.
         return new AccountAuthenticationResult(
             AccountAuthenticationStatus.Accepted,
             stored.Account,
@@ -329,9 +325,7 @@ internal sealed class AccountAuthenticationService :
             }
         }
 
-        await _presence.MarkAccountOnlineAsync(
-            stored.Account.Id,
-            cancellationToken);
+        // W14: no login_status write here; the game session sets and clears it.
         return new AccountAuthenticationResult(
             AccountAuthenticationStatus.Accepted,
             stored.Account,

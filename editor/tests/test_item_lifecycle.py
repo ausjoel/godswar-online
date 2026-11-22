@@ -34,7 +34,7 @@ class ItemLifecycleTests(unittest.TestCase):
         for key in lifecycle.translations():
             row = rows[key]
             self.assertTrue(row['generated_translation'])
-            self.assertIn('GENERATED', row['sub'])
+            self.assertIn('Our translation', row['sub'])
             self.assertNotIn('cn', row['flags'].split())
             self.assertTrue(row['name'].isascii() or key in ('4477', '4478'))
 

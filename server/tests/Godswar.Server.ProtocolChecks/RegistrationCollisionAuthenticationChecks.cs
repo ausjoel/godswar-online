@@ -51,10 +51,11 @@ internal static class RegistrationCollisionAuthenticationChecks
                 1,
                 store.CredentialReplacementCount,
                 "plaintext collision is replaced through credential CAS");
+            // W14 (reversed on purpose): authentication no longer sets the login flag; the game session does.
             Check.Equal(
-                1,
+                0,
                 store.MarkOnlineCount,
-                "accepted collision marks the account online once");
+                "W14: accepted collision leaves the login flag to the game session");
             Check.True(
                 PasswordVerifierRecord.TryParse(
                     store.StoredVerifier,

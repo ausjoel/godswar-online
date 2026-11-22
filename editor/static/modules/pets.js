@@ -83,14 +83,56 @@
     if (same) S.bar.unset(bk); else S.bar.set(bk, { label, from: kind === "p" ? presText(from) : from, to: kind === "p" ? presText(to) : to, field, applies: "next_login" });
     if (kind === "f" && (key === "level" || key === "aptitude")) drawSavvy();
     if (kind === "s" || kind === "g") drawSavvy();
+    scheduleLegal();
+  }
+  function pendingFields() {
+    const fields = Object.assign({}, S.pend.fields);
+    if (Object.keys(S.pend.savvy).length) fields.savvy = Object.assign({}, S.pend.savvy);
+    if (Object.keys(S.pend.growth).length) fields.growth = Object.assign({}, S.pend.growth);
+    return fields;
+  }
+
+  // ------------------------------------------------------------------ "legal pet" mode: what real merges / rebirths could reach
+  const LEGAL_KEY = "gw.pets.legal";
+  function legalOn() { if (S.legal === undefined) { try { S.legal = localStorage.getItem(LEGAL_KEY) === "1"; } catch (e) { S.legal = false; } } return S.legal; }
+  function setLegal(on) { S.legal = !!on; try { localStorage.setItem(LEGAL_KEY, on ? "1" : "0"); } catch (e) { /* private window */ } }
+  function scheduleLegal() {
+    if (!S || !legalOn() || !S.legalBox) return;
+    clearTimeout(S.legalT);
+    S.legalT = setTimeout(refreshLegal, 300);
+  }
+  async function refreshLegal() {
+    const p = pet(), box = S.legalBox;
+    if (!p || !box) return;
+    const seq = (S.legalSeq = (S.legalSeq || 0) + 1);
+    let r;
+    try { r = await S.ctx.api("legal/" + S.ctx.cid, { pet: p.id, fields: pendingFields() }); }
+    catch (e) { if (seq === S.legalSeq) GW.clear(box).append(h("div", { class: "tt-bad" }, e.message)); return; }
+    if (seq !== S.legalSeq || box !== S.legalBox) return;
+    const L = r.limits;
+    GW.clear(box).append(
+      ...r.checks.map(x => h("div", { class: x.level === "error" ? "tt-bad" : x.level === "warn" ? "pt-legalwarn" : "gw-good" },
+        (x.level === "error" ? "Server refuses: " : x.level === "warn" ? "Not reachable in game: " : "Legal: ") + x.msg)),
+      h("div", { class: "pt-legallim gw-dim" },
+        "Reachable with " + p.completed_pet_merges + " merge(s) and " + p.completed_rebirths + " rebirth(s): Basic total up to " + L.basic_total_max +
+        " (hatch " + L.basic_hatch + " + " + L.per_merge.savvy + " per stat per merge) · rank up to " + L.rank_max + " (hatch " + L.hatch_ranks.join(" / ") +
+        " + " + L.per_merge.rank + " per merge) · growth acceleration " + L.accel[0] + " - " + L.accel[1] + " per stat (Phoenix " + L.phoenix.join(" - ") +
+        ") · level 1 - " + L.level_max + " · max energy " + L.energy + ". Use the Simulator tab to build the merges and rebirths."));
+  }
+  function legalSection() {
+    const on = legalOn();
+    const tog = h("button", { class: "gw-chipbtn" + (on ? " on" : ""), type: "button", role: "switch", "aria-checked": on ? "true" : "false",
+      "data-help": "Legal pet mode: checks the pet against what real Pet Manager merges, rebirths and items can produce from its hatch (Basic, rank, growth acceleration, energy, skills with no skill book, Trait needs). Warnings only: saving still works.",
+      onclick: () => { setLegal(!legalOn()); render(); } }, on ? "Legal pet mode: on" : "Legal pet mode: off");
+    S.legalBox = on ? h("div", { class: "pt-legal", role: "status", "aria-live": "polite" }, h("span", { class: "gw-dim" }, "checking ...")) : null;
+    if (on) setTimeout(refreshLegal, 0);
+    return h("div", { class: "pt-sec" }, h("div", { class: "pt-row" }, tog), S.legalBox);
   }
   const presText = p => p ? [p.carried ? "carried" : "", p.summoned ? "summoned" : "", p.contributes ? "merged into owner" : ""].filter(Boolean).join(", ") || "in the shed" : "";
   async function savePending() {
     const p = pet();
     if (!p) return null;
-    const fields = Object.assign({}, S.pend.fields);
-    if (Object.keys(S.pend.savvy).length) fields.savvy = Object.assign({}, S.pend.savvy);
-    if (Object.keys(S.pend.growth).length) fields.growth = Object.assign({}, S.pend.growth);
+    const fields = pendingFields();
     if (S.pend.presence) fields.presence = S.pend.presence;
     try {
       const r = await S.ctx.api("pet/" + S.ctx.cid + "/edit", { pet: p.id, revision: p.revision, fields });
@@ -108,20 +150,21 @@
     const head = h("div", { class: "pt-head" },
       h("span", { class: "gw-chip " + (d.writable ? "login" : "never"), "data-help": "The database this editor writes. A copy is safe to experiment on." }, "database " + d.database),
       h("span", { class: "gw-chip " + (d.live.available ? "now" : "never"), "data-help": d.live.available
-        ? "The game server offers live edits (round-2). For this page: mounts given to or removed from the bag reach an online player at once. Pets have no live operation in the game server."
+        ? "The game server can change characters while they are online. For this page: mounts given to or removed from the bag reach an online player at once. Pets have no live operation in the game server."
         : "The game server does not offer live edits (stock server). Everything here is a database edit for a logged-out character; it shows at the next login." },
         d.live.available ? "live edits: bag items" : "no live edits"),
       h("span", { class: "gw-dim" }, ch.name + " · Lv " + ch.level + " " + (ch.class || "") + " · " + ch.owned_pets + " pet" + (ch.owned_pets === 1 ? "" : "s") + " · " + d.mounts.items.length + " mount item" + (d.mounts.items.length === 1 ? "" : "s")));
     const tabs = h("div", { class: "pt-tabs", role: "tablist" },
-      ["pets", "mounts"].map(t => h("button", { class: "gw-tabx" + (S.tab === t ? " on" : ""), type: "button", role: "tab", "aria-selected": S.tab === t ? "true" : "false",
+      ["pets", "sim", "mounts"].map(t => h("button", { class: "gw-tabx" + (S.tab === t ? " on" : ""), type: "button", role: "tab", "aria-selected": S.tab === t ? "true" : "false",
         onclick: async () => { if (S.tab === t) return; if (S.bar.size && !await GW.confirm({ title: "Unsaved changes", message: "Discard the unsaved pet changes?", ok: "Discard" })) return; resetPending(); S.tab = t; render(); } },
-        t === "pets" ? "Pets" : "Mounts")));
+        t === "pets" ? "Pets" : t === "sim" ? "Merge & rebirth simulator" : "Mounts")));
     S.root.append(head, tabs);
     if (blocked()) S.root.append(h("div", { class: "gw-online " + (online() ? "on" : "warn") + " pt-block" }, S.tab === "mounts" && online() && d.writable
       ? (d.live.bag_add ? ch.name + " is online. Giving a mount or gear to the bag and deleting one from the bag go live (the game server does it and the player sees it at once). The riding slot, gear slots, quality and other places need the character logged out" + (d.live.kick ? ": use 'Kick to edit everything' on the banner." : ".")
         : ch.name + " is online. Live edits arrive with the round-2 server update; this character must be logged out to change mounts.")
       : blocked()));
-    if (S.tab === "pets") renderPets(); else renderMounts();
+    S.legalBox = null;
+    if (S.tab === "pets") renderPets(); else if (S.tab === "sim") renderSim(); else renderMounts();
     S.root.append(S.bar.el);
   }
 
@@ -231,6 +274,7 @@
     const sec = (title, ...kids) => h("div", { class: "pt-sec" }, h("div", { class: "pt-sectitle" }, title), ...kids);
     const win = h("section", { class: "gw-frame-normalwindow gw-win pt-detail" + (ro ? " pt-ro" : "") }, h("div", { class: "gw-wtitle" }, "Pet details"));
     if (p.sealed) win.append(h("div", { class: "gw-online warn" }, "Read-only: this pet is " + p.activity_state + " (packed in an item, dispatched or working). The server's seal, dispatch and work commands own it."));
+    win.append(legalSection());
 
     // ---- facts
     const nameIn = h("input", { class: "pt-input", type: "text", maxlength: 31, value: p.name, "aria-label": "pet name", "data-field": F("name"),
@@ -268,7 +312,9 @@
       bar(p, "remaining_lifetime", "Lifetime", Math.max(Number(p.max_lifetime) || 1500, Number(p.remaining_lifetime) || 0), "life left; the species' bar is full at " + GW.fmt(p.max_lifetime) + " (max " + GW.fmt(wire.remaining_lifetime[1]) + ")", "life", wire.remaining_lifetime[1]),
       bar(p, "current_energy", "Energy", null, "spent while merged into the owner; merge needs full energy", "en"))),
       h("div", { class: "pt-row" }, GW.numberField({ field: F("maximum_energy"), label: "Max energy", value: num(p.maximum_energy), min: 1, max: 100000,
-        onChange: (v, ok) => { if (ok && v !== null) setPend("f", "maximum_energy", p.maximum_energy, v, "max energy", F("maximum_energy")); } })));
+        onChange: (v, ok) => { if (ok && v !== null) setPend("f", "maximum_energy", p.maximum_energy, v, "max energy", F("maximum_energy")); } }),
+        h("span", { class: Number(p.maximum_energy) === 100 ? "gw-dim pt-note" : "pt-legalwarn pt-note", "data-help": "Every pet has max energy 100: both hatch inserts write 100 and nothing in the server changes it. Energy is a percentage; the game always shows it on a fixed 0-1800 scale, so a larger maximum looks the same but owner Merge drains 1 point per 3 s and recharges 5 per 6 s, i.e. it lasts longer." },
+          Number(p.maximum_energy) === 100 ? "100 for every pet (normal)" : "normal is 100: more makes owner Merge last longer")));
 
     // ---- talents
     const aptRow = d.aptitudes.find(a => a.id === aptNow) || {};
@@ -298,7 +344,7 @@
       nf("level", "Level", { min: Number(d.settings.minimum_level || 1), max: Number(d.settings.maximum_level || 120) }),
       h("span", { class: "gw-dim pt-note" }, "Added savvy is recomputed: (growth + acceleration) x level."),
       nf("experience", "Current Exp", { min: 0, max: U32 }),
-      h("span", { class: "gw-dim pt-note", "data-help": "pet_content_experience_steps: EXP the pet needs to reach the next level (published pet content)." },
+      h("span", { class: "gw-dim pt-note", "data-help": "EXP the pet needs to reach the next level." },
         "Upgrade Exp: " + (nextReq ? GW.fmt(nextReq) : (req ? GW.fmt(req) : "max level"))),
       nf("rank", "Rank", { min: 0, max: Number(d.settings.maximum_rank || 655.35), decimals: 2, step: 0.01 }),
       h("span", { class: "gw-dim pt-note" }, "Rank picks each skill's effect step (its Restrict list) and is shown x100 in 16 bits (0 - 655.35)."),
@@ -487,8 +533,92 @@
     const m = modal(body, { title: "Skill cell " + (s.slot_index + 1) + ": " + s.name });
   }
 
-  // the pet-skill library: every pet skill, filtered for this pet, with family / tier / Trait facts
+  // the effect of one tier at a pet rank: the highest Restrict (rank) not above it picks Values (absolute, not added)
+  function effectAt(e, rank) {
+    const r = (e && e.restrict) || [], v = (e && e.values) || [];
+    let out = null;
+    for (let i = 0; i < r.length; i++) if (Number(rank) >= r[i]) out = { step: i + 1, steps: r.length, restrict: r[i], value: v[i] };
+    return out;
+  }
+
+  // the skill picker: one row per family (the combined name, no I-VI), click it to pick the level (tier)
   async function learn(p, cell) {
+    if (!await guard()) return;
+    const lib = await library();
+    const have = new Map(p.skills.map(s => [s.type, s]));
+    const opt = { fits: true, q: "" };
+    const starterType = ((lib.byId.get(Number((lib.species.find(x => x.id === Number(p.species_id)) || {}).starter)) || {}).type);
+    const famOk = f => !f.species || f.species.includes(Number(p.species_id)) || f.type === starterType;
+    const heads = f => Object.entries(f.tiers).map(([t, id]) => [Number(t), lib.byId.get(Number(id)) || { id: Number(id), name: "#" + id }]);
+    const fams = [...lib.fam.values()].sort((a, b) => (have.has(b.type) - have.has(a.type)) || String(a.name).localeCompare(String(b.name)));
+    const list = h("div", { class: "pt-famlist", role: "listbox", "aria-label": "pet skill families" });
+    const detail = h("div", { class: "pt-libdetail" }, h("p", { class: "gw-dim" }, "Pick a skill on the left, then its level (tier I, II, ...)."));
+    const expF = GW.numberField({ field: "character_pet_skills.skill_experience", label: "Skill EXP", value: 0, min: 0, max: 2147483647, slider: false });
+    let sel = null;
+    function drawList() {
+      GW.clear(list);
+      const q = opt.q.trim().toLowerCase();
+      for (const f of fams) {
+        if (opt.fits && !famOk(f)) continue;
+        if (opt.fits && !heads(f).some(([, e]) => e.published !== false)) continue;
+        if (q && !String(f.name).toLowerCase().includes(q) && !heads(f).some(([, e]) => String(e.info || "").toLowerCase().includes(q))) continue;
+        const cur = have.get(f.type);
+        const first = heads(f)[0][1];
+        list.append(h("button", { class: "pt-famrow" + (sel === f.type ? " on" : "") + (cur ? " pt-has" : ""), type: "button", role: "option", "aria-selected": sel === f.type ? "true" : "false",
+          onclick: () => { sel = f.type; drawList(); showFam(f, cur ? Number(cur.tier) : null); } },
+          GW.icon(first.sprite, { name: f.name }), h("span", { class: "pt-famname" }, f.name),
+          h("span", { class: "pt-famtiers" }, heads(f).map(([t]) => h("span", { class: "pt-tierpip" + (cur && Number(cur.tier) === t ? " cur" : "") + ((f.books || {})[t] && (f.books || {})[t].length ? "" : " nobook") }, ROMAN[t] || t))),
+          f.only ? h("span", { class: "gw-dim pt-famonly" }, f.only) : null));
+      }
+      if (!list.children.length) list.append(h("p", { class: "gw-dim" }, "No skill matches."));
+    }
+    function showFam(f, tier) {
+      const tiers = heads(f);
+      const t = tier || tiers[0][0];
+      const e = (tiers.find(([x]) => x === t) || tiers[0])[1];
+      const cur = have.get(f.type);
+      const eff = effectAt(e, p.rank);
+      const trait = (e.trait || []).map((v, i) => [v, p.stats[i]]).filter(([v]) => v > 0);
+      const books = (f.books || {})[t] || [];
+      const chips = h("span", { class: "pt-seg" }, tiers.map(([x, ex]) => h("button", { class: "gw-chipbtn" + (x === t ? " on" : ""), type: "button", "data-tip-type": "petskill", "data-tip-id": String(ex.id),
+        onclick: () => showFam(f, x) }, ROMAN[x] || x)));
+      GW.clear(detail).append(...[
+        h("div", { class: "pt-row" }, h("b", null, f.name), chips),
+        h("div", { class: "pt-facts" },
+          lab(null, "Level:", "Pet_Skill.xml Priority: the skill-book tier. The game stores the tier's first id with rank = tier; learning tier N needs tier N-1 first (a skill book each)."), val(e.name + " (tier " + (ROMAN[t] || t) + " of " + tiers.length + ")"),
+          lab(null, "Effect now:", "At this pet's rank (" + p.rank + "): the highest Restrict step not above the rank gives the absolute value. Rank rises only by merging pets."),
+          val(eff ? eff.value + " (step " + eff.step + " of " + eff.steps + ", from rank " + eff.restrict + ")" : "-"),
+          lab(null, "Trait need:", "The savvy the game asks for when the book is used (Agility ... Luck). A learned skill keeps working if savvy drops later."),
+          h("span", null, trait.length ? trait.map(([v, st]) => h("span", { class: (Number(st && st.total) >= v ? "gw-good" : "tt-bad") + " pt-trait" }, (st ? st.stat_name : "?") + " " + v)) : val("none")),
+          lab(null, "Skill book:", "The item that teaches this tier in game (ItemBaseAttribute.xml PetSkill). No book = not reachable in game (except the species' starter family)."),
+          val(books.length ? books.map(x => "#" + x).join(", ") : "none", books.length || f.type === starterType ? "" : "tt-bad"),
+          lab(null, "Only for:"), val(f.only || "any pet", famOk(f) ? "" : "tt-bad"),
+          lab(null, "Server:"), val(e.published === false ? "not published (no effect)" : "published", e.published === false ? "tt-bad" : "")),
+        h("div", { class: "pt-libtip" }),
+        cur ? h("div", { class: cur.tier === t ? "gw-dim" : "gw-online warn" }, cur.tier === t ? "The pet has this level now (cell " + (cur.slot_index + 1) + ")." : "The pet has " + cur.name + " in cell " + (cur.slot_index + 1) + ": this replaces it there (one of each type).") : null,
+        h("div", { class: "pt-row" }, expF,
+          h("button", { class: "gw-btnx", type: "button", disabled: cur && cur.tier === t && cur.skill_id === e.id ? true : null,
+            onclick: async () => { m.close(); const body = { action: "set", skill: e.id, experience: expF.value || 0 }; if (cell !== null && !cur) body.cell = cell; await skillWrite(p, body, (cur ? "set " : "learn ") + e.name); } },
+            cur ? "Set to " + (ROMAN[t] || t) : cell === null ? "Learn " + e.name : "Put " + e.name + " in cell " + (cell + 1)))].filter(Boolean));
+      GW.render.tooltip("petskill", e.id).then(tip => { const box = detail.querySelector && detail.querySelector(".pt-libtip"); if (box) GW.clear(box).append(tip); }).catch(() => {});
+    }
+    const search = h("input", { class: "pt-input", type: "search", placeholder: "search skills", "aria-label": "search skills", oninput: () => { opt.q = search.value; drawList(); } });
+    const fitsBtn = h("button", { class: "gw-chipbtn on", type: "button", "data-help": "Hides other species' families and unpublished skills.",
+      onclick: () => { opt.fits = !opt.fits; fitsBtn.classList.toggle("on", opt.fits); drawList(); } }, "Only skills a " + p.species_name + " can learn");
+    drawList();
+    if (cell !== null) { const s = p.skills.find(x => x.slot_index === cell); if (s) { const f = lib.fam.get(s.type); if (f) { sel = f.type; drawList(); showFam(f, Number(s.tier)); } } }
+    const body = h("div", { class: "pt-libwrap" },
+      h("div", { class: "pt-row" }, search, fitsBtn,
+        h("button", { class: "gw-chipbtn", type: "button", "data-help": "The old view: every one of the 1,655 pet-skill ids in a grid.", onclick: () => { m.close(); learnById(p, cell); } }, "Every id ..."),
+        h("span", { class: "gw-dim" }, "Pips: the levels; a struck-out pip has no skill book in game.")),
+      h("div", { class: "pt-libcols" }, list, detail),
+      h("div", { class: "pt-row pt-libfoot" }, h("button", { class: "gw-btnx", type: "button", onclick: () => m.close() }, "Close")));
+    const m = modal(body, { title: (cell === null ? "Teach " : "Change cell " + (cell + 1) + " of ") + p.name + ": pet skills", full: true });
+    setTimeout(() => search.focus && search.focus(), 30);
+  }
+
+  // the pet-skill library by id: every pet skill, filtered for this pet, with family / tier / Trait facts
+  async function learnById(p, cell) {
     if (!await guard()) return;
     const lib = await library();
     const have = new Map(p.skills.map(s => [s.type, s]));
@@ -612,6 +742,244 @@
     await write("pet/" + S.ctx.cid + "/delete", { pet: p.id, revision: p.revision }, "delete pet " + p.name);
   }
 
+  // ================================================================== SIMULATOR (the Pet Manager's Merge and Rebirth)
+  const STATN = ["Agility", "Strength", "Accuracy", "Technique", "Wisdom", "Luck"];
+  const PRESET = { min: 0, avg: 500, max: 1000 };
+  function simFromPet(p) {
+    const st = (p ? p.stats : []).slice().sort((a, b) => a.stat_code - b.stat_code);
+    const col = k => st.length === 6 ? st.map(s => fmtg(s[k])) : ["10", "10", "10", "10", "10", "10"];
+    return { pet: p ? p.id : null, species: p ? Number(p.species_id) : 1, level: p ? Number(p.level) : 30, rank: p ? fmt2(p.rank) : "0.00",
+      basic: col("initial_savvy"), growth: col("base_growth_rate"), accel: col("growth_acceleration"),
+      completed: p ? Number(p.completed_rebirths) : 0, contract: p ? Number(p.soul_contract_stage) : 0, left: p ? Number(p.rebirths_remaining) : 0, edited: false };
+  }
+  function simState() {
+    if (!S.sim || (S.sim.primary.pet !== (pet() || {}).id && !S.sim.primary.edited)) {
+      const p = pet(), pri = simFromPet(p);
+      const old = S.sim || {};
+      S.sim = { primary: pri,
+        partner: old.partner || Object.assign(simFromPet(p), { level: 120, accel: ["0", "0", "0", "0", "0", "0"] }),
+        merge: old.merge || { n: 10, spirits: 0, pos: [500, 500, 500, 500, 500, 500], rpos: 500 },
+        rebirth: old.rebirth || { n: 1, spirits: 0, pos: [500, 500, 500, 500, 500, 500], level: 120 } };
+    }
+    return S.sim;
+  }
+  async function simContent() {
+    if (!S.simC) S.simC = await S.ctx.api("sim/content");
+    return S.simC;
+  }
+  function scheduleSim() { clearTimeout(S.simT); S.simT = setTimeout(runSim, 250); }
+  const numIn = (value, label, onSet, cls) => {
+    const el = h("input", { class: "pt-input pt-num " + (cls || ""), type: "text", inputmode: "decimal", value: String(value), "aria-label": label,
+      oninput: () => { const v = el.value.trim(); const ok = v !== "" && isFinite(Number(v)) && Number(v) >= 0; el.classList.toggle("bad", !ok); if (ok) { onSet(v); scheduleSim(); } } });
+    return el;
+  };
+  function slider(value, label, onSet, disabled) {
+    const out = h("span", { class: "pt-slval" }, Math.round(value / 10) + "%");
+    const el = h("input", { class: "pt-slider", type: "range", min: 0, max: 1000, step: 10, value: String(value), "aria-label": label, disabled: disabled ? true : null,
+      "data-help": "Where in this roll's range the result lands: 0% = the minimum, 50% = the average (the expected value of the server's uniform roll), 100% = the maximum.",
+      oninput: () => { onSet(Number(el.value)); out.textContent = Math.round(Number(el.value) / 10) + "%"; scheduleSim(); } });
+    return h("span", { class: "pt-slwrap" }, el, out);
+  }
+  function petCard(title, x, partner, c) {
+    const rows = STATN.map((n, i) => h("tr", null, h("td", { class: "gw-label" }, n),
+      h("td", null, numIn(x.basic[i], title + " " + n + " Basic", v => { x.basic[i] = v; x.edited = true; })),
+      h("td", null, numIn(x.growth[i], title + " " + n + " growth", v => { x.growth[i] = v; x.edited = true; })),
+      h("td", null, numIn(x.accel[i], title + " " + n + " acceleration", v => { x.accel[i] = v; x.edited = true; })),
+      h("td", { class: "gw-value pt-simadded" })));
+    const spSel = h("select", { class: "pt-input", "aria-label": title + " species", onchange: () => { x.species = Number(spSel.value); x.edited = true; scheduleSim(); } },
+      c.species.map(s => h("option", { value: String(s.id), selected: s.id === x.species ? true : null }, s.name + " (x" + s.factor + ")")));
+    const card = h("div", { class: "gw-frame-simplewindow pt-simcard" },
+      h("div", { class: "pt-sectitle" }, title),
+      h("div", { class: "pt-row" }, partner ? h("label", null, "Species ", spSel) : h("span", { class: "gw-dim" }, x.pet ? "from " + ((pet() || {}).name || "the pet") + (x.edited ? " (edited here)" : "") : "no pet: type the numbers"),
+        h("label", null, "Level ", numIn(x.level, title + " level", v => { x.level = Math.min(c.max_level, Math.max(1, Math.round(Number(v)))); x.edited = true; })),
+        h("label", null, "Rank ", numIn(x.rank, title + " rank", v => { x.rank = v; x.edited = true; }))),
+      h("table", { class: "pt-svt" }, h("tr", null, h("th"), h("th", { "data-help": "Basic Savvy (hatch + merge gains). Merge compares the pet's Basic with the partner's Basic + Added / 5." }, "Basic"),
+        h("th", { "data-help": "Base growth rate (the nature's roll)." }, "Growth"), h("th", { "data-help": "Growth acceleration: the sum of all rebirth rolls (Phoenix redraws it)." }, "Accel."),
+        h("th", { "data-help": "Added = level x (growth + acceleration)." }, "Added")), rows));
+    card._added = rows.map(r => r.children[4]);
+    const drawAdded = () => card._added.forEach((td, i) => { td.textContent = (Number(x.level) * (Number(x.growth[i]) + Number(x.accel[i]))).toFixed(2); });
+    drawAdded(); card._draw = drawAdded;
+    return card;
+  }
+
+  async function renderSim() {
+    const box = h("div", { class: "pt-sim" }, h("p", { class: "gw-dim" }, "Loading the Pet Manager tables ..."));
+    S.root.append(box);
+    let c;
+    try { c = await simContent(); } catch (e) { GW.clear(box).append(h("div", { class: "tt-bad" }, e.message)); return; }
+    const st = simState(), d = S.data, p = pet();
+    const pick = h("select", { class: "pt-input", "aria-label": "pet to simulate", onchange: () => { S.sel = Number(pick.value); S.sim.primary = simFromPet(pet()); render(); } },
+      d.pets.map(x => h("option", { value: String(x.id), selected: p && x.id === p.id ? true : null }, x.name + " · " + x.species_name + " Lv " + x.level)));
+    const priCard = petCard("This pet", st.primary, false, c);
+    const parCard = petCard("Fake partner (merged away)", st.partner, true, c);
+    const mg = st.merge, rb = st.rebirth;
+    const spChips = (o, key) => h("span", { class: "pt-seg" }, [0, 1, 2, 3, 4, 5].map(n => h("button", { class: "gw-chipbtn" + (o.spirits === n ? " on" : ""), type: "button",
+      onclick: () => { o.spirits = n; render(); } }, String(n))));
+    const presets = (o, withRank) => h("span", { class: "pt-seg" }, Object.entries(PRESET).map(([k, v]) => h("button", { class: "gw-chipbtn", type: "button",
+      onclick: () => { o.pos = o.pos.map(() => v); if (withRank) o.rpos = v; render(); } }, k === "min" ? "Min" : k === "avg" ? "Avg" : "Max")));
+    const mergeCtl = h("div", { class: "gw-frame-simplewindow pt-simcard" },
+      h("div", { class: "pt-sectitle", "data-help": "Pet Manager > Merge (client: Inosculate). Both pets level " + c.merge_min_level + "+; the partner is consumed. Each merge rolls each stat separately; gains shrink as the pet's Basic catches up with the partner." }, "Merges"),
+      h("div", { class: "pt-row" }, h("label", null, "How many ", numIn(mg.n, "number of merges", v => { mg.n = Math.min(1000, Math.max(0, Math.round(Number(v)))); })),
+        h("span", { "data-help": "Merged Spirit (#" + c.items.merge_spirit + ") or, for a bound pet, Fused Harpyia (#" + c.items.merge_spirit_bound + "), 0-5 per merge. They raise each roll's minimum to 10-50% of the maximum." }, "Merged Spirits "), spChips(mg)),
+      h("div", { class: "pt-row" }, h("span", { class: "gw-label" }, "Rolls land at:"), presets(mg, true)),
+      h("div", { class: "pt-sliders" }, STATN.map((n, i) => h("label", { class: "pt-slrow" }, h("span", null, n), slider(mg.pos[i], n + " merge roll", v => { mg.pos[i] = v; }))),
+        h("label", { class: "pt-slrow" }, h("span", null, "Rank"), slider(mg.rpos, "rank merge roll", v => { mg.rpos = v; }, mg.spirits === 0)),
+        mg.spirits === 0 ? h("span", { class: "gw-dim pt-note" }, "With no spirit the rank gain is one fixed value (no range).") : null));
+    const rebCtl = h("div", { class: "gw-frame-simplewindow pt-simcard" },
+      h("div", { class: "pt-sectitle", "data-help": "Pet Manager > Rebirth (client: Resurge). Needs a Soul Contract and a rebirth attempt (water); the pet goes back to level 1 and every stat's growth acceleration rises by the roll. Rank and Basic stay." }, "Rebirths"),
+      h("div", { class: "pt-row" }, h("label", null, "How many ", numIn(rb.n, "number of rebirths", v => { rb.n = Math.min(100, Math.max(0, Math.round(Number(v)))); })),
+        h("span", { "data-help": "Rebirth Spirit (#" + c.items.rebirth_spirit + ") or, for a bound pet, Reborn Harpyia (#" + c.items.rebirth_spirit_bound + "), 0-5: the roll's minimum per stat is 0.01 / 0.02 / 0.04 / 0.06 / 0.08 / 0.10, the maximum always 0.20." }, "Rebirth Spirits "), spChips(rb)),
+      h("div", { class: "pt-row" }, h("label", null, "Level afterwards ", numIn(rb.level, "level after the rebirths", v => { rb.level = Math.min(c.max_level, Math.max(1, Math.round(Number(v)))); }))),
+      h("div", { class: "pt-row" }, h("span", { class: "gw-label" }, "Rolls land at:"), presets(rb, false)),
+      h("div", { class: "pt-sliders" }, STATN.map((n, i) => h("label", { class: "pt-slrow" }, h("span", null, n), slider(rb.pos[i], n + " rebirth roll", v => { rb.pos[i] = v; })))));
+    S.simOut = { merge: h("div", { class: "pt-simres" }), rebirth: h("div", { class: "pt-simres" }), cards: [priCard, parCard] };
+    const canApply = p && !blocked() && !p.sealed;
+    const apply = (what) => h("button", { class: "gw-btnx", type: "button", disabled: canApply ? null : true,
+      "data-help": canApply ? "Write the result to " + p.name + ". The server re-runs the same simulation from the pet's SAVED values (not numbers edited here) and writes it in one transaction with the start-up checks; Undo in the change log puts it back." : (blocked() || "Pick a pet first."),
+      onclick: () => applySim(what) }, what === "merge" ? "Apply the merges to " + (p ? p.name : "the pet") : what === "rebirth" ? "Apply the rebirths" : "Apply both");
+    GW.clear(box).append(
+      h("div", { class: "pt-row" }, h("label", null, "Pet ", pick), h("span", { class: "gw-dim" }, "Tables: " + c.source + ". The most one merge adds: " + c.ceiling.savvy + " per stat, " + c.ceiling.rank + " rank.")),
+      h("div", { class: "pt-simcols" },
+        h("div", { class: "pt-simin" }, priCard, parCard),
+        h("div", { class: "pt-simin" }, mergeCtl, S.simOut.merge, rebCtl, S.simOut.rebirth,
+          h("div", { class: "pt-row" }, apply("merge"), apply("rebirth"), apply("both"), st.primary.edited ? h("span", { class: "pt-legalwarn" }, "You edited this pet's numbers here: Apply uses its saved values.") : null))),
+      planCard(c, st));
+    runSim();
+  }
+
+  async function runSim() {
+    if (!S || S.tab !== "sim" || !S.simOut) return;
+    const st = S.sim, out = S.simOut, seq = (S.simSeq = (S.simSeq || 0) + 1);
+    out.cards.forEach(cd => cd._draw && cd._draw());
+    const pri = st.primary, par = st.partner;
+    const mBody = { primary: { basic: pri.basic, rank: pri.rank, level: pri.level },
+      partner: { species: par.species, basic: par.basic, rank: par.rank, level: par.level, growth: par.growth, accel: par.accel },
+      merges: st.merge.n, spirits: st.merge.spirits, savvy_pos: st.merge.pos, rank_pos: st.merge.rpos };
+    const rBody = { pet: { completed: pri.completed, growth: pri.growth, accel: pri.accel, soul_contract_stage: pri.contract, rebirths_remaining: pri.left },
+      rebirths: st.rebirth.n, spirits: st.rebirth.spirits, pos: st.rebirth.pos, level: st.rebirth.level };
+    const [m, r] = await Promise.all([S.ctx.api("sim/merge", mBody).catch(e => ({ error: e.message })), S.ctx.api("sim/rebirth", rBody).catch(e => ({ error: e.message }))]);
+    if (!S || seq !== S.simSeq) return;
+    drawMerge(out.merge, m); drawRebirth(out.rebirth, r, pri);
+    if (out.plan) {
+      const pBody = { primary: { basic: pri.basic, rank: pri.rank, level: pri.level, growth: pri.growth, accel: pri.accel, completed: pri.completed },
+        partner: mBody.partner, merges: Math.min(300, st.merge.n), spirits: st.merge.spirits, rebirths: Math.min(st.rebirth.n, 100 - Number(pri.completed || 0)),
+        rebirth_spirits: st.rebirth.spirits, level: st.rebirth.level, rebirth_pos: Math.round(st.rebirth.pos.reduce((a, b) => a + b, 0) / 6) };
+      const pl = await S.ctx.api("sim/plan", pBody).catch(e => ({ error: e.message }));
+      if (!S || seq !== S.simSeq) return;
+      drawPlan(out.plan, pl);
+    }
+  }
+
+  // ---- B21 item 23: merge-count planner (made-up partner, exact reachable range per merge count, rebirth gains)
+  function planCard(c, st) {
+    const apts = (S.data && S.data.aptitudes) || [];
+    const fx = S.fx || (S.fx = { species: st.partner.species, aptitude: apts.length ? apts[apts.length - 1].id : 1, level: 120, quality: "mid", rebirths: 0 });
+    const spSel = h("select", { class: "pt-input", "aria-label": "made-up partner species", onchange: () => { fx.species = Number(spSel.value); } },
+      c.species.map(s => h("option", { value: String(s.id), selected: s.id === fx.species ? true : null }, s.name + " (x" + s.factor + ")")));
+    const apSel = h("select", { class: "pt-input", "aria-label": "made-up partner nature", onchange: () => { fx.aptitude = Number(apSel.value); } },
+      apts.map(a => h("option", { value: String(a.id), selected: a.id === fx.aptitude ? true : null }, a.name + " (Basic " + a.savvy.join("-") + ", growth " + a.growth.join("-") + ")")));
+    const qSel = h("select", { class: "pt-input", "aria-label": "made-up partner hatch quality", onchange: () => { fx.quality = qSel.value; } },
+      [["min", "Worst hatch"], ["mid", "Middle hatch"], ["max", "Best hatch"]].map(([v, t]) => h("option", { value: v, selected: v === fx.quality ? true : null }, t)));
+    const lv = h("input", { class: "pt-input pt-num", type: "number", min: 1, max: c.max_level, value: String(fx.level), "aria-label": "made-up partner level", onchange: () => { fx.level = Number(lv.value); } });
+    const rbIn = h("input", { class: "pt-input pt-num", type: "number", min: 0, max: c.max_rebirths, value: String(fx.rebirths), "aria-label": "made-up partner rebirths", onchange: () => { fx.rebirths = Number(rbIn.value); } });
+    const make = h("button", { class: "gw-btnx", type: "button", "data-help": "Fill the partner card with a made-up pet hatched the way the server hatches one: Basic and growth in the middle (or at an edge) of the nature's ranges, split evenly over the six stats, and one of the nature's hatch ranks. Rebirths add the average roll (0.11 per stat).",
+      onclick: async () => {
+        try {
+          const f = await S.ctx.api("sim/fictitious", fx);
+          Object.assign(st.partner, { species: f.species, level: f.level, rank: f.rank, basic: f.basic, growth: f.growth, accel: f.accel, edited: true });
+          render();
+        } catch (e) { GW.alert(e.message, "Made-up partner"); }
+      } }, "Use as partner");
+    S.simOut.plan = h("div", { class: "pt-simres" }, h("p", { class: "gw-dim" }, "Planning ..."));
+    return h("div", { class: "gw-frame-simplewindow pt-simcard pt-plan" },
+      h("div", { class: "pt-sectitle", "data-help": "What the pet looks like after 0, 1, 2 ... merges with the partner above (same partner every time), using the merge and rebirth settings above.\n• Range: the lowest and highest result any luck can give (every roll combination).\n• Average: every roll at its middle.\n~ Gains shrink by themselves: each merge closes the gap between the pet and the partner that the next merge feeds on." }, "Merge-count planner"),
+      h("div", { class: "pt-row" }, h("span", { class: "gw-label" }, "Made-up partner:"), h("label", null, "Species ", spSel), h("label", null, "Nature ", apSel), qSel,
+        h("label", null, "Level ", lv), h("label", null, "Rebirths ", rbIn), make),
+      S.simOut.plan);
+  }
+  function drawPlan(box, p) {
+    GW.clear(box);
+    if (p.error) { box.append(h("div", { class: "tt-bad" }, p.error)); return; }
+    const rows = p.merge.rows, n = rows.length - 1;
+    const pickRows = n <= 30 ? rows : rows.filter(r => r.n <= 10 || r.n % 10 === 0 || r.n === n);
+    box.append(planChart(rows),
+      h("table", { class: "pt-svt pt-plantab" },
+        h("tr", null, h("th", null, "Merges"), h("th", { "data-help": "Lowest - highest Basic total any luck can give after this many merges." }, "Basic total (range)"),
+          h("th", { "data-help": "Every roll at its middle." }, "Average"), h("th", { "data-help": "What the average merge at this count adds (all six stats) and that as a share of the first merge's gain." }, "This merge adds"),
+          h("th", null, "Rank (range)"), h("th", null, "Rank avg."), h("th", { "data-help": "Basic + Added at level " + p.merge.level + " (Added does not change with merges)." }, "Shown savvy at Lv " + p.merge.level)),
+        pickRows.map(r => h("tr", null, h("td", null, String(r.n)), h("td", null, r.range.basic_total.join(" - ")), h("td", { class: "gw-value" }, r.avg.basic_total),
+          h("td", null, r.n ? "+" + r.gain + (r.gain_share !== null ? " (" + r.gain_share + "%)" : "") : "-"),
+          h("td", null, r.range.rank.join(" - ")), h("td", null, r.avg.rank), h("td", null, r.visible_total)))));
+    const rr = p.rebirth.rows;
+    if (rr.length > 1) box.append(h("table", { class: "pt-svt pt-plantab" },
+      h("tr", null, h("th", null, "Rebirths"), h("th", null, "Needs Lv"), h("th", null, "Attempt item"), h("th", { "data-help": "Sum of the six stats' Added at level " + p.rebirth.level + "." }, "Added total"),
+        h("th", { "data-help": "Each rebirth adds the same points (one roll of " + p.rebirth.range.join(" - ") + " per stat, here " + p.rebirth.per_rebirth + "); the share of what the pet already had falls after the first." }, "Gain (share)")),
+      rr.map(r => h("tr", null, h("td", null, String(r.n) + (r.model_change ? " (new model)" : "")), h("td", null, r.level_needed ? String(r.level_needed) : "-"),
+        h("td", null, r.water ? r.water.name : "-"), h("td", { class: "gw-value" }, r.added_total), h("td", null, r.gain === null ? "-" : "+" + r.gain + " (" + r.gain_share + "%)")))));
+    box.append(h("div", { class: "gw-dim" }, "End: Basic " + p.end.basic.join(" / ") + " + Added " + p.end.added.join(" / ") + " = shown " + p.end.visible_total + " at Lv " + p.end.level + "; rank " + p.end.rank + " (" + p.end.rank_range.join(" - ") + ")."),
+      ...(p.merge.notes || []).map(x => h("div", { class: "pt-legalwarn" }, x)));
+  }
+  function planChart(rows) {
+    const W = 560, H = 150, P = 28, ns = "http://www.w3.org/2000/svg";
+    const lo = rows.map(r => Number(r.range.basic_total[0])), hi = rows.map(r => Number(r.range.basic_total[1])), av = rows.map(r => Number(r.avg.basic_total));
+    const y0 = Math.min(...lo), y1 = Math.max(...hi, y0 + 1), n = Math.max(1, rows.length - 1);
+    const X = i => P + (W - 2 * P) * i / n, Y = v => H - P + 8 - (H - P) * (v - y0) / (y1 - y0);
+    const svg = document.createElementNS(ns, "svg");
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H); svg.setAttribute("class", "pt-planchart"); svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", "Basic total by merge count: range band and average line");
+    const el = (t, a) => { const e = document.createElementNS(ns, t); Object.entries(a).forEach(([k, v]) => e.setAttribute(k, v)); svg.append(e); return e; };
+    el("polygon", { points: lo.map((v, i) => X(i) + "," + Y(v)).concat(hi.map((v, i) => X(i) + "," + Y(v)).reverse()).join(" "), class: "pt-band" });
+    el("polyline", { points: av.map((v, i) => X(i) + "," + Y(v)).join(" "), class: "pt-line" });
+    el("text", { x: P, y: 12, class: "pt-axis" }).textContent = "Basic total " + y0.toFixed(2) + " - " + y1.toFixed(2);
+    el("text", { x: W - P, y: H - 4, class: "pt-axis", "text-anchor": "end" }).textContent = n + " merges";
+    return svg;
+  }
+  function drawMerge(box, m) {
+    GW.clear(box);
+    if (m.error) { box.append(h("div", { class: "tt-bad" }, m.error)); return; }
+    const first = m.steps[0];
+    box.append(h("table", { class: "pt-svt" },
+      h("tr", null, h("th"), h("th", null, "Basic now"), h("th", { "data-help": "The first merge's roll range for this stat (min - max), then what the slider picks." }, "1st merge"), h("th", null, "Gained"), h("th", null, "Basic after")),
+      STATN.map((n, i) => h("tr", null, h("td", { class: "gw-label" }, n), h("td", null, m.start_basic[i]),
+        h("td", { class: first && Number(first.bounds[i][1]) === 0 ? "tt-bad" : "" }, first ? (Number(first.bounds[i][1]) === 0 ? "nothing (need " + first.need[i] + " more)" : first.bounds[i].join(" - ")) : "-"),
+        h("td", { class: "gw-good" }, "+" + m.gain[i]), h("td", { class: "gw-value pt-tot" }, m.basic[i]))),
+      h("tr", null, h("td", { class: "gw-label" }, "Rank"), h("td", null, m.start_rank), h("td", null, first ? first.rank_bounds.join(" - ") : "-"), h("td", { class: "gw-good" }, "+" + m.rank_gain), h("td", { class: "gw-value pt-tot" }, m.rank))),
+      ...m.notes.map(x => h("div", { class: "pt-legalwarn" }, x)),
+      m.steps.length > 1 ? h("details", { class: "pt-simsteps" }, h("summary", null, "Every merge (" + m.steps.length + ")"),
+        h("table", { class: "pt-svt" }, h("tr", null, h("th", null, "#"), STATN.map(n => h("th", null, n.slice(0, 3))), h("th", null, "Rank")),
+          m.steps.slice(0, 200).map(s => h("tr", null, h("td", null, String(s.n)), s.gains.map((g, i) => h("td", { "data-help": "range " + s.bounds[i].join(" - ") }, "+" + g)), h("td", null, "+" + s.rank_gain))))) : null);
+  }
+  function drawRebirth(box, r, pri) {
+    GW.clear(box);
+    if (r.error) { box.append(h("div", { class: "tt-bad" }, r.error)); return; }
+    box.append(h("table", { class: "pt-svt" },
+      h("tr", null, h("th"), h("th", null, "Accel. now"), h("th", null, "Accel. after"), h("th", { "data-help": "growth + acceleration" }, "Effective growth"), h("th", null, "Added at Lv " + r.level)),
+      STATN.map((n, i) => h("tr", null, h("td", { class: "gw-label" }, n), h("td", null, fmt2(pri.accel[i])), h("td", { class: "gw-good" }, r.accel[i]),
+        h("td", null, (Number(pri.growth[i]) + Number(r.accel[i])).toFixed(2)), h("td", { class: "gw-value pt-tot" }, r.added_at_level[i])))),
+      h("div", { class: "gw-dim" }, "Each rebirth: +" + r.range.join(" to +") + " per stat. After " + r.completed + " rebirth(s) a Phoenix reset would redraw the acceleration at " + r.phoenix.join(" - ") + "."),
+      ...r.notes.map(x => h("div", { class: "pt-legalwarn" }, x)),
+      r.steps.length ? h("details", { class: "pt-simsteps" }, h("summary", null, "Every rebirth (" + r.steps.length + "): level gate, water, model"),
+        h("table", { class: "pt-svt" }, h("tr", null, h("th", null, "#"), h("th", null, "Needs Lv"), h("th", null, "Attempt item"), STATN.map(n => h("th", null, n.slice(0, 3)))),
+          r.steps.map(s => h("tr", null, h("td", null, String(s.n) + (s.model_change ? " (new model)" : "")), h("td", null, String(s.level_needed)), h("td", null, s.water ? s.water.name : "-"),
+            s.increase.map(x => h("td", null, "+" + x)))))) : null);
+  }
+  async function applySim(what) {
+    const p = pet(), st = S.sim;
+    if (!p || !await guard()) return;
+    const par = st.partner;
+    const body = { pet: p.id, revision: p.revision };
+    if (what !== "rebirth" && st.merge.n > 0) body.merge = { partner: { species: par.species, basic: par.basic, rank: par.rank, level: par.level, growth: par.growth, accel: par.accel },
+      merges: st.merge.n, spirits: st.merge.spirits, savvy_pos: st.merge.pos, rank_pos: st.merge.rpos };
+    if (what !== "merge" && st.rebirth.n > 0) body.rebirth = { rebirths: st.rebirth.n, spirits: st.rebirth.spirits, pos: st.rebirth.pos, level: st.rebirth.level };
+    if (!body.merge && !body.rebirth) { GW.alert("Set how many merges or rebirths first.", "Nothing to apply"); return; }
+    const parts = [body.merge ? st.merge.n + " merge(s) with the fake partner (" + st.merge.spirits + " spirit(s))" : "", body.rebirth ? st.rebirth.n + " rebirth(s) (" + st.rebirth.spirits + " spirit(s)), ending at level " + st.rebirth.level : ""].filter(Boolean);
+    if (!await GW.confirm({ title: "Apply to " + p.name + "?", message: "Write the simulated " + parts.join(" and ") + " to " + p.name + ": Basic savvy, rank, merge / rebirth counts, rebirth attempts, growth acceleration, level and Added. Undo in the change log puts it back.", ok: "Apply" })) return;
+    S.sim.primary.edited = false;
+    await write("pet/" + S.ctx.cid + "/apply-sim", body, "simulated " + parts.join(" + "));
+    S.sim.primary = simFromPet(pet());
+    render();
+  }
+
   // ================================================================== MOUNTS
   function itemInst(m) { return { item_quality: m.quality, item_grade: m.grade, bound: m.bound, stack: m.stack, attrs: (m.attrs || []).map(a => ({ id: a.id, level: a.level })) }; }
   function mountCell(m, slot, opts) {
@@ -699,7 +1067,7 @@
         onclick: async () => { if (await mountGuard(false)) await write("mount/" + S.ctx.cid + "/ride", { row: m.row, expected: m.expected }, "ride " + m.name); } }, "Ride this one") : null,
       equipped ? h("button", { class: "gw-btnx", type: "button", "data-help": "Move it to the first free bag cell (a mount only when no gear is equipped).",
         onclick: async () => { if (await mountGuard(false)) await write("mount/" + S.ctx.cid + "/unequip", { row: m.row, expected: m.expected }, "unequip " + m.name); } }, "Unequip") : null,
-      h("button", { class: "gw-btnx danger", type: "button", "data-help": m.location === 1 ? "Delete it from the bag (live when the player is online on a round-2 server)." : "Delete it (database; the character must be logged out).",
+      h("button", { class: "gw-btnx danger", type: "button", "data-help": m.location === 1 ? "Delete it from the bag (at once when the player is online and the game server supports it)." : "Delete it (database; the character must be logged out).",
         onclick: async () => {
           if (!await mountGuard(m.location === 1)) return;
           if (!await GW.confirm({ title: "Delete " + m.name + "?", message: "Delete " + m.name + " (" + m.where + ")?" + (m.location === 1 && online() ? " The game server removes it from the player's bag now; a live change has no automatic Undo." : " Undo in the change log puts it back."), ok: "Delete", danger: true })) return;
@@ -768,7 +1136,7 @@
   // ================================================================== module
   GW.module("pets", {
     async mount(el, ctx) {
-      S = { ctx, el, tab: (ctx.route[0] === "mounts" ? "mounts" : "pets"), sel: null, msel: null, lib: null, offs: [] };
+      S = { ctx, el, tab: (ctx.route[0] === "mounts" ? "mounts" : ctx.route[0] === "sim" ? "sim" : "pets"), sel: null, msel: null, lib: null, offs: [] };
       S.bar = GW.saveBar({ title: "Save these pet changes?", onSave: savePending, onDiscard: () => { resetPending(); render(); } });
       resetPending();
       let was = null;
@@ -779,6 +1147,6 @@
       try { await load(false); }
       catch (e) { S.root.append(h("div", { class: "tt-bad" }, e.message)); }
     },
-    unmount() { if (S) for (const f of S.offs) try { f(); } catch (e) { /* gone */ } S = null; },
+    unmount() { if (S) { clearTimeout(S.legalT); clearTimeout(S.simT); for (const f of S.offs) try { f(); } catch (e) { /* gone */ } } S = null; },
   });
 })();

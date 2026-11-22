@@ -546,7 +546,7 @@ def set_talents(ctx, cid):
     r["mode"] = "database"
     over = [allowed[t]["name"] for t, r_ in want.items() if r_ > CLIENT_TALENT_CAP]
     if over:
-        r["warning"] = "Above rank %d: the server uses it, but the admin's client shows at most %d (%s)." % (
+        r["warning"] = "Above rank %d: the server uses it, but the game shows at most rank %d (%s)." % (
             CLIENT_TALENT_CAP, CLIENT_TALENT_CAP, ", ".join(over))
     return r
 

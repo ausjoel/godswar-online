@@ -444,9 +444,37 @@ internal static partial class TransporterHandlerChecks
         float X,
         float Z);
 
-    private sealed class TransporterStore : GameStoreTestStub
+    private sealed class TransporterStore : GameStoreTestStub, IGameStore // B22: + teleporter wallet
     {
         public List<PositionWrite> PositionWrites { get; } = [];
+
+        // B22 (d32): an in-memory wallet for the teleporter fee checks.
+        public int Silver { get; set; }
+        public int Gold { get; set; }
+        public int BindingGold { get; set; }
+
+        public Task<TeleportWalletResult?> AdjustTeleportWalletAsync(
+            int accountId,
+            int characterId,
+            string currency,
+            int delta,
+            CancellationToken cancellationToken = default)
+        {
+            var balance = currency switch { "silver" => Silver, "gold" => Gold, "bgold" => BindingGold, _ => -1 };
+            if (balance < 0 || delta == 0 || balance + (long)delta < 0)
+            {
+                return Task.FromResult<TeleportWalletResult?>(null);
+            }
+
+            switch (currency)
+            {
+                case "silver": Silver += delta; break;
+                case "gold": Gold += delta; break;
+                default: BindingGold += delta; break;
+            }
+
+            return Task.FromResult<TeleportWalletResult?>(new TeleportWalletResult(Silver, Gold, BindingGold));
+        }
 
         public override Task SaveCharacterPositionAsync(
             int accountId,

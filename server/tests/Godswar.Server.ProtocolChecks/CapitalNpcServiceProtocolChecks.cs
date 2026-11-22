@@ -315,27 +315,27 @@ internal static partial class CapitalNpcServiceProtocolChecks
             CapitalNpcShopCurrency Charge, uint First, uint FirstPrice,
             uint Last, uint LastPrice)[] athens =
         [
-            ("Athens_026", 5166, 5, 63, 4, CapitalNpcShopCurrency.BindingGold,
+            ("Athens_026", 5166, 5, 63, 3, CapitalNpcShopCurrency.Silver, // B21: was 4 / BindingGold
                 1000, 58, 3006, 683),
-            ("Athens_027", 5167, 5, 63, 4, CapitalNpcShopCurrency.BindingGold,
+            ("Athens_027", 5167, 5, 63, 3, CapitalNpcShopCurrency.Silver, // B21: was 4 / BindingGold
                 1700, 58, 3006, 683),
-            ("Athens_028", 5168, 6, 76, 4, CapitalNpcShopCurrency.BindingGold,
+            ("Athens_028", 5168, 6, 76, 3, CapitalNpcShopCurrency.Silver, // B21: was 4 / BindingGold
                 3100, 58, 3612, 683),
-            ("Athens_029", 5169, 7, 91, 4, CapitalNpcShopCurrency.BindingGold,
+            ("Athens_029", 5169, 7, 91, 3, CapitalNpcShopCurrency.Silver, // B21: was 4 / BindingGold
                 2700, 58, 3612, 683),
-            ("Athens_096", 5234, 5, 63, 4, CapitalNpcShopCurrency.BindingGold,
+            ("Athens_096", 5234, 5, 63, 3, CapitalNpcShopCurrency.Silver, // B21: was 4 / BindingGold
                 1000, 58, 3006, 683),
-            ("Athens_099", 5237, 8, 86, 4, CapitalNpcShopCurrency.BindingGold,
+            ("Athens_099", 5237, 8, 86, 3, CapitalNpcShopCurrency.Silver, // B21: was 4 / BindingGold
                 5445, 1, 5208, 8500),
-            ("Athens_102", 5240, 6, 78, 4, CapitalNpcShopCurrency.BindingGold,
+            ("Athens_102", 5240, 6, 78, 3, CapitalNpcShopCurrency.Silver, // B21: was 4 / BindingGold
                 2100, 58, 3412, 683),
-            ("Athens_107", 5245, 5, 63, 4, CapitalNpcShopCurrency.BindingGold,
+            ("Athens_107", 5245, 5, 63, 3, CapitalNpcShopCurrency.Silver, // B21: was 4 / BindingGold
                 1700, 58, 3006, 683),
-            ("Athens_108", 5246, 2, 24, 2, CapitalNpcShopCurrency.Gold,
+            ("Athens_108", 5246, 2, 24, 3, CapitalNpcShopCurrency.Silver, // B21: was 2 / Gold
                 3100, 58, 3210, 654),
             ("Athens_121", 5259, 5, 79, 3, CapitalNpcShopCurrency.Silver,
                 13000, 1856, 13074, 919855),
-            ("Athens_122", 5260, 8, 96, 4, CapitalNpcShopCurrency.BindingGold,
+            ("Athens_122", 5260, 8, 96, 3, CapitalNpcShopCurrency.Silver, // B21: was 4 / BindingGold
                 12800, 105, 12982, 2125),
             ("Athens_135", 5273, 5, 76, 3, CapitalNpcShopCurrency.Silver,
                 13200, 1856, 13271, 634970),
@@ -659,10 +659,11 @@ internal static partial class CapitalNpcServiceProtocolChecks
             CapitalNpcServiceProtocol.TryGetShopCurrency(
                 CapitalNpcServiceKind.SkillVendor,
                 out var skillCurrency) &&
-            skillCurrency == CapitalNpcShopCurrency.BindingGold &&
-            !CapitalNpcServiceProtocol.TryGetShopCurrency(
+            skillCurrency == CapitalNpcShopCurrency.Silver && // B22 W11 d58: silver like Sparta
+            CapitalNpcServiceProtocol.TryGetShopCurrency( // B22 W11 d58: the Athens props shelf is all silver now
                 CapitalNpcServiceKind.PropsVendor,
-                out _) &&
+                out var propsCurrency) &&
+            propsCurrency == CapitalNpcShopCurrency.Silver &&
             !CapitalNpcServiceProtocol.TryGetShopCurrency(
                 CapitalNpcServiceKind.TeachingManager,
                 out _),

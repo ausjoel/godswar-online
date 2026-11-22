@@ -685,7 +685,11 @@ internal static class EquipmentForgeCatalog
     ];
 
     private static readonly IReadOnlyDictionary<uint, EquipmentForgeRule> ByItemId =
-        All.ToDictionary(rule => rule.ItemId);
+        All.ToDictionary(rule => rule.ItemId)
+            // B22 G1: the generated tier items forge with their Class Suit IV base's rule (EquipForge.xml rows match).
+            .Concat(GearTierItemSeeds.ForgeBases.Select(pair => new KeyValuePair<uint, EquipmentForgeRule>(
+                pair.ItemId, All.Single(rule => rule.ItemId == pair.BaseItemId) with { ItemId = pair.ItemId })))
+            .ToDictionary(entry => entry.Key, entry => entry.Value);
 
     public static bool TryGet(uint itemId, out EquipmentForgeRule rule)
     {
@@ -773,7 +777,10 @@ internal static class ForgingMaterialRuleCatalog
     ];
 
     private static readonly IReadOnlyDictionary<uint, ForgingMaterialRule> ByItemId =
-        All.ToDictionary(rule => rule.ItemId);
+        All.ToDictionary(rule => rule.ItemId)
+            // B22 G2: the 12 rare gems are grade material for the tier gear's G21-25 (BijouForge.xml rows match).
+            .Concat(RareGemForgeRules.All.Select(rule => new KeyValuePair<uint, ForgingMaterialRule>(rule.ItemId, rule)))
+            .ToDictionary(entry => entry.Key, entry => entry.Value);
 
     public static bool TryGet(uint itemId, out ForgingMaterialRule rule)
     {

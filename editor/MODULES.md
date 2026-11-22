@@ -31,6 +31,24 @@ helper in your own file first and say in your report what should move into `comm
 A new module is picked up automatically: any `modules/*.py` (not starting with `_`, not `common.py`) is
 imported at start-up. One that fails to import is shown in the sidebar with its error; the others keep working.
 
+## Hover and help text: one house style
+
+Everything a page shows on hover (`data-help`, `data-field`, module `description`, limit notes, the server's rate
+descriptions) is written for the owner, who is not a programmer:
+
+* one short plain sentence that says what the thing does, then at most 2-3 short facts (limits, when a change
+  applies: at once / next login / after a server restart, risk);
+* sentence case, units stated, human units (a multiplier as x1.5 and a chance as 15%, never raw basis points;
+  convert on save and keep stored units in the API);
+* no owner notes or decision ids ("the admin F-123"), no agent / package names, no "GENERATED" / "UNPROVEN", no file,
+  table, class or packet names. Put where a number comes from in a code comment beside the string.
+
+`GW.helpText({title, text, facts, list, note})` builds such a text and `GW.helpNode(text)` draws it (long text wraps,
+"• " lines become a real list, "Label: value" lines get a highlighted label, "~ " lines are small notes); every
+`data-help` goes through it, so plain strings with `\n` and "• " also work. Server text that arrives with bookkeeping in
+it goes through `common.plain_note()`. `tests/test_help_text_unit.py` enforces the rule for string literals, for
+`data/rate_text.json` (the Server rates wording, kept identical to the server source) and for the schema files.
+
 ## 2. Backend: `modules/<name>.py`
 
 ```python
@@ -150,7 +168,6 @@ Insert database and client text as text (`h()` does), never as HTML.
 
 Look: `static/ui/UI-STYLE.md` (window frames `.gw-frame-normalwindow`, cells `.gw-cell`, buttons `.gw-btnx`,
 quality colours `.gw-q1..20`, grade colours `.gw-g1..25`, the reference pictures in `static/ui/windows/`).
-Demo of every shared part: the sidebar's "Editor parts (demo)" (`#/kit`).
 
 ## 4. Live edits (the game running, the player online)
 

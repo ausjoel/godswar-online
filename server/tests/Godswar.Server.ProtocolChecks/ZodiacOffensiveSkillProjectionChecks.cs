@@ -162,7 +162,7 @@ internal static class ZodiacOffensiveSkillProjectionChecks
                 $"all five runtime ranks in family 10003 receive the selected effect ({skillId})");
         }
 
-        var outsideFamily = Skill(skillId: 35);
+        var outsideFamily = Skill(skillId: 40); // B22: 35-39 are now family 10003 levels 6-10
         var unchanged = ZodiacOffensiveSkillProjection.Resolve(
             character,
             outsideFamily);

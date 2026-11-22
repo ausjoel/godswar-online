@@ -23,6 +23,8 @@ internal sealed partial class GameClientHandler
     {
         ClearForgeSelection();
         ClearGearEnhancerSelection();
+        Journey.Attempted = true; // W6A
+        Journey.Mark("game_login");
         if (_account is not null)
         {
             _session.Disconnect();
@@ -87,6 +89,7 @@ internal sealed partial class GameClientHandler
                 cancellationToken);
             if (_account is null)
             {
+                Journey.Refuse("unknown_account"); // W6A
                 _session.Disconnect();
                 return;
             }
@@ -95,13 +98,17 @@ internal sealed partial class GameClientHandler
             // password login for this account from this address on the
             // login port within the last two minutes (used up here).
             if (LegacyGameLoginHandoff.Enabled &&
-                !LegacyGameLoginHandoff.TryConsume(
+                !await LegacyGameLoginHandoff.TryConsumeAsync( // ROUND-SHAREDHANDOFF: only for this worker's realm
                     _account.Id,
-                    _session.RemoteEndPoint))
+                    _processRealmId.Value,
+                    _session.RemoteEndPoint,
+                    cancellationToken))
             {
                 Console.Error.WriteLine(
                     "[security] legacy game login refused (no password login from this address) " +
                     $"account={_account.Id} remote={LegacyGameLoginHandoff.AddressOf(_session.RemoteEndPoint) ?? "unknown"}");
+                Journey.AccountId = _account.Id; // W6A
+                Journey.Refuse("no_password_login");
                 _account = null;
                 _session.Disconnect();
                 return;
@@ -120,6 +127,8 @@ internal sealed partial class GameClientHandler
         {
             Console.WriteLine(
                 $"[operator] login refused (banned) endpoint=game account={_account.Id}");
+            Journey.AccountId = _account.Id; // W6A
+            Journey.Refuse("banned");
             _session.Disconnect();
             return;
         }
@@ -143,6 +152,7 @@ internal sealed partial class GameClientHandler
         _accountSessionRegistered = true;
         if (replacedSession is not null)
         {
+            replacedSession.EndHint ??= "replaced"; // W6A
             replacedSession.Disconnect();
             await PublishReplacedWorldRemovalAsync(
                 replacement.DetachedWorld);
@@ -188,6 +198,13 @@ internal sealed partial class GameClientHandler
             return;
         }
 
+        // W14: the legacy accounts.login_status projection is set here, when the game session (the
+        // character screen) is registered, and cleared by this session's teardown. The login server
+        // (6999) no longer sets it, so a login that never reaches the game port leaves no stale flag.
+        await _accountPresence.MarkAccountOnlineAsync(
+            _account.Id,
+            cancellationToken);
+
         if (_session.AllowsPayloadDiagnostics)
         {
             Console.WriteLine($"[game] accepted {_account.Username}");
@@ -195,6 +212,8 @@ internal sealed partial class GameClientHandler
 
         await _session.SendAsync(PacketBuilder.AfterLogin(), cancellationToken, "AfterLogin");
         await SendCharacterPreviewAsync(cancellationToken);
+        Journey.AccountId = _account.Id; // W6A
+        Journey.Mark("character_screen");
     }
 
     private async Task SendCharacterPreviewAsync(CancellationToken cancellationToken)
@@ -303,6 +322,7 @@ internal sealed partial class GameClientHandler
     {
         ClearForgeSelection();
         ClearGearEnhancerSelection();
+        Journey.Mark("enter_requested"); // W6A
         if (_account is not null &&
             (!_characterSnapshotLoaded ||
              (_character is not null &&
@@ -374,11 +394,15 @@ internal sealed partial class GameClientHandler
         await LoadPetWorkAsync(cancellationToken);
         IReadOnlyList<PetBootstrapSnapshot> ownedPets =
             _characterLoadSnapshot?.Pets ?? [];
-        var ownedPetList = PacketBuilder.OwnedPetList(
+        // W6A: one bad item or pet row must not stop the login. What cannot be sent is left out of the client's
+        // view (it stays in the database and in this session, so its slot stays taken), logged and recorded.
+        var ownedPetList = PacketBuilder.OwnedPetListForEntry(
             RequirePetContent(),
             ownedPets,
             _characterLoadSnapshot?.PetShed.OpenedCellCount ??
-                PetShedCapacityPolicy.DefaultOpenedCellCount);
+                PetShedCapacityPolicy.DefaultOpenedCellCount,
+            out var hiddenPets);
+        RecordLoginBlockersQuarantined(hiddenPets);
         Console.WriteLine(
             $"[game] enter name={_character.Name} profession={_character.Profession} level={_character.Level} honor={_character.MedusaHonorPoints} equipment={PacketBuilder.EnterEquipmentSummary(_character)} main={enterMain.Length} kitbagDetail={kitBagDetailPages.Length} kitbagIndex={kitBagSlotIndexes.Length} skills={skillStates.Count} talents={talentStates.Count} pets={ownedPets.Count}");
 
@@ -428,10 +452,41 @@ internal sealed partial class GameClientHandler
             cancellationToken,
             "DesignationInfo");
         await _session.SendAsync(PacketBuilder.EnterComplete(), cancellationToken, "EnterComplete");
+        Journey.Mark("entered"); // W6A
         // EXPIRY (b03): item timers for the tooltip, then the online sweep.
         await BeginItemExpiryAfterEnterAsync(cancellationToken);
         StartFarmRewardClaims();
         StartPartyKillShares(); // PARTY (r02)
+    }
+
+    // W6A: say what world entry had to hide. Best effort: a failure here must never end the login.
+    private void RecordLoginBlockersQuarantined(IReadOnlyList<string> hiddenPets)
+    {
+        try
+        {
+            if (_character is not { } character)
+            {
+                return;
+            }
+            var notes = new List<string>();
+            foreach (var item in PacketBuilder.UnsendableItems(character))
+            {
+                notes.Add($"{item.Container} slot {item.Slot} item {item.ItemId}: {item.Reason}");
+            }
+            notes.AddRange(hiddenPets);
+            if (notes.Count == 0)
+            {
+                return;
+            }
+            var text = string.Join("; ", notes);
+            Console.Error.WriteLine(
+                $"[login-blocker] quarantined character-id={character.Id} account-id={_account?.Id ?? 0} count={notes.Count} {text}");
+            Journey.Quarantined = Godswar.Server.Operations.Health.SessionJourney.Clip(text);
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine("[login-blocker] check skipped: " + error.GetType().Name);
+        }
     }
 
     private async Task SendMapWorldObjectsAsync(CancellationToken cancellationToken)
@@ -625,7 +680,8 @@ internal sealed partial class GameClientHandler
             }
 
             // FINALISE-PETS: capturable pets carry 10 health (ten hits of one).
-            monsterDefinitions.Add(CapturablePetCombatPolicy.NormalizeSpawn(monster));
+            monsterDefinitions.Add(Godswar.Server.Application.WorldInstances.AetherSanctumBossScale.NormalizeSpawn( // B23-S: Sanctum boss HP %
+                CapturablePetCombatPolicy.NormalizeSpawn(monster)));
         }
 
         var monsterRuntimeInitializedAt = DateTimeOffset.UtcNow;

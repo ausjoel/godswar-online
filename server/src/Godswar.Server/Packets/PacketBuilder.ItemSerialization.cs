@@ -28,6 +28,7 @@ internal static partial class PacketBuilder
 
     private static void WriteEnterItemRecord(Span<byte> record, CompactItemEntry item)
     {
+        item = SendableItem(item); // W6A: an item that cannot be sent is shown as an empty slot
         record.Clear();
         BinaryPrimitives.WriteUInt32LittleEndian(record[..4], item.Id);
         WriteNullableInt32(record.Slice(4, 4), item.Attribute1);
@@ -45,6 +46,7 @@ internal static partial class PacketBuilder
 
     private static void WriteKitBagItemRecord(Span<byte> record, CompactItemEntry item, uint ownerObjectId = LocalPlayerObjectId)
     {
+        item = SendableItem(item); // W6A: an item that cannot be sent is shown as an empty slot
         record.Clear();
 
         if (item.IsEmpty)
@@ -87,6 +89,7 @@ internal static partial class PacketBuilder
         // Unlike the one-byte world-appearance summary, an inspect record has a
         // full byte each for quality and grade. Preserve the server values here;
         // the patched client data currently supports Q20/G25.
+        item = SendableItem(item); // W6A
         WriteKitBagItemRecord(record, item);
         if (item.IsEmpty)
         {
@@ -182,6 +185,7 @@ internal static partial class PacketBuilder
 
     private static void WriteSnapshotItemRecord(Span<byte> record, CompactItemEntry item)
     {
+        item = SendableItem(item); // W6A: an item that cannot be sent is shown as an empty slot
         record.Clear();
         BinaryPrimitives.WriteUInt32LittleEndian(record[..4], item.Id);
         WriteNullableInt32(record.Slice(4, 4), item.Attribute1);

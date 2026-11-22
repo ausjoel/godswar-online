@@ -30,14 +30,19 @@ internal sealed partial class GameClientHandler
                 npcId,
                 dialogIndex) ||
             !TryAuthorizeTransporterAction(route, npcId) ||
-            !TransporterProtocol.TryResolveDestination(
+            // B22 (d32): only a button the menu showed, then the editor's row (or the compiled destination).
+            _transporterDialogueContext?.MenuSubIds is { } shown && !shown.Contains(subId) ||
+            !TransporterMenuPolicy.TryResolve(
                 route.NpcKey,
                 npcId,
                 _character.CurrentMap,
                 dialogIndex,
                 subId,
                 arguments,
-                out var destination))
+                NpcContentOverrides.Current,
+                out var destination,
+                out var menuTarget,
+                out var menuRow))
         {
             Console.Error.WriteLine(
                 "[transporter] rejected malformed or unauthorized action " +
@@ -61,7 +66,7 @@ internal sealed partial class GameClientHandler
                 GateCatalog.LevelCap,
                 teleportOverride is null ? "compiled" : "npc_teleport_overrides");
         var gmSkips = gateKey is not null && GateRules.GmMaySkip(gateKey) &&
-            await HasOperatorAuthorityAsync(cancellationToken);
+            await HasOperatorPowerAsync(Godswar.Server.Application.Operators.GmPowerPolicy.GateBypass, cancellationToken);
         if (!gmSkips && (_character.Level < gate.Minimum || _character.Level > gate.Maximum))
         {
             await _session.SendAsync(
@@ -103,39 +108,66 @@ internal sealed partial class GameClientHandler
 
         // FINALISE2 (the admin F-19): the capitals' Mycenae button costs 20,000 Silver (NF_L0_10003). GMs who skip the
         // gate do not pay. The debit is atomic and refunded if the move does not happen.
-        var silverFee = !gmSkips && gateKey == GateKeys.Mycenae && destination.TargetMapId == 6
-            ? GateCatalog.MycenaeSilverFee
-            : 0;
-        if (silverFee > 0)
+        // B22 (d32): an editor row's price and currency replace that fee (0 = free); no row keeps it.
+        var fee = TransporterMenuPolicy.Price(destination, menuRow, gmSkips);
+        if (fee.Amount > 0)
         {
-            var charged = await _store.ChargeSilverAsync(_account!.Id, _character.Id, silverFee, cancellationToken);
+            var charged = await _store.AdjustTeleportWalletAsync(_account!.Id, _character.Id, fee.Currency, -fee.Amount, cancellationToken);
             if (charged is null)
             {
                 await _session.SendAsync(
-                    PacketBuilder.CapturedNpcFunctionActionResponse(npcId, TransporterProtocol.DialogIndex, TransporterProtocol.MycenaeSilverResultSubId),
+                    fee.CapturedMycenaeLine
+                        ? PacketBuilder.CapturedNpcFunctionActionResponse(npcId, TransporterProtocol.DialogIndex, TransporterProtocol.MycenaeSilverResultSubId)
+                        : PacketBuilder.ServerNote($"You need {fee.Amount:N0} {TransporterMenuPolicy.CurrencyName(fee.Currency)}!"),
                     cancellationToken,
                     "TransporterSilverRequirement");
                 Console.WriteLine(
-                    $"[transporter] silver gate rejected character={_character.Name} silver={_character.Silver} fee={silverFee}");
+                    $"[transporter] fee gate rejected character={_character.Name} silver={_character.Silver} gold={_character.Gold} " +
+                    $"bgold={_character.BindingGold} fee={fee.Amount} {fee.Currency}");
                 return;
             }
 
-            _character.Silver = charged.Silver;
-            _registry.UpdateCharacter(_session, _character, advanceWorldRevision: false);
+            ApplyTeleportWallet(fee.Currency, charged);
             await _session.SendAsync(BuildLocalPlayerStatusUpdate(), cancellationToken, "TransporterSilverCharged");
             Console.WriteLine(
-                $"[transporter] silver charged character={_character.Name} fee={silverFee} wallet={charged.Silver}");
+                $"[transporter] fee charged character={_character.Name} fee={fee.Amount} {fee.Currency} " +
+                $"wallet={charged.Silver}/{charged.Gold}/{charged.BindingGold}");
+        }
+
+        // B22: an added button with its own map + X / Z goes there like an npc_teleport_overrides row (which still wins).
+        if (teleportOverride is null && menuTarget is not null)
+        {
+            teleportOverride = new NpcTeleportOverride(
+                route.NpcKey, subId, menuTarget.MapId, menuTarget.X, menuTarget.Z, destination.MinimumLevel);
         }
 
         try
         {
-            await ContinueTransporterAsync(route, npcId, subId, destination, teleportOverride, silverFee, cancellationToken);
+            await ContinueTransporterAsync(route, npcId, subId, destination, teleportOverride, fee, cancellationToken);
         }
-        catch when (silverFee > 0)
+        catch when (fee.Amount > 0)
         {
-            await RefundTransporterSilverAsync(silverFee, "fault");
+            await RefundTransporterSilverAsync(fee, "fault");
             throw;
         }
+    }
+
+    // B22 (d32): copy the one balance the fee or refund changed into the session's character (as F-19 did for silver).
+    private void ApplyTeleportWallet(string currency, Godswar.Server.State.TeleportWalletResult wallet)
+    {
+        if (_character is null)
+        {
+            return;
+        }
+
+        switch (currency)
+        {
+            case TransporterMenuPolicy.Gold: _character.Gold = wallet.Gold; break;
+            case TransporterMenuPolicy.BindingGold: _character.BindingGold = wallet.BindingGold; break;
+            default: _character.Silver = wallet.Silver; break;
+        }
+
+        _registry.UpdateCharacter(_session, _character, advanceWorldRevision: false);
     }
 
     // FINALISE2: the move itself, split out so the Mycenae fee can be refunded when the move does not happen.
@@ -145,7 +177,7 @@ internal sealed partial class GameClientHandler
         int subId,
         TransporterDestination destination,
         NpcTeleportOverride? teleportOverride,
-        int silverFee,
+        TeleportPrice silverFee, // B22: any currency
         CancellationToken cancellationToken)
     {
         if (_character is null)
@@ -227,26 +259,25 @@ internal sealed partial class GameClientHandler
             $"map={destination.SourceMapId}->{destination.TargetMapId}");
     }
 
-    // FINALISE2 (F-19): give the Mycenae fee back when the move did not happen.
-    private async Task RefundTransporterSilverAsync(int silverFee, string reason)
+    // FINALISE2 (F-19): give the Mycenae fee back when the move did not happen. B22: any teleporter fee, any currency.
+    private async Task RefundTransporterSilverAsync(TeleportPrice fee, string reason)
     {
-        if (silverFee <= 0 || _account is null || _character is null)
+        if (fee.Amount <= 0 || _account is null || _character is null)
         {
             return;
         }
 
-        var wallet = await _store.GrantQuestCurrencyAsync(_account.Id, _character.Id, silverFee, 0, CancellationToken.None);
+        var wallet = await _store.AdjustTeleportWalletAsync(_account.Id, _character.Id, fee.Currency, fee.Amount, CancellationToken.None);
         if (wallet is not null)
         {
-            _character.Silver = wallet.Silver;
-            _registry.UpdateCharacter(_session, _character, advanceWorldRevision: false);
+            ApplyTeleportWallet(fee.Currency, wallet);
             if (!_session.IsDisconnected)
             {
                 await _session.SendAsync(BuildLocalPlayerStatusUpdate(), CancellationToken.None, "TransporterSilverRefund");
             }
         }
 
-        Console.WriteLine($"[transporter] silver refunded character={_character.Name} fee={silverFee} reason={reason}");
+        Console.WriteLine($"[transporter] fee refunded character={_character.Name} fee={fee.Amount} {fee.Currency} reason={reason}");
     }
 
     private bool TryIssueTransporterDialogueContext(

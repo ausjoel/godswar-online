@@ -1,0 +1,8 @@
+/* static/modules/account_tools.css - B21 item 24 */
+.gw-mod-account_tools .gw-at-tabs { display: flex; gap: 4px; margin-bottom: 10px; flex-wrap: wrap; }
+.gw-mod-account_tools .gw-at-controls { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 6px 0; }
+.gw-mod-account_tools .gw-at-table { border-collapse: collapse; margin-top: 6px; width: 100%; }
+.gw-mod-account_tools .gw-at-table th, .gw-mod-account_tools .gw-at-table td { padding: 3px 8px; text-align: left; border-bottom: 1px solid rgba(255, 255, 255, .08); vertical-align: middle; }
+.gw-mod-account_tools .gw-at-table th { font-weight: 600; white-space: nowrap; }
+.gw-mod-account_tools .gw-at-done { padding: 8px 12px; margin: 8px 0; }
+@media (max-width: 700px) { .gw-mod-account_tools .gw-at-table { display: block; overflow-x: auto; } }

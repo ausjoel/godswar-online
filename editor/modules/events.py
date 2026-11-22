@@ -34,7 +34,7 @@ FIXED = [
 # W3 seasonal events (the admin F-26): every season starts off; on/off plus first and last day, entered as Brisbane dates
 # (AEST, UTC+10, no daylight saving) and stored in UTC. Labels mirror server Application/Seasons/SeasonalEvents.cs.
 SEASONS = [
-    ("spring_festival", "Spring Festival", "Spring Festival Envoy (gold plate, ham, rice cake, chocolate, rose and couple exchanges), Lunar Beast Slayer (firecrackers) and festival-goods / firecracker drops in both suburbs; suggested window: the 10 days up to Lunar New Year (F-134); the date moves, so set it with yearly off each year (2027: 27 Jan - 6 Feb, to verify)"),
+    ("spring_festival", "Spring Festival", "Spring Festival Envoy (gold plate, ham, rice cake, chocolate, rose and couple exchanges), Lunar Beast Slayer (firecrackers) and festival-goods / firecracker drops in both suburbs; suggested window: the 10 days up to Lunar New Year; the date moves, so set it with yearly off each year (2027: 27 Jan - 6 Feb, to verify)"),
     ("carnival", "Carnival", "Carnival Envoy"),
     ("easter", "Easter", "Easter Envoy, Easter Bunny Envoy"),
     ("may_day", "May Day", "May Day Envoy at (159,76): Fertiliser grows the faction tree, winners claim gift packs"),
@@ -43,7 +43,7 @@ SEASONS = [
     ("oriental_cuisine", "Oriental Cuisine", "Oriental Cuisine Master"),
     ("halloween", "Halloween", "Halloween Envoy (suit, wand, Pumpkin Candy exchange) and candy drops"),
     ("thanksgiving", "Thanksgiving", "Thanksgiving Envoy (turkey meat exchange) and turkey drops on Marathon / Peloponnese"),
-    ("christmas", "Christmas", "Santa Claus (gloves, antler turn-in to each faction's reindeer model, level rewards) and Antler drops from Little Deer / Vicious Fawn; suggested window: the 10 days up to 25 December (F-134)"),
+    ("christmas", "Christmas", "Santa Claus (gloves, antler turn-in to each faction's reindeer model, level rewards) and Antler drops from Little Deer / Vicious Fawn; suggested window: the 10 days up to 25 December"),
 ]
 SEASON_PARTS = [("seasonal_events", "true", "event_key")]
 BRISBANE = datetime.timezone(datetime.timedelta(hours=10))

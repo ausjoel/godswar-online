@@ -52,6 +52,7 @@ internal static class WorldTravelCheckCatalog
         (HarborAttackCompletionRewardChecks.PostgresCheckName, HarborAttackCompletionRewardChecks.RunPostgresCheckAsync), // BAY2
         (TrainingGroundChecks.CheckName, TrainingGroundChecks.RunAsync), // TRAINING
         (WarriorTrainingGroundChecks.CheckName, WarriorTrainingGroundChecks.RunAsync), // WARRIOR (F-51)
+        (B21FollowupChecks.CheckName, B21FollowupChecks.RunAsync), // B21
         (WarriorTrainingScrollChecks.CheckName, WarriorTrainingScrollChecks.RunAsync), // WARRIOR scrolls (F-146 b)
         (InstanceCallerHandlerChecks.WarriorTrainingPagesCheckName,
             InstanceCallerHandlerChecks.RunWarriorTrainingPagesAsync), // WARRIOR (F-51)

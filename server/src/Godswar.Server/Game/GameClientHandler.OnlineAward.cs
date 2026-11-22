@@ -59,6 +59,15 @@ internal sealed partial class GameClientHandler
         {
             return;
         }
+        if (!await OnlineAwardOnlineTimeMetAsync(cancellationToken)) // B21: minutes online first
+        {
+            await SendOnlineAwardRejectedAsync(
+                npcId,
+                OnlineAwardExecutionDisposition.ProviderUnavailable,
+                packet.ClientOperationId,
+                cancellationToken);
+            return;
+        }
         if (!HasCurrentOnlineAwardRealmAuthority() ||
             !TryCaptureCurrentPlayerOwnership(out var ownership))
         {

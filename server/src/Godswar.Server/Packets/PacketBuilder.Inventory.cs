@@ -227,6 +227,7 @@ internal static partial class PacketBuilder
 
     private static byte[] KitBagSlotIndex(int slot, CompactItemEntry item)
     {
+        item = SendableItem(item); // W6A: matches the empty record the detail page sends
         const int packetLength = 40;
         var packet = new byte[packetLength];
         var page = Math.DivRem(slot, KitBagSlotsPerPage, out var index);

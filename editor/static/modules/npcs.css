@@ -27,3 +27,38 @@
 .gw-npc-drop-before { box-shadow: inset 0 2px 0 #f5c542; }
 .gw-npc-drop-after { box-shadow: inset 0 -2px 0 #f5c542; }
 .gw-npc-drop-no { cursor: no-drop; background: #240b0b; }
+/* B21 item 27: shop as the game's trade window (10 x 5 cells of 42 px per tab) */
+.gw-npc-shop-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin: 6px 0; }
+.gw-npc-shop-tabs .gw-npc-drop-tab { outline: 2px solid #f5c542; }
+.gw-npc-grid { display: grid; grid-template-columns: repeat(10, 42px); gap: 0; padding: 10px; width: max-content; max-width: 100%; overflow-x: auto;
+  background: rgba(4, 18, 30, .92); border: 2px solid #8b97a0; border-radius: 10px; outline: none; }
+.gw-npc-cell { position: relative; width: 42px; height: 42px; box-sizing: border-box; border: 1px solid #3a4a55; background: #0b1820;
+  display: flex; align-items: center; justify-content: center; cursor: grab; }
+.gw-npc-cell.empty { cursor: default; background: #08121a; }
+.gw-npc-cell.on { border: 2px solid #f5c542; }
+.gw-npc-cell.over { border-color: #ff4b3e; }
+.gw-npc-cell .gw-icon { pointer-events: none; }
+.gw-npc-price { position: absolute; right: 1px; bottom: 0; font: 9px Consolas, monospace; color: #fff77c; text-shadow: 0 0 2px #000, 1px 1px 0 #000; pointer-events: none; }
+.gw-npc-cell.gw-npc-drop-before { box-shadow: inset 3px 0 0 #f5c542; }
+.gw-npc-cell.gw-npc-drop-after { box-shadow: inset -3px 0 0 #f5c542; }
+.gw-npc-sel { margin-top: 8px; border: 1px solid #2e6a88; padding: 6px; }
+/* B21 item 28: NPCs on the map */
+.gw-npc-map { display: flex; flex-direction: column; gap: 6px; }
+.gw-npc-mapcv { width: 100%; max-width: 512px; aspect-ratio: 1; border: 1px solid #2e5468; background: #06131b; }
+.gw-npc-legend { display: flex; gap: 10px; align-items: center; font-size: 12px; }
+.gw-npc-legend .k::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; border: 1px solid #000; vertical-align: -1px; }
+.gw-npc-legend .shop::before { background: #f5c542; } .gw-npc-legend .tele::before { background: #5ee0ff; } .gw-npc-legend .other::before { background: #c9d3d9; }
+.gw-npc-mapnames { max-height: 30vh; overflow-y: auto; }
+/* B21 item 27: teleporter destinations */
+.gw-npc-tele { border: 1px solid #2e5468; padding: 8px; margin: 6px 0; background: #0a1b25; }
+.gw-npc-tele-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 6px; }
+.gw-npc-tele-no { display: inline-block; min-width: 22px; text-align: center; background: #24485c; border-radius: 3px; }
+.gw-npc-tele-label { color: #ffff00; font-family: Consolas, monospace; }
+.gw-npc-tele-body { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }
+.gw-npc-pickcv { width: 256px; height: 256px; border: 1px solid #2e5468; cursor: crosshair; }
+.gw-npc-tele-form { display: flex; flex-direction: column; gap: 6px; }
+.gw-npc-body:has(.gw-npc-map) { grid-template-columns: minmax(300px, 520px) 1fr; }
+.gw-npc-list:has(.gw-npc-map) { max-height: none; }
+/* B22 P1 (d32): teleporter menu editor (static/modules/teleport-menu.js) */
+.gw-npc-tmenu { border-top: 1px solid #2e5468; margin-top: 10px; padding-top: 6px; }
+.gw-npc-tmenu-form { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 10px; }

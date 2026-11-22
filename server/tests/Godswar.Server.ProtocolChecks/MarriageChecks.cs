@@ -83,15 +83,16 @@ internal static class MarriageChecks
             "a purge keeps the couple history (SET NULL, not CASCADE)");
 
         // Switch and prices.
-        var defaults = ServerRatesSnapshot.Default;
-        Check.True(!MarriagePolicy.IsEnabled(null, defaults), "off by default");
+        Check.True(MarriagePolicy.IsEnabled(null, ServerRatesSnapshot.Default), "B21: on by default (live is on)");
+        var defaults = ServerRatesSnapshot.Create([new(ServerRateKeys.MarriageEnabled, 0m)], 1, DateTimeOffset.UtcNow, "check", "test");
+        Check.True(!MarriagePolicy.IsEnabled(null, defaults), "npc.marriage = 0: off");
         Check.True(MarriagePolicy.IsEnabled("true", defaults) && MarriagePolicy.IsEnabled("1", defaults), "env turns it on");
         var on = ServerRatesSnapshot.Create([new(ServerRateKeys.MarriageEnabled, 1m)], 1, DateTimeOffset.UtcNow, "check", "test");
         Check.True(MarriagePolicy.IsEnabled(null, on), "rate npc.marriage = 1 turns it on");
         Check.Equal(9999, MarriagePolicy.EngagementSilver(defaults), "retail engagement 9999 Silver");
         Check.Equal(100, MarriagePolicy.BookingGold(defaults), "retail booking 100 Gold");
         Check.True(MarriagePolicy.NecklaceRequired(defaults), "necklace required by default");
-        Check.Equal(0m, ServerRateCatalog.Get(ServerRateKeys.MarriageEnabled).DefaultValue, "switch defaults to 0");
+        Check.Equal(1m, ServerRateCatalog.Get(ServerRateKeys.MarriageEnabled).DefaultValue, "B21: switch defaults to 1");
 
         // Regression: the old Cupid / Shadow tables are what answers while the switch is off.
         Check.True(OpeningOf("CupidDialogue").SequenceEqual([6, 1, 2, 3, 4, 5, 7]), "Cupid opening: stock entries plus 7 (F-130 necklace)");

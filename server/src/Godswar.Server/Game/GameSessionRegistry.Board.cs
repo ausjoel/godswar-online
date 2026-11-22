@@ -84,14 +84,15 @@ internal sealed partial class GameSessionRegistry
             if (IsBoardCapable(session))
             {
                 // Board.lua cuts a line at 46 characters, so a message wraps over up to 3 board lines instead.
-                var lines = kind == 'M' ? BoardText.Wrap(text) : [text];
+                var lines = kind == 'M' ? BoardText.Wrap(BoardClock.Stamp(text, DateTimeOffset.UtcNow)) : [text]; // B21
                 foreach (var line in lines)
                 foreach (var frame in GameClientHandler.BuildGmPanelTextFrames(kind + line, BoardWindowId))
                     await session.SendAsync(frame, cancellationToken, "Board");
             }
             else
             {
-                await session.SendAsync(PacketBuilder.PersonalGameLog(BoardText.Clip(text)), cancellationToken, "BoardFallback");
+                var line = kind == 'M' ? BoardClock.Stamp(text, DateTimeOffset.UtcNow) : text; // B21
+                await session.SendAsync(PacketBuilder.PersonalGameLog(BoardText.Clip(line)), cancellationToken, "BoardFallback");
             }
             return true;
         }

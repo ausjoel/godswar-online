@@ -2,6 +2,7 @@ using Godswar.Server.Application.Rates;
 using Godswar.Server.Application.Titles;
 using Godswar.Server.Application.Zodiac;
 using Godswar.Server.Domain.World.Content;
+using Godswar.Server.Packets;
 
 namespace Godswar.Server.ProtocolChecks;
 
@@ -14,8 +15,11 @@ internal static class TitleFortuneChecks
     {
         ServerRates.ResetToDefaults();
         var defaults = ServerRatesSnapshot.Default;
-        Check.Equal(0m, defaults.Get(ServerRateKeys.TitleExpertEnabled), "title expert off by default");
-        Check.Equal(0m, defaults.Get(ServerRateKeys.FortuneTellerEnabled), "fortune teller off by default");
+        Check.Equal(1m, defaults.Get(ServerRateKeys.TitleExpertEnabled), "B21: title expert on by default");
+        Check.Equal(1m, defaults.Get(ServerRateKeys.FortuneTellerEnabled), "B21: fortune teller on by default");
+        // B21: the "disabled" checks below run with both switches set to 0.
+        ServerRates.Install(ServerRatesSnapshot.Create([KeyValuePair.Create(ServerRateKeys.TitleExpertEnabled, 0m),
+            KeyValuePair.Create(ServerRateKeys.FortuneTellerEnabled, 0m)], 1, DateTimeOffset.UtcNow, "check", "test"));
         Check.Equal(230m, defaults.Get(ServerRateKeys.FortuneTellerGold), "client button price 230 Gold");
         Check.Equal(5m, defaults.Get(ServerRateKeys.ZodiacLuckyDayBonus), "retail Lucky Day +5%");
         if (Environment.GetEnvironmentVariable("GODSWAR_TITLE_EXPERT") is null)
@@ -53,30 +57,89 @@ internal static class TitleFortuneChecks
         claim = TitleExpertPolicy.ResolveLevelClaim(3, Stats(100, matk: 2100), none);
         Check.True(claim.Grant.SequenceEqual([1300u, 1301u, 1302u, 1303u]), "mage 100/2100 -> 1300-1303");
 
-        // Attribute titles: HP 20000/32000 ... Absorb 900/1300 (buttons 1-8).
-        claim = TitleExpertPolicy.ResolveAttributeClaim(1, Stats(1, hp: 19999), none);
+        // Attribute titles: HP 20000/32000 ... Absorb 900/1300 (buttons 1-8), tiers 1-2 shared by every class.
+        // B22: professions 0 Warrior, 1 Champion, 2 Priest, 3 Mage; tiers 3-8 per class (ids 3016-3063).
+        claim = TitleExpertPolicy.ResolveAttributeClaim(0, 1, Stats(1, hp: 19999), none);
         Check.True(claim.Reply.SequenceEqual([501]), "HP 19999 -> 501");
-        claim = TitleExpertPolicy.ResolveAttributeClaim(1, Stats(1, hp: 32000), none);
+        claim = TitleExpertPolicy.ResolveAttributeClaim(0, 1, Stats(1, hp: 32000), none);
         Check.True(claim.Grant.SequenceEqual([3000u, 3001u]), "HP 32000 -> 3000 and 3001");
-        claim = TitleExpertPolicy.ResolveAttributeClaim(4, Stats(1, pdef: 2100), none);
+        claim = TitleExpertPolicy.ResolveAttributeClaim(0, 4, Stats(1, pdef: 2100), none);
         Check.True(claim.Grant.SequenceEqual([3006u]), "DEF 2100 -> Iron Bastion only");
-        claim = TitleExpertPolicy.ResolveAttributeClaim(4, Stats(1, pdef: 2100), [3006u]);
+        claim = TitleExpertPolicy.ResolveAttributeClaim(0, 4, Stats(1, pdef: 2100), [3006u]);
         Check.True(claim.Reply.SequenceEqual([516]), "DEF 2100 owning 3006 -> 516");
-        claim = TitleExpertPolicy.ResolveAttributeClaim(8, Stats(1, absorb: 1300), [3014u, 3015u]);
-        Check.True(claim.Reply.SequenceEqual([600]), "both absorb titles owned -> 600");
-        claim = TitleExpertPolicy.ResolveAttributeClaim(9, Stats(1), none);
+        claim = TitleExpertPolicy.ResolveAttributeClaim(0, 9, Stats(1), none);
         Check.True(claim.Reply.SequenceEqual([500]), "unknown attribute -> 500");
         int[] firstLines = [501, 505, 510, 515, 520, 525, 530, 535];
-        for (var button = 1; button <= 8; button++)
+        var top = Stats(1, 999999, 999999, 999999, 999999, 999999, 999999, 999999, 999999);
+        for (byte profession = 0; profession < 4; profession++)
         {
-            claim = TitleExpertPolicy.ResolveAttributeClaim(button, Stats(1), none);
-            Check.True(claim.Reply.SequenceEqual([firstLines[button - 1]]), $"attribute {button} first line");
-            var top = Stats(1, 99999, 99999, 99999, 99999, 99999, 99999, 99999, 99999);
-            claim = TitleExpertPolicy.ResolveAttributeClaim(button, top, none);
-            Check.True(
-                claim.Grant.SequenceEqual([(uint)(3000 + 2 * (button - 1)), (uint)(3001 + 2 * (button - 1))]),
-                $"attribute {button} title ids");
+            for (var button = 1; button <= 8; button++)
+            {
+                claim = TitleExpertPolicy.ResolveAttributeClaim(profession, button, Stats(1), none);
+                Check.True(claim.Reply.SequenceEqual([firstLines[button - 1]]), $"class {profession} attribute {button} first line");
+                claim = TitleExpertPolicy.ResolveAttributeClaim(profession, button, top, none);
+                var expected = new List<uint> { (uint)(3000 + 2 * (button - 1)), (uint)(3001 + 2 * (button - 1)) };
+                if (TitleExpertPolicy.HasLadder(profession, button))
+                {
+                    expected.AddRange(Enumerable.Range(0, 6).Select(i => (uint)(3016 + 6 * (button - 1) + i)));
+                }
+
+                Check.True(claim.Grant.SequenceEqual(expected), $"B22: class {profession} attribute {button} top grants");
+                claim = TitleExpertPolicy.ResolveAttributeClaim(profession, button, top, expected);
+                Check.True(claim.Reply.SequenceEqual([TitleExpertPolicy.HasLadder(profession, button)
+                        ? 600 : 7000 + profession * 100 + button * 10]),
+                    $"B22: class {profession} attribute {button} all owned -> 600 or not-for-class line");
+                var tiers = TitleExpertPolicy.AttributeTiersFor(profession, button)!;
+                for (var i = 1; i < tiers.Count; i++)
+                {
+                    Check.True(tiers[i].Need > tiers[i - 1].Need, $"B22: class {profession} attribute {button} tier {i + 1} rises");
+                }
+            }
         }
+
+        // B22: the ladder per class. ATK is Warrior/Champion only, MATK Priest/Mage only; the rest all four.
+        Check.True(TitleExpertPolicy.HasLadder(0, 2) && TitleExpertPolicy.HasLadder(1, 2) &&
+            !TitleExpertPolicy.HasLadder(2, 2) && !TitleExpertPolicy.HasLadder(3, 2), "B22: ATK ladder for physical classes");
+        Check.True(!TitleExpertPolicy.HasLadder(0, 3) && !TitleExpertPolicy.HasLadder(1, 3) &&
+            TitleExpertPolicy.HasLadder(2, 3) && TitleExpertPolicy.HasLadder(3, 3), "B22: MATK ladder for magic classes");
+        claim = TitleExpertPolicy.ResolveAttributeClaim(0, 1, Stats(1, hp: 86699), [3000u, 3001u]);
+        Check.True(claim.Grant.Count == 0 && claim.Reply.SequenceEqual([7013]), "B22: Warrior HP 86699 -> line 7013 (needs 86700)");
+        claim = TitleExpertPolicy.ResolveAttributeClaim(0, 1, Stats(1, hp: 86700), [3000u, 3001u]);
+        Check.True(claim.Grant.SequenceEqual([3016u]), "B22: Warrior HP 86700 -> Titan Blood");
+        claim = TitleExpertPolicy.ResolveAttributeClaim(3, 1, Stats(1, hp: 86700), [3000u, 3001u]);
+        Check.True(claim.Grant.SequenceEqual([3016u, 3017u]), "B22: Mage HP 86700 -> Titan Blood and Heart of Atlas (59.8k/74.8k)");
+        claim = TitleExpertPolicy.ResolveAttributeClaim(3, 1, Stats(1, hp: 134599), [3000u, 3001u]);
+        Check.True(claim.Grant.SequenceEqual([3016u, 3017u, 3018u, 3019u, 3020u]), "B22: Mage HP 134599 stops before tier 8");
+        claim = TitleExpertPolicy.ResolveAttributeClaim(3, 1, Stats(1, hp: 134599), [3000u, 3001u, 3016u, 3017u, 3018u, 3019u, 3020u]);
+        Check.True(claim.Reply.SequenceEqual([7318]), "B22: Mage HP tier 8 line 7318");
+        claim = TitleExpertPolicy.ResolveAttributeClaim(1, 2, Stats(1, patk: 18000), [3002u, 3003u]);
+        Check.True(claim.Grant.SequenceEqual([3022u, 3023u, 3024u, 3025u, 3026u, 3027u]), "B22: Champion ATK 18000 -> top");
+        claim = TitleExpertPolicy.ResolveAttributeClaim(2, 2, Stats(1, patk: 99999), [3002u, 3003u]);
+        Check.True(claim.Reply.SequenceEqual([7220]), "B22: Priest ATK after tier 2 -> not-for-class line 7220");
+        claim = TitleExpertPolicy.ResolveAttributeClaim(3, 4, Stats(1, pdef: 5420), [3006u, 3007u]);
+        Check.True(claim.Grant.Count == 6 && claim.Grant[^1] == 3039u, "B22: Mage DEF 5420 (90% of 6019) -> Unbreakable Olympus");
+        claim = TitleExpertPolicy.ResolveAttributeClaim(0, 8, Stats(1, absorb: 39900), [3014u]);
+        Check.True(claim.Grant.SequenceEqual([3015u, 3058u, 3059u, 3060u, 3061u, 3062u, 3063u]), "B22: Warrior absorb 39900 skips owned tier 1");
+        Check.Equal(48, TitleExpertPolicy.LadderTitleText.Count, "B22: 48 ladder names");
+        Check.True(Enumerable.Range(3016, 48).All(id => TitleExpertPolicy.LadderTitleText.ContainsKey((uint)id)),
+            "B22: names cover 3016-3063");
+        Check.Equal(3063u, TitleExpertPolicy.LadderTitleId(8, 8), "B22: last ladder id");
+
+        // B22: a claim never takes the character past the 128 owned-title limit.
+        var big = new TitleExpertPolicy.Claim([3016u, 3017u, 3018u], [3016, 3017, 3018]);
+        Check.True(TitleExpertPolicy.FitToTitleLimit(big, 125, 128).Grant.Count == 3, "B22: 125 + 3 fits 128");
+        var trimmed = TitleExpertPolicy.FitToTitleLimit(big, 126, 128);
+        Check.True(trimmed.Grant.SequenceEqual([3016u, 3017u]) && trimmed.Reply.SequenceEqual([3016, 3017]), "B22: 126 + 3 trims to 2");
+        Check.True(TitleExpertPolicy.FitToTitleLimit(big, 128, 128).Reply.SequenceEqual([500]), "B22: full list -> 500");
+        var line = new TitleExpertPolicy.Claim([], [7013]);
+        Check.True(TitleExpertPolicy.FitToTitleLimit(line, 128, 128).Reply.SequenceEqual([7013]), "B22: requirement line passes at the limit");
+
+        // B22: the Title window tab follows the id range (DesigType0-4); Medusa/event titles stay Event (4).
+        Check.Equal((byte)0, PacketBuilder.DesignationTypeFor(1000), "B22: 1000 Leveling tab");
+        Check.Equal((byte)1, PacketBuilder.DesignationTypeFor(2506), "B22: 2506 Quest tab");
+        Check.Equal((byte)2, PacketBuilder.DesignationTypeFor(3016), "B22: 3016 Attribute tab");
+        Check.Equal((byte)4, PacketBuilder.DesignationTypeFor(1401), "B22: engagement stays Event");
+        Check.Equal((byte)4, PacketBuilder.DesignationTypeFor(5152), "B22: Medusa stays Event");
 
         // Quest titles: the mapped quests that exist in the server's chain.
         foreach (var questId in new uint[] { 118, 122, 217, 221, 376, 1118, 1122, 1217, 1221, 1376 })

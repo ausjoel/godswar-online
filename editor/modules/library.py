@@ -232,7 +232,7 @@ F = {
                    "label": ("Stat", "What it raises (Message.dat caption)."), "key": ("Client key", "Its tag in ItemAppendAttribute.xml."),
                    "max_level": ("Highest level", "Highest attribute level."), "stat_type": ("Stat type", "The stat number the server adds it to."),
                    "distribution": ("Roll range", "The client's Distribution pair."), "flag": ("Flag", "The client's Flag value."),
-                   "text": ("Tooltip text", "How the item tooltip writes this attribute (EquipDescription.dat).")},
+                   "text": ("Tooltip text", "How the game's item tooltip writes this attribute.")},
     "holystone": {"id": ("Effect id", "EquipStoneInfo.xml id (character_items.holy_socket1..6_effect_id)."), "name": ("Name", "EquipDescription.dat."),
                   "desc": ("Effect", "What the stone does in a socket."), "key": ("Client key", "The stat it changes."),
                   "percent": ("Percent", "The value is a percentage."),
@@ -962,6 +962,7 @@ def give(ctx, cid):
     meta = rb.item_meta(pid)
     if not meta["server"]:
         raise Bad("item %d is not an item template of this server" % pid)
+    common.refuse_ungrantable(pid)
     dflt = meta["defaults"]
     q = common.to_int(p.get("quality", dflt["item_quality"]), 0, 20, "quality")
     g = common.to_int(p.get("grade", dflt["item_grade"]), 0, 25, "grade")

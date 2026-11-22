@@ -129,7 +129,7 @@ internal static class ClassSuitWireProtocolChecks
         }
 
         Check.True(
-            !ClassSuitProtocol.TryResolveOperation(109, out _),
+            !ClassSuitProtocol.TryResolveOperation(110, out _), // B22 G2: 109 is now Class Suit V-VII
             "unknown operation does not resolve");
         Check.True(
             !ClassSuitProtocol.IsExactNavigation(

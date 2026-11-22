@@ -22,6 +22,7 @@ internal static partial class WarehouseHandlerChecks
         await CheckDuplicateDepositAsync();
         await CheckExpiredAccessAsync();
         await CheckManagerFreshAndDuplicateAsync();
+        await CheckB21BoxPagesAsync(); // B21
     }
 
     private static async Task CheckCommittedDepositAsync()

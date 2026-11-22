@@ -1,0 +1,15 @@
+/* static/modules/gm_console.css - B22 d51 GM commands window */
+.gw-mod-gm_console .gw-gc-row { display: flex; gap: 8px; margin: 8px 0; }
+.gw-mod-gm_console .gw-gc-input { flex: 1; min-width: 0; font-family: ui-monospace, Menlo, monospace; padding: 6px 8px; }
+.gw-mod-gm_console .gw-gc-out { font-family: ui-monospace, Menlo, monospace; font-size: 13px; background: rgba(0, 0, 0, .35); border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 4px; padding: 8px 10px; min-height: 140px; max-height: 340px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; }
+.gw-mod-gm_console .gw-gc-line.cmd { color: #f4d27a; }
+.gw-mod-gm_console .gw-gc-line.err { color: #ff8a80; }
+.gw-mod-gm_console .gw-gc-line.dim { opacity: .65; }
+.gw-mod-gm_console .gw-gc-table { border-collapse: collapse; width: 100%; margin: 6px 0; }
+.gw-mod-gm_console .gw-gc-table th, .gw-mod-gm_console .gw-gc-table td { padding: 3px 8px; text-align: left; border-bottom: 1px solid rgba(255, 255, 255, .08); vertical-align: top; }
+.gw-mod-gm_console .gw-gc-cmd { font-family: ui-monospace, Menlo, monospace; background: none; border: 1px solid rgba(255, 255, 255, .18); border-radius: 3px; color: inherit;
+  padding: 2px 6px; cursor: pointer; white-space: nowrap; }
+.gw-mod-gm_console .gw-gc-cmd:disabled { opacity: .45; cursor: default; }
+.gw-mod-gm_console .gw-gc-bad td { color: #ff8a80; }
+@media (max-width: 700px) { .gw-mod-gm_console .gw-gc-table { display: block; overflow-x: auto; } }

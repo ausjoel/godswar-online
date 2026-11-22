@@ -1,0 +1,23 @@
+/* static/modules/_gear_ui.css - B21 item 26: shared item-slot views (static/modules/_gear_ui.js). Every rule starts .gw-gearui */
+.gw-gearui-dollwrap { display: inline-block; vertical-align: top; margin: 0 12px 8px 0; }
+.gw-gearui-dolltitle { text-align: center; font-weight: 600; margin-bottom: 4px; }
+.gw-gearui-doll { position: relative; width: 272px; height: 226px; background: rgba(0, 0, 0, .18); border-radius: 6px; }
+.gw-gearui-doll .gw-gearui-figure { position: absolute; left: 72px; top: 30px; transform: scale(1.6); transform-origin: top left; opacity: .45; pointer-events: none; }
+.gw-gearui-doll .gw-gearui-abs { position: absolute; }
+.gw-gearui-cap { position: absolute; left: 2px; right: 2px; top: 0; bottom: 0; display: flex; align-items: center; justify-content: center; text-align: center;
+  font-size: 8.5px; line-height: 1.05; color: #7f98a5; pointer-events: none; overflow: hidden; }
+.gw-gearui-grade { position: absolute; left: 2px; top: 1px; font-size: 9px; color: #ffe08a; pointer-events: none; }
+.gw-gearui-cell.gw-gearui-changed { box-shadow: 0 0 0 2px #e8c46a; }
+.gw-gearui-cell.gw-gearui-new { box-shadow: 0 0 0 2px #6ad38a; }
+.gw-gearui-cell.gw-gearui-off { opacity: .35; }
+.gw-gearui-cell.gw-gearui-on { box-shadow: 0 0 0 2px #7fb6ff; }
+.gw-gearui-bagwrap { display: inline-block; vertical-align: top; }
+.gw-gearui-bagtabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 4px; }
+.gw-gearui-bag { display: grid; grid-template-columns: repeat(6, 42px); gap: 2px; }
+.gw-gearui-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; margin: 4px 0 8px; }
+.gw-gearui-legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 5px; border-radius: 2px; vertical-align: -1px; }
+.gw-gearui-legend .lg-changed::before { background: #e8c46a; }
+.gw-gearui-legend .lg-new::before { background: #6ad38a; }
+.gw-gearui-legend .lg-off::before { background: #555; }
+.gw-gearui-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
+@media (max-width: 640px) { .gw-gearui-doll { transform: scale(.85); transform-origin: top left; margin-bottom: -34px; } }

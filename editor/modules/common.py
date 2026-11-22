@@ -160,6 +160,13 @@ def public_change(c):
     return {k: v for k, v in c.items() if k not in ("before", "after")}
 
 
+def refuse_ungrantable(pid):
+    """Raise Bad for an item that cannot be handed out by id (reborn.UNGRANTABLE: the packed Seal Jade)."""
+    why = R.ungrantable_reason(pid)
+    if why:
+        raise Bad(why)
+
+
 def to_int(v, lo=None, hi=None, what="value"):
     try:
         if isinstance(v, bool):
@@ -416,7 +423,7 @@ class CatalogService:
             cat = g("category") or kind
             sub = " · ".join(x for x in ("#%s" % iid, _lv(g("minlv"), g("maxlv")), cat,
                                            ("Dead items: " + item_lifecycle.STATUS_LABELS[display["dead_status"]]) if display["dead_status"] else "",
-                                           "GENERATED translation" if display["generated_translation"] else "") if x)
+                                           "Our translation" if display["generated_translation"] else "") if x)
             client_item = self.file("items").get(str(iid), {})
             sprite = client_item["sprite"] if "sprite" in client_item else g("sprite")
             rows.append(_row(iid, display.get("name") or g("name"), ITEM_GROUP.get(kind, "Other"), cat, sub, sprite, g("classes") or None,
@@ -497,21 +504,43 @@ class CatalogService:
         return [_row(p["species"], p.get("name"), None, None, "species %s" % p["species"], p.get("sprite"))
                 for k, p in sorted(self.file("pets").items(), key=lambda kv: int(kv[0]))]
 
+    def _art(self, sheet, key):
+        """'art:<sheet>:<tile>' for GW.icon (package E pictures in static/graphics/), or None."""
+        if "_art" not in self._files:
+            gfx = os.path.join(HERE, "static", "graphics")
+            self._files["_art"] = {"models": _load_json(os.path.join(gfx, "models.json"), {}) or {},
+                                   "maps": _load_json(os.path.join(gfx, "maps.json"), {}) or {},
+                                   "icons": _load_json(os.path.join(gfx, "icons-extra.json"), {}) or {}}
+        a = self._files["_art"]
+        if sheet == "map":
+            m = (a["maps"].get("maps") or {}).get(str(key)) or {}
+            if "same_as" in m:
+                m = (a["maps"].get("maps") or {}).get(str(m["same_as"])) or {}
+            t = m.get("thumb")
+        elif sheet in ("item", "holystone"):
+            t = (a["icons"].get(sheet) or {}).get(str(key))
+            sheet = "icon"
+        else:
+            t = ((a["models"].get(sheet) or {}).get(str(key)) or {}).get("t")
+        return None if t is None else "art:%s:%d" % (sheet, t)
+
     def _ix_monster(self):
         maps = self.file("maps")
         rows = []
         for k, m in sorted(self.file("monsters").items()):
             where = ", ".join((maps.get(str(x)) or {}).get("name", str(x)) for x in (m.get("maps") or [])[:3])
             rows.append(_row(k, m.get("name"), (m.get("rank") or "normal").capitalize(), None,
-                             "%s%s" % (k, " · " + where if where else ""), key=k))
+                             "%s%s" % (k, " · " + where if where else ""), self._art("monster", k), key=k))
         return rows
 
     def _ix_npc(self):
-        return [_row(k, n.get("name"), n.get("scene"), None, "%s%s" % (k, " · " + n["desc"][:60] if n.get("desc") else ""), key=k)
+        return [_row(k, n.get("name"), n.get("scene"), None, "%s%s" % (k, " · " + n["desc"][:60] if n.get("desc") else ""),
+                     self._art("npc", k), key=k)
                 for k, n in sorted(self.file("npcs").items())]
 
     def _ix_map(self):
-        return [_row(m["id"], m.get("name"), None, None, "#%s · %s" % (m["id"], m.get("scene") or ""), key=m.get("scene") or "")
+        return [_row(m["id"], m.get("name"), None, None, "#%s · %s" % (m["id"], m.get("scene") or ""), self._art("map", m["id"]),
+                     key=m.get("scene") or "")
                 for k, m in sorted(self.file("maps").items(), key=lambda kv: int(kv[0]))]
 
     def _ix_quest(self):
@@ -547,7 +576,8 @@ class CatalogService:
 
     def _ix_holystone(self):
         return [_row(s["id"], s.get("name"), None, None, "#%s · %s" % (s["id"], s.get("effect_text") or s.get("desc") or ""),
-                     s.get("sprite") if s.get("sprite") is not None else s.get("socket_sprite"), key=s.get("key") or "")
+                     self._art("holystone", s["id"]) or (s.get("sprite") if s.get("sprite") is not None else s.get("socket_sprite")),
+                     key=s.get("key") or "")
                 for k, s in sorted(self.file("holystones").items(), key=lambda kv: int(kv[0]))]
 
     SUIT_TIERS = {0: "Ordinary", 1: "Bronze", 2: "Silver", 3: "Gold", 4: "Platinum", 5: "Mithril", 6: "Orichalcum",
@@ -650,11 +680,31 @@ CATALOG = CatalogService()
 
 
 # =========================================================================== glossary + write rules
+# Text that comes from the game server (rate descriptions, gate notes) can carry the project's own bookkeeping: the
+# owner's name, decision / finding ids ("F-166 (b):"), "GENERATED", "UNPROVEN, see Development/...". plain_note()
+# removes those so a hover reads as plain help. The stored text is never changed; pages keep it in *_stored.
+_NOTE_RE = re.compile(
+    r"\s*\((?:[^()]*\b(?:the admin|F-\d+|GENERATED|UNPROVEN|Development/)[^()]*)\)"                 # (the admin F-123), (GENERATED)
+    r"|(?:\bW\d\s+)?(?:(?<!\w)the admin\s+)?\bF-\d+(?:/F-\d+)*(?:\s*\([a-z]\))?:?\s*"                   # "the admin F-166 (b): "
+    r"|(?<!\w)the admin\s+(?:BAY\d|\d{4}-\d\d-\d\d)[:,]?\s*"                                           # "the admin BAY2 ", "the admin 2026-11-05: "
+    r"|\bGENERATED(?:\s+rule)?[.:]?\s*"
+    r"|\s*\(?UNPROVEN[^.)]*\)?")
+
+
+def plain_note(text):
+    t = _NOTE_RE.sub(" ", str(text or "")).replace("the admin's", "the owner's").replace("the admin", "the owner")
+    t = re.sub(r"\s+([.,;:])", r"\1", re.sub(r"\s{2,}", " ", t)).strip()
+    t = re.sub(r"\.(?:\s*\.)+", ".", t)
+    t = re.sub(r"([.;]\s+)([a-z])", lambda m: m.group(1) + m.group(2).upper() if m.group(1)[0] == "." else m.group(0), t)
+    return t[:1].upper() + t[1:] if t else t
+
+
 APPLIES_TEXT = {
     # glossary.json _meta.applies and write_rules.json legend.applies, in plain words for the chip
+    "game_reload": "applies after game-data reload",
     "now": "applies at the next use", "per_use": "applies at the next use", "hot_reload": "applies within 5 seconds",
     "next_login": "applies at the character's next login", "login": "applies at the character's next login",
-    "after_restart": "applies after gw251 restart", "startup": "applies after gw251 restart",
+    "after_restart": "applies after a server restart", "startup": "applies after a server restart",
     "new_revision_and_restart": "not editable (published content)", "never": "the server does not read this",
     "not_editable": "not editable", "live": "applied now by the running server", "unknown": "not established",
 }
@@ -759,6 +809,7 @@ GLOSSARY = GlossaryService()
 # One table maps round2's endpoint paths to the capability names the write rules use (WRITE-RULES.md s.7 step 7.2).
 # If round2 ships other paths, change them HERE only.
 CAP_PATHS = {
+    "/admin/buff/broadcast": ["server.buff_broadcast"],
     "/admin/item/add": ["character.give_item"],
     "/admin/item/remove": ["character.item_delete"],
     "/admin/item/move": ["character.item_move"],
@@ -1148,7 +1199,21 @@ class Ctx:
             if m:
                 raise Conflict(m.group(1).strip())
             raise
-        return {"change": public_change(c), "applies": applies, "applies_text": APPLIES_TEXT.get(applies, applies)}
+        return self.login_check_after(cid, {"change": public_change(c), "applies": applies,
+                                            "applies_text": APPLIES_TEXT.get(applies, applies)})
+
+    def login_check_after(self, cid, result):
+        """After a character write: would the character still get into the world? Adds result["login_check"] (the
+        character's findings and one plain sentence each) when something would stop or be hidden at login, so the
+        page can say so at once. Best effort: a failure here never fails the write that already happened."""
+        try:
+            from . import player_health as PH, _login_check as LC
+            found, _ = PH.run_check(self, PH._characters(self, "AND c.id = %d" % int(cid)))
+            if found and found[0]["findings"]:
+                result["login_check"] = dict(found[0], sentences=LC.sentence(found[0]))
+        except Exception:   # noqa: BLE001
+            pass
+        return result
 
     def rows_write(self, scope_list, action, build, fields=(), lock_cids=(), guard_sql=(), expected=None, advanced=False,
                    applies=None, target="", no_undo=None):
@@ -1330,6 +1395,7 @@ class Ctx:
             meta = rb.item_meta(pid)
             if not meta["server"]:
                 raise Bad("item %d is not an item template of this server" % pid)
+            refuse_ungrantable(pid)
             dflt = meta["defaults"]
             q = to_int(p.get("quality", dflt["item_quality"]), 0, 20, "quality")
             g = to_int(p.get("grade", dflt["item_grade"]), 0, 25, "grade")
@@ -1360,8 +1426,8 @@ class Ctx:
             if st == 200:
                 rec = self._live_record(cid, info["name"], what + " (live)", [(o["path"], live_body, doc)], before, rb.dump(cid),
                                         inverse=None)
-                return {"mode": "live", "change": public_change(rec), "applies": "live", "applies_text": APPLIES_TEXT["live"],
-                        "result": doc}
+                return self.login_check_after(cid, {"mode": "live", "change": public_change(rec), "applies": "live",
+                                                    "applies_text": APPLIES_TEXT["live"], "result": doc})
             if st == 409 and err == "busy":
                 raise Conflict("%s is changing maps or logging in; try again in a moment. Nothing was changed." % info["name"])
             if not (st == 409 and err == "offline"):

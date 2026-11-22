@@ -15,6 +15,7 @@ internal static class FlameBlastPulsePolicy
     public static readonly TimeSpan Interval = TimeSpan.FromSeconds(1);
 
     public static bool AppliesTo(in SkillCombatDefinition combat) =>
-        combat.SkillId is >= 570 and <= 574 &&
+        (combat.SkillId is >= 570 and <= 579 || // B22: + Flame Blast 6-10
+         Godswar.Server.Application.Combat.ClassFieldSkills.IsField(combat.SkillId)) && // B22 B23-F class fields
         SkillCombatResolver.IsHostileMonsterGroundAreaSkill(combat);
 }

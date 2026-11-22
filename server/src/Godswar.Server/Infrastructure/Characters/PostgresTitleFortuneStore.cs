@@ -59,6 +59,7 @@ internal sealed class PostgresTitleFortuneStore(NpgsqlDataSource dataSource)
         throw new ArgumentNullException(nameof(dataSource));
     private readonly PostgresPlayerOwnershipGuard _ownershipGuard = new(dataSource);
     private int _schemaReady;
+    private int _ladderCatalogReady; // B22
 
     private async Task EnsureSchemaAsync(CancellationToken cancellationToken)
     {
@@ -92,6 +93,27 @@ internal sealed class PostgresTitleFortuneStore(NpgsqlDataSource dataSource)
         }
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        // B22: the ladder titles 3016-3063 are new catalogue rows; add them once per process (idempotent, the same
+        // rows as tools/b22-title-ladder sql), so a grant is never silently dropped by the catalogue filter below.
+        if (Volatile.Read(ref _ladderCatalogReady) == 0 && titleIds.Any(static id =>
+                id >= Application.Titles.TitleExpertPolicy.LadderFirstTitle &&
+                id <= Application.Titles.TitleExpertPolicy.LadderLastTitle))
+        {
+            var ladder = Application.Titles.TitleExpertPolicy.LadderTitleText.OrderBy(static pair => pair.Key).ToArray();
+            await using var seed = new NpgsqlCommand(
+                """
+                INSERT INTO public.editor_title_catalog (title_id, display_name, description)
+                SELECT * FROM unnest(@ids, @names, @descriptions)
+                ON CONFLICT (title_id) DO NOTHING;
+                """,
+                connection);
+            seed.Parameters.AddWithValue("ids", ladder.Select(static pair => (int)pair.Key).ToArray());
+            seed.Parameters.AddWithValue("names", ladder.Select(static pair => pair.Value.Name).ToArray());
+            seed.Parameters.AddWithValue("descriptions", ladder.Select(static pair => pair.Value.Description).ToArray());
+            await seed.ExecuteNonQueryAsync(cancellationToken);
+            Volatile.Write(ref _ladderCatalogReady, 1);
+        }
+
         await using var command = new NpgsqlCommand(
             """
             INSERT INTO public.character_title_grants (character_id, title_id, granted_by, note)

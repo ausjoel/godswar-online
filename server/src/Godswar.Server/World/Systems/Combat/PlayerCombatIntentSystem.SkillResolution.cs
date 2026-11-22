@@ -122,6 +122,9 @@ internal sealed partial class PlayerCombatIntentSystem
             skill,
             eventId,
             targetOrder);
+        // B21 item 18: per-class area skill damage (combat.aoe_*, default x1 = unchanged).
+        if (PlayerCombatRules.IsHostileAreaSkill(skill))
+            resolution = Godswar.Server.Application.Combat.AreaSkillBalance.Apply(offense.Profession, resolution);
         // PROF (q06): Sigil Stones deal their item-text damage when GODSWAR_SIGIL_FIXED_DAMAGE=1.
         resolution = SigilFixedDamage.TryGet(skill, out var fixedDamage)
             ? SigilFixedDamage.Apply(resolution, fixedDamage)

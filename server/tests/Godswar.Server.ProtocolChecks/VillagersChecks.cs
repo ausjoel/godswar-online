@@ -36,10 +36,10 @@ internal static class VillagersChecks
     private static void CheckSwitchDefaults()
     {
         ServerRates.ResetToDefaults();
-        Check.True(!VillagersSwitches.WeekendClaimEnabled, "RELEASE: weekend claim is off by default");
+        Check.True(VillagersSwitches.WeekendClaimEnabled, "B21: weekend claim is on by default (live is on)");
         Check.True(!VillagersSwitches.WeekendClaimAnyDay, "weekend claim any-day lever is off by default");
-        Check.True(!VillagersSwitches.FestivalGiftsEnabled, "holiday gifts are off by default");
-        Check.True(!VillagersSwitches.VillageLeaderBooksEnabled, "RELEASE: Village Leader re-issue is off by default");
+        Check.True(VillagersSwitches.FestivalGiftsEnabled, "B21: holiday gifts are on by default (live is on)");
+        Check.True(VillagersSwitches.VillageLeaderBooksEnabled, "B21: Village Leader re-issue is on by default (live is on)");
         Check.Equal(4, ServerRateCatalog.Definitions.Count(static definition =>
             definition.Category == ServerRateCatalog.VillagersCategory), "four villagers switches");
         Check.True(ServerRateCatalog.Definitions.All(static definition =>

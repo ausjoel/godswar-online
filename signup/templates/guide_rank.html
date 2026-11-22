@@ -1,0 +1,32 @@
+{% extends "_article.html" %}
+{% block title %}Rank effects and /rank{% endblock %}
+{% block heading %}Rank effects and /rank{% endblock %}
+{% block intro %}Well-forged gear makes your character glow. On this server you decide how much of that glow to show.{% endblock %}
+{% block slug %}rank{% endblock %}
+{% block article %}
+<h2>What a rank effect is</h2>
+<p>The armour and weapon you wear earn <b>rank points</b> from their quality and how far they are forged. Enough points light up a <b>rank</b>: higher ranks add stronger glows and, at the top, wings. Armour and weapon have separate ranks. Open your bag and hover over <b>Armour Rank</b> or <b>Weapon Rank</b> to see your points against the next rank.</p>
+<p>The effect is only for looks. Choosing to show a lower rank never changes your stats or the rank you have earned.</p>
+
+<h2>Choose it from the bag (client 1.5.3)</h2>
+<ol>
+  <li>Open your bag.</li>
+  <li>Click <b>Armour Rank</b> or <b>Weapon Rank</b>.</li>
+  <li>Pick <b>None</b>, any rank from 1 up to the one your gear has earned, or <b>Max</b> (always show the full earned rank).</li>
+</ol>
+<p>Your choice is saved on the server for that character, and the server sends it to players nearby too.</p>
+
+<h2>Or type /rank in chat</h2>
+<div class="tablewrap"><table>
+  <thead><tr><th>Type</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>/rank</code></td><td>Shows your earned and shown rank for armour and weapon.</td></tr>
+    <tr><td><code>/rank armour 4</code></td><td>Show at most armour rank 4 (<code>armor</code> works too).</td></tr>
+    <tr><td><code>/rank weapon 2</code></td><td>Show at most weapon rank 2.</td></tr>
+    <tr><td><code>/rank 3</code></td><td>Set both armour and weapon to at most rank 3.</td></tr>
+    <tr><td><code>/rank weapon off</code></td><td>Hide the weapon effect (<code>0</code> or <code>none</code> do the same).</td></tr>
+    <tr><td><code>/rank max</code></td><td>Show everything you have earned again.</td></tr>
+  </tbody>
+</table></div>
+<p>The command line never appears in chat for other people. If you pick a rank higher than you have earned, you simply show your earned rank until your gear catches up.</p>
+{% endblock %}

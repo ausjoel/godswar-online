@@ -9,8 +9,10 @@ namespace Godswar.Server.Game;
 //   Trainer 1: [1000,1001,1003,1004] -> 1000 -> Index 2 [1006 rules, 1005 Start] -> 1005 -> Index 3 [1401 ...]
 //   any trainer: 1001/1201 -> Index 2 sum form [1281, 1250+N, a*10000+50, b*10000+60] -> submit -> Index 3
 //   [1401+N exchanged | 3292/3202 finished + time | 1280 wrong sum | 1104 six races | 1512 bag full].
-// The submission's layout is UNPROVEN: it is recognised as the next request from the same window while the form
-// is pending, and the typed sum is read from +0x38 (proven only for the guild altar's edit boxes).
+// The submission (captured from the real client 1.4.9 on 2026-11-12, W5-F): a 92-byte 10069 with the click path
+// [1201 or 1001, 0] and the typed sum in the payload word +0x38 (frame +0x3C). GodsWar.exe builds it at 0x5a9900:
+// frame +0x3C = the NpcFun window's BijouEditBox (atoi of its text, 0x5a90c5), +0x40 MoneyEditBox, +0x44 NumEditBox;
+// NpcFunHealth.lua shows InputText1 = BijouEditBox for the sum. An empty box sends -1.
 internal sealed partial class GameClientHandler
 {
     private enum RaceOutcome { Exchanged, Finished, NoManual, Limit, BagFull }
@@ -26,7 +28,7 @@ internal sealed partial class GameClientHandler
 
         if (selection < 0 && amount > 0 && TakeEventsNpcForm(npc, EventsNpcPolicy.HealthFunction) is { } typed)
         {
-            // UNPROVEN: a submission that carries only the typed number.
+            // A submission that carries only the typed number (not what client 1.4.9 sends; kept for safety).
             await SubmitHealthManualAsync(npc, dialogIndex, trainer, typed, path, amount, cancellationToken);
             return true;
         }

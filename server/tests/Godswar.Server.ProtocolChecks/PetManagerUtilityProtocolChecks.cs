@@ -426,9 +426,17 @@ internal static class PetManagerUtilityProtocolChecks
             GameDefaults.EmptyKitBag,
             0,
             (packed with { LinkedSealedPetId = 0 }).ToCompactString());
-        Check.Throws<InvalidDataException>(
-            () => PacketBuilder.KitBagDetailPages(character),
-            "packed 10109 without an authoritative link fails closed");
+        // W6A: it no longer throws (that ended every login of the character). It is never sent with a zero
+        // pet link: the client gets an empty slot and the login check reports the item.
+        record = PacketBuilder.KitBagDetailPages(character)[0]
+            .AsSpan(24, 72);
+        Check.Equal(
+            -1,
+            BinaryPrimitives.ReadInt32LittleEndian(record),
+            "packed 10109 without an authoritative link fails closed: sent as an empty slot");
+        Check.True(
+            PacketBuilder.ItemFault(packed with { LinkedSealedPetId = 0 }) is not null,
+            "packed 10109 without an authoritative link is reported as a fault");
     }
 
     private static PetDurableReceipt RejectedReceipt(

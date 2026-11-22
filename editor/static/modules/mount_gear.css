@@ -2,3 +2,6 @@
 .gw-mod-mount_gear .mg-controls label{display:flex;gap:6px;align-items:center}
 .gw-mod-mount_gear .mg-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;padding:12px;background:#0b171f;border:1px solid #36505b}
 .gw-mod-mount_gear .mg-stats label{display:flex;gap:8px;align-items:center}
+/* B21 item 26: in-game slots */
+.gw-mod-mount_gear .mg-slots{margin:6px 0 10px}
+.gw-mod-mount_gear .mg-beforeafter{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:6px 0}

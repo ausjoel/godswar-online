@@ -186,6 +186,8 @@ internal static class CommandMetrics
                 "class_suit_upgrade_tier_iii",
             CommandFamily.ClassSuitUpgradeTierIV =>
                 "class_suit_upgrade_tier_iv",
+            CommandFamily.ClassSuitUpgradeTierBeyond => // B22 G2
+                "class_suit_upgrade_tier_beyond",
             CommandFamily.ClassSuitAddAttribute =>
                 "class_suit_add_attribute",
             CommandFamily.ClassSuitDeleteAttribute =>

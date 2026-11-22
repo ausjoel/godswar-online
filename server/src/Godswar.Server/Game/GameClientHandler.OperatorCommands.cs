@@ -24,7 +24,7 @@ internal sealed partial class GameClientHandler
     private static readonly string[] OperatorCommandWords =
     [
         "/announce", "/kick", "/mute", "/unmute", "/ban", "/unban",
-        "/goto", "/leave", "/testrun", "/summon", "/move", "/where", "/instances", "/gm", "/panel", "/**",
+        "/goto", "/leave", "/testrun", "/wlclear", "/summon", "/move", "/where", "/instances", "/gm", "/panel", "/**",
         "/god", "/walls", "/speed", "/power", "/armor", "/bufflock", "/petlock", "/powers",
         "/buff", "/give", "/bag", "/bind", "/dupe", "/itemset", "/commands", "/mall",
         .. (ProfessionBlueprintCatalog.Enabled ? new[] { "/craft" } : Array.Empty<string>()) // PROF (q09): GODSWAR_PROFESSIONS=1 only
@@ -59,6 +59,11 @@ internal sealed partial class GameClientHandler
             return true;
         }
 
+        if (await RefuseSwitchedOffCommandAsync(packet, GmPowerPolicy.CommandKey(word), cancellationToken)) // W5B
+        {
+            return true;
+        }
+
         var body = text[offset..].Trim();
         var args = body.Split(
             (char[]?)null,
@@ -77,6 +82,8 @@ internal sealed partial class GameClientHandler
                 "/goto" => await OperatorGotoAsync(args, cancellationToken),
                 "/leave" => await OperatorLeaveRunAsync(cancellationToken),
                 "/testrun" => await OperatorStartTestRunAsync(args, cancellationToken),
+                "/wlclear" => Environment.GetEnvironmentVariable("GODSWAR_RIG_TEST_RUNS") == "1" // WL-SLIDERS rig aid
+                    ? _registry.RigClearWonderlandIsland(_session, DateTimeOffset.UtcNow) : "/wlclear is for test servers",
                 "/summon" => await OperatorSummonAsync(args, cancellationToken),
                 "/move" => await OperatorMoveAsync(args, cancellationToken),
                 "/where" => OperatorWhere(args),
@@ -282,6 +289,7 @@ internal sealed partial class GameClientHandler
         }
 
         await TryNotifyAsync(target, "You were disconnected by the server staff.", cancellationToken);
+        target.Session.EndHint ??= "kicked"; // W6A
         target.Session.Disconnect();
         await LogOperatorAsync("kick", target.CharacterName, $"account={target.AccountId}", cancellationToken);
         return $"{target.CharacterName} was disconnected";
@@ -363,6 +371,7 @@ internal sealed partial class GameClientHandler
         if (online is not null)
         {
             await TryNotifyAsync(online, "This account has been banned.", cancellationToken);
+            online.Session.EndHint ??= "banned"; // W6A
             online.Session.Disconnect();
         }
 
@@ -389,10 +398,15 @@ internal sealed partial class GameClientHandler
             return $"no character named {args[1]}";
         }
 
-        await RequireOperatorStore().SetAccountStatusAsync(
-            character.AccountId,
-            OperatorControls.AccountStatusNormal,
-            cancellationToken);
+        if (!await RequireOperatorStore().SetAccountStatusAsync(
+                character.AccountId,
+                OperatorControls.AccountStatusNormal,
+                cancellationToken))
+        {
+            // W4A: a deleted account (status 2) is restored in the editor, not unbanned.
+            return $"account {character.Username} is deleted; restore it in the editor (Accounts)";
+        }
+
         await LogOperatorAsync(
             "unban",
             character.CharacterName,
@@ -709,9 +723,9 @@ internal sealed partial class GameClientHandler
         switch (word)
         {
             case "/speed":
-                if (!off && (!float.IsFinite(value) || value <= 0 || (!_developerCommands.UseCharacterGmFlags && value is < 0.5f or > 10f)))
+                if (!off && (!float.IsFinite(value) || value <= 0 || (!OperatorLimitsLifted && value is < 0.5f or > 10f)))
                 {
-                    return _developerCommands.UseCharacterGmFlags ? "speed must be a finite positive number" : "speed must be 0.5 to 10 (1 = normal)";
+                    return OperatorLimitsLifted ? "speed must be a finite positive number" : "speed must be 0.5 to 10 (1 = normal)";
                 }
 
                 if (speedTarget is not null)
@@ -723,18 +737,18 @@ internal sealed partial class GameClientHandler
                     current with { SpeedFactor = off ? 1f : value });
                 break;
             case "/power":
-                if (!off && (!int.TryParse(args[1], out var _) || value < 1 || (!_developerCommands.UseCharacterGmFlags && value > 1000)))
+                if (!off && (!int.TryParse(args[1], out var _) || value < 1 || (!OperatorLimitsLifted && value > 1000)))
                 {
-                    return _developerCommands.UseCharacterGmFlags ? "power must be a positive 32-bit integer" : "power must be 1 to 1000 (attack multiplier)";
+                    return OperatorLimitsLifted ? "power must be a positive 32-bit integer" : "power must be 1 to 1000 (attack multiplier)";
                 }
 
                 powers = OperatorControls.UpdatePowers(_character!.Id, current =>
                     current with { AttackMultiplier = off ? 1 : int.Parse(args[1], CultureInfo.InvariantCulture) });
                 break;
             default:
-                if (!off && (!int.TryParse(args[1], out var _) || value < 0 || (!_developerCommands.UseCharacterGmFlags && value > 1_000_000)))
+                if (!off && (!int.TryParse(args[1], out var _) || value < 0 || (!OperatorLimitsLifted && value > 1_000_000)))
                 {
-                    return _developerCommands.UseCharacterGmFlags ? "armor must be a nonnegative 32-bit integer" : "armor must be 0 to 1,000,000 (added defence)";
+                    return OperatorLimitsLifted ? "armor must be a nonnegative 32-bit integer" : "armor must be 0 to 1,000,000 (added defence)";
                 }
 
                 powers = OperatorControls.UpdatePowers(_character!.Id, current =>
@@ -1033,9 +1047,9 @@ internal sealed partial class GameClientHandler
         }
 
         // A packed Seal Jade with no linked pet stops its owner entering the world (PacketBuilder.ItemSerialization).
-        if (itemId == PetItemCatalog.PackedSealJade)
+        if (PetItemCatalog.CannotBeGrantedReason(itemId) is { } cannotGrant) // W6A: one rule for every grant path
         {
-            return "a packed Seal Jade only comes from sealing a pet";
+            return cannotGrant;
         }
 
         var stackCap = ReadItemStackCap(template.StatsJson);
@@ -1360,6 +1374,7 @@ internal sealed partial class GameClientHandler
                     cancellationToken),
                 OperatorMarriageRefreshAction => await ApplyMarriageRefreshAsync(cancellationToken), // MARRIAGE
                 PetDispatchDueAction => await CompleteDuePetDispatchesAsync(cancellationToken), // W3 Magic Bell
+                PrizeChestDeliveryAction => await NotifyPrizeChestDeliveryAsync(cancellationToken), // W5-F
                 _ => "unknown action"
             };
             Console.WriteLine(

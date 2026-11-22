@@ -134,7 +134,7 @@ internal sealed partial class GameClientHandler
         // FINALISE: hot rate gm.obey_gates = 1 makes GMs obey them like everyone else.
         // FINALISE2: plus the gate's own GM rule (Gates table gm_bypass).
         var operatorBypass = Godswar.Server.Application.Gates.GateRules.GmMaySkip(bandGate) &&
-            await HasOperatorAuthorityAsync(cancellationToken);
+            await HasOperatorPowerAsync(Godswar.Server.Application.Operators.GmPowerPolicy.GateBypass, cancellationToken);
         if (!operatorBypass &&
             (_character.Level < destination.MinimumLevel ||
              _character.Level > destination.MaximumLevel))

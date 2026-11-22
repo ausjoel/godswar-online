@@ -980,6 +980,103 @@ def boost(ctx, gid):
                    target="guild " + g["name"], boost=True)
 
 
+# ----------------------------------------------------------------------------------------------- POST: max a guild (B21)
+# B21 item 21 (the admin 2026-11-21): "instantly max a guild (level, buildings, funds as the server allows) and max members'
+# contributions". Two ceilings:
+#   game   = the client's own caps (Settings/Sys/Consortia.xml CorsortiaDefaultValue: MaxMoney 900,000,000 for Silver and
+#            Gold, MaxBijou 90,000,000 gems, MaxContribute 900,000 points, MaxMember 10,000); the guild window and the
+#            donate / spend checks were made for these numbers. The default.
+#   server = what the database and the uint32 packet fields take, kept 147 million below 2^31-1 so a donation or a
+#            quest pay-out that adds to it cannot overflow the integer column (it would refuse the donation).
+MAX_PARTS = ("level", "buildings", "funds", "member_limit", "contributions", "altars")
+SERVER_CEILING = 2_000_000_000
+# B22 d50: "max" also fills every member's offering points on every built altar to the bonus cap. The cap is the same in
+# both modes: GuildAltarWorshipBonusPolicy.MaxPoints = 1,000,000 (20 steps of 50,000 = +150%); more pays nothing.
+ALTAR_MAX_POINTS = POINTS_PER_STEP * MAX_STEPS
+
+
+def max_targets(defaults, mode):
+    """{silver, gold, bijou, contribute, member_limit} for mode 'game' (client caps) or 'server'."""
+    d = defaults or {}
+    if mode == "server":
+        return {"silver": SERVER_CEILING, "gold": SERVER_CEILING, "bijou": SERVER_CEILING, "contribute": SERVER_CEILING,
+                "member_limit": 10000}
+    return {"silver": int(d.get("MaxMoney") or 900_000_000), "gold": int(d.get("MaxMoney") or 900_000_000),
+            "bijou": int(d.get("MaxBijou") or 90_000_000), "contribute": int(d.get("MaxContribute") or 900_000),
+            "member_limit": int(d.get("MaxMember") or 10000)}
+
+
+def max_statements(gid, g, types, members, parts, t, top_level):
+    """The SQL of one 'max' (pure, for the unit test). Only raises values: anything already above the target stays."""
+    st = []
+    sets = []
+    if "level" in parts and g["level"] < top_level:
+        sets.append("level = %d" % top_level)
+    if "member_limit" in parts and g["member_limit"] < t["member_limit"]:
+        sets.append("member_limit = %d" % t["member_limit"])
+    if "funds" in parts:
+        for k in ("silver", "gold", "bijou"):
+            if int(g[k]) < t[k]:
+                sets.append("%s = %d" % (k, t[k]))
+    if sets:
+        st.append("UPDATE guilds SET %s, updated_at = now() WHERE id = %d" % (", ".join(sets), gid))
+    if "buildings" in parts:
+        for ty in types:
+            st.append("INSERT INTO guild_buildings (guild_id, slot, building_type, level, created_at, updated_at) "
+                      "VALUES (%d, %d, %d, %d, now(), now()) ON CONFLICT (guild_id, slot) DO UPDATE SET level = "
+                      "GREATEST(guild_buildings.level, EXCLUDED.level), updated_at = now()" % (gid, ty["type"], ty["type"], ty["max"]))
+    if "altars" in parts and members:
+        # every member x every altar (types 10-19) the guild has built - including the ones this max just built, because
+        # the buildings statement above runs first in the same transaction. Only raises; the drain clock (settled_at)
+        # restarts only on a row whose points actually rise.
+        st.append("INSERT INTO guild_altar_worship (guild_id, character_id, building_type, points, updated_at, settled_at) "
+                  "SELECT %(g)d, m.character_id, b.building_type, %(p)d, now(), now() FROM guild_members m JOIN guild_buildings b "
+                  "ON b.guild_id = m.guild_id WHERE m.guild_id = %(g)d AND b.building_type BETWEEN %(lo)d AND %(hi)d AND b.level > 0 "
+                  "ON CONFLICT (guild_id, character_id, building_type) DO UPDATE SET points = EXCLUDED.points, updated_at = now(), "
+                  "settled_at = now() WHERE guild_altar_worship.points < EXCLUDED.points"
+                  % {"g": gid, "p": ALTAR_MAX_POINTS, "lo": min(ALTAR_ATTR), "hi": max(ALTAR_ATTR)})
+    if "contributions" in parts and members:
+        ids = ",".join(str(int(m["character_id"])) for m in members)
+        c = t["contribute"]
+        st.append("UPDATE guild_members SET contribution_silver = GREATEST(contribution_silver, %d), contribution_gold = "
+                  "GREATEST(contribution_gold, %d) WHERE guild_id = %d" % (t["silver"], t["gold"], gid))
+        st.append("UPDATE character_base SET consortia_contribute = GREATEST(consortia_contribute, %d) WHERE id IN (%s)" % (c, ids))
+    return st
+
+
+@M.post(r"g/(\d+)/max")
+def max_guild(ctx, gid):
+    """POST /api/m/guild/g/<id>/max {parts: [level, buildings, funds, member_limit, contributions], mode: game|server}
+    - B21: raise everything chosen to its ceiling in ONE write (every member offline; Undo in the Change log)."""
+    gid = int(gid)
+    g = _guild(ctx, gid)
+    parts = ctx.body.get("parts") or list(MAX_PARTS)
+    if not isinstance(parts, list) or not parts or any(p not in MAX_PARTS for p in parts):
+        raise Bad("parts must be a list of: %s" % ", ".join(MAX_PARTS))
+    mode = ctx.body.get("mode") or "game"
+    if mode not in ("game", "server"):
+        raise Bad("mode is 'game' (the client's own limits) or 'server' (the largest safe number)")
+    t = max_targets(_cat().get("defaults"), mode)
+    levels = ctx.need_rb().pg.json("(SELECT to_jsonb(coalesce(max(level), 12)) FROM guild_levels)") or 12
+    types = _types(ctx)
+    members = _members(ctx, gid)
+    exp = _expected_dict(ctx.body.get("expected"))
+    exp = {k: exp[k] for k in ("level", "member_limit", "silver", "gold", "bijou") if k in exp}
+    expected = [{"table": "guilds", "where": {"id": gid}, "values": exp}] if exp else None
+    stmts = max_statements(gid, g, types, members, parts, t, int(levels))
+    # the buildings and contributions use GREATEST, so they may change nothing; the guild row is checked here
+    if not stmts:
+        raise Bad("nothing to raise: %s is already at the %s maximum" % (g["name"], "game's" if mode == "game" else "server's"))
+    what = "max (%s limits): %s" % ("game" if mode == "game" else "server", ", ".join(p.replace("_", " ") for p in parts))
+    fields = ["guilds.*"] + (["guild_buildings.*"] if "buildings" in parts else []) + \
+             (["guild_members.contribution_silver", "guild_members.contribution_gold", "character_base.consortia_contribute"]
+              if "contributions" in parts else []) + (["guild_altar_worship.*"] if "altars" in parts else [])
+    r = _gwrite(ctx, gid, "guild %s: %s" % (g["name"], what), lambda before: stmts, fields=fields, expected=expected,
+                target="guild " + g["name"])
+    r.update(guild=_guild(ctx, gid), targets=dict(t, altar_points=ALTAR_MAX_POINTS), top_level=int(levels))
+    return r
+
+
 # ----------------------------------------------------------------------------------------------- POST: faction areas
 @M.post("faction/control")
 def faction_control(ctx):

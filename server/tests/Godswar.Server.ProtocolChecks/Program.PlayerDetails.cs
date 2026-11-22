@@ -145,9 +145,11 @@ internal static partial class Program
         const uint objectId = 0x7135B24E;
         var effects = new ClientStatusEffect[]
         {
-            new(1504, 43_200),
+            // W6-B: 1500-1507 are gated by status.account_bonus_icons (W6BWellAndStatusChecks);
+            // this layout check uses stock ids.
+            new(1390, 43_200),
             new(511, 28_800),
-            new(1503, uint.MaxValue),
+            new(1007, uint.MaxValue),
             new(586, 28_800)
         };
         var packet = PacketBuilder.PlayerStatusEffects(
@@ -165,8 +167,8 @@ internal static partial class Program
         // Preserved MSG_STATUS writes std::map entries in ascending status-ID order.
         Check.Equal(511u, ReadUInt32(packet, 12), "first sorted status ID");
         Check.Equal(586u, ReadUInt32(packet, 16), "second sorted status ID");
-        Check.Equal(1503u, ReadUInt32(packet, 20), "third sorted status ID");
-        Check.Equal(1504u, ReadUInt32(packet, 24), "fourth sorted status ID");
+        Check.Equal(1007u, ReadUInt32(packet, 20), "third sorted status ID");
+        Check.Equal(1390u, ReadUInt32(packet, 24), "fourth sorted status ID");
         Check.Equal(28_800u, ReadUInt32(packet, 92), "first status remaining time");
         Check.Equal(28_800u, ReadUInt32(packet, 96), "second status remaining time");
         Check.Equal(uint.MaxValue, ReadUInt32(packet, 100), "permanent status remaining-time sentinel");

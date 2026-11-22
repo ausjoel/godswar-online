@@ -108,6 +108,12 @@ internal sealed partial class GameClientHandler
                 // put, and every later warehouse operation fails. The receipt
                 // already resolved the real slot during execution; only fall
                 // back to the sentinel when execution produced none.
+                // B21: name the physical cell of the visible box; a cell on another box is not on screen.
+                if (!WarehousePageCommand.TryToVisibleSlot(
+                        vacatedWarehouseSlot, _warehouseSelectedPage, out var visibleWarehouseSlot)) // B21
+                {
+                    continue;
+                }
                 var resolvedKitBagSlot =
                     receipt.ActualKitBagSlot !=
                         WarehouseCapacityPolicy.AutomaticKitBagSlot
@@ -117,7 +123,7 @@ internal sealed partial class GameClientHandler
                     PacketBuilder.WarehouseTransferAcknowledgement(
                         new WarehouseTransferIntent(
                             WarehouseTransferOperation.Withdraw,
-                            vacatedWarehouseSlot,
+                            visibleWarehouseSlot, // B21
                             resolvedKitBagSlot,
                             WarehouseCapacityPolicy.AutomaticWarehouseSlot,
                             0,

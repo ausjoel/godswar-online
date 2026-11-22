@@ -86,13 +86,9 @@ internal static partial class PostgresWorldContentReaderLoader
             transaction,
             header.Revision,
             cancellationToken);
-        var expectedMapIds = Enumerable.Range(0, 70)
-            .Concat(Enumerable.Range(200, 11))
-            .Select(static value => (short)value)
-            .ToHashSet();
-        if (!maps.Select(static value => value.MapId)
-                .ToHashSet()
-                .SetEquals(expectedMapIds))
+        // B22 G2: the stock set, plus the optional Aether Sanctum map 70.
+        if (!Godswar.Server.Application.World.GameplayMapSet.IsValid(
+                maps.Select(static value => value.MapId)))
         {
             throw GameplayUnavailable(
                 "The gameplay publication must contain maps 0-69 and " +

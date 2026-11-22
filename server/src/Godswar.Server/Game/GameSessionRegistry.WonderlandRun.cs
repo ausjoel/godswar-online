@@ -116,6 +116,15 @@ internal sealed partial class GameSessionRegistry
             }
             if (admission.Entrants.Contains(characterId))
             {
+                // S5: a late member whose earlier join was released (queue refused, expired, session
+                // gone) confirms again on a fresh reservation; that one is now the member's admission.
+                // A repeated confirmation while the first join still stands keeps the first.
+                if (reservationId != Guid.Empty && admission.LateEntrants.Contains(characterId) &&
+                    !admission.JoinedReservations.ContainsKey(characterId))
+                {
+                    admission.JoinedReservations[characterId] = reservationId;
+                    _wonderlandReservations[reservationId] = instanceId;
+                }
                 // Idempotent: a repeated confirmation (the client may answer the
                 // same window twice) must continue to the transfer instead of
                 // releasing the attempt the first confirmation already spent.
@@ -153,6 +162,7 @@ internal sealed partial class GameSessionRegistry
                 return false;
             }
             admission.Entrants.Add(characterId);
+            admission.LateEntrants.Add(characterId);
             // Keep the invited member's own identity on the run's roster: the
             // title settlement fences its recipients against the admitted roster,
             // and this member holds no seat in the registered party.
@@ -170,11 +180,32 @@ internal sealed partial class GameSessionRegistry
             if (reservationId != Guid.Empty)
             {
                 _wonderlandReservations[reservationId] = instanceId;
+                // S5: the title ledger fence reads this member's admission on its own reservation.
+                admission.JoinedReservations[characterId] = reservationId;
             }
             Console.WriteLine(
                 "[instance-invite] late admission accepted " +
                 $"instance={instanceId} character={characterId}");
             return true;
+        }
+    }
+
+    /// <summary>
+    /// S5: a late member's join was released before it was admitted, so its ledger row is gone. The
+    /// member stops counting toward the run's admitted roster (and so toward title settlement) until
+    /// a new confirmation records a fresh reservation.
+    /// </summary>
+    internal void ForgetWonderlandLateReservation(Guid reservationId)
+    {
+        if (reservationId == Guid.Empty) return;
+        lock (_gate)
+        {
+            if (!_wonderlandReservations.TryGetValue(reservationId, out var instanceId) ||
+                !_wonderlandAdmissions.TryGetValue(instanceId, out var admission) ||
+                admission.ReservationId == reservationId) return;
+            foreach (var pair in admission.JoinedReservations.Where(pair => pair.Value == reservationId).ToArray())
+                admission.JoinedReservations.Remove(pair.Key);
+            _wonderlandReservations.TryRemove(reservationId, out _);
         }
     }
 
@@ -235,9 +266,13 @@ internal sealed partial class GameSessionRegistry
             // admitted after it was sealed. It fences the recipients (see below)
             // and it is what the durable title store reconciles against the daily
             // entry ledger, across each of those admissions' own reservations.
+            // S5: the registered entrants sealed with the party, then each late member whose own
+            // reservation still stands (a released join holds no ledger row and is left out).
             var roster = admission.OriginalMembers
-                .Concat(admission.JoinedMembers)
-                .Where(member => admission.Entrants.Contains(member.CharacterId))
+                .Where(member => admission.Entrants.Contains(member.CharacterId) &&
+                    !admission.LateEntrants.Contains(member.CharacterId))
+                .Concat(admission.JoinedMembers
+                    .Where(member => admission.JoinedReservations.ContainsKey(member.CharacterId)))
                 .GroupBy(member => member.CharacterId)
                 .Select(group => group.First())
                 .OrderBy(member => member.CharacterId)
@@ -267,8 +302,11 @@ internal sealed partial class GameSessionRegistry
                 .Distinct()
                 .Order()
                 .ToArray();
+            var late = admission.JoinedReservations
+                .Where(pair => roster.Any(member => member.CharacterId == pair.Key))
+                .ToDictionary(pair => pair.Key, pair => pair.Value);
             var request = new WonderlandTitleRequest(runtime.InstanceId, runtime.RealmId, admission.ReservationId,
-                admission.StartedAt, clear.ClearedAt, clear.Island, admitted, frozen, reservations);
+                admission.StartedAt, clear.ClearedAt, clear.Island, admitted, frozen, reservations, late);
             if (QueueWonderlandTitleMilestone(request))
                 CaptureWonderlandCompletionNoticeLocked(request, admission.LeaderId, finishers);
         }
@@ -326,6 +364,12 @@ internal sealed partial class GameSessionRegistry
         /// entitlement, without a seat in the registered party.
         /// </summary>
         public List<LegacyInstancePartyMember> JoinedMembers { get; } = [];
+
+        /// <summary>Characters added by <see cref="TryAdmitWonderlandLateEntrant"/>.</summary>
+        public HashSet<int> LateEntrants { get; } = [];
+
+        /// <summary>Each late member's own admission reservation, by character id.</summary>
+        public Dictionary<int, Guid> JoinedReservations { get; } = [];
         public DateTimeOffset StartedAt { get; } = startedAt;
         public HashSet<int> Entrants { get; } = [];
         public bool Sealed { get; set; }

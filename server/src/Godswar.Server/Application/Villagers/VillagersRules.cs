@@ -11,27 +11,26 @@ internal static class VillagersRateDefinitions
 {
     public static IReadOnlyList<ServerRateDefinition> All { get; } =
     [
-        Switch(ServerRateKeys.WeekendExperienceClaim, 10, "Festival Envoy weekend EXP claim", 0m, // RELEASE: default off
+        Switch(ServerRateKeys.WeekendExperienceClaim, 10, "Festival Envoy weekend EXP claim", 1m, // B21 item 17: default on (live is on)
             "Game/GameClientHandler.Villagers.cs",
-            "1 = the Festival Envoy's 'Weekend EXP Fun' button works (retail: Saturday and " +
-            "Sunday, +200% monster EXP for 8 online hours, once per character per day). " +
-            "0 = the button does nothing (the behaviour before this switch existed)."),
+            "Makes the Festival Envoy's 'Weekend EXP Fun' button work. On: on Saturday and Sunday " +
+            "each character can claim +200% monster EXP for 8 hours online, once a day. Off: the " +
+            "button does nothing."),
         Switch(ServerRateKeys.WeekendExperienceAnyDay, 20, "Weekend EXP claim on any day", 0m,
             "Application/Progression/WeekendExperienceClaimContracts.cs",
-            "1 = the weekend EXP claim is also open Monday-Friday (a GM event or a test). " +
-            "0 = Saturday and Sunday only (retail)."),
-        Switch(ServerRateKeys.FestivalGifts, 30, "Festival Envoy holiday gifts", 0m,
+            "Opens the weekend EXP claim on every day. On: it can also be claimed Monday to " +
+            "Friday, for a GM event or a test. Off: Saturday and Sunday only."),
+        Switch(ServerRateKeys.FestivalGifts, 30, "Festival Envoy holiday gifts", 1m, // B21 item 17: default on (live is on)
             "Game/GameClientHandler.Villagers.cs, table public.festival_gift_days",
-            "1 = the Festival Envoy hands out the gift of today's row in festival_gift_days " +
-            "(level 30+, once per character per day, until 23:55 server time) and answers " +
-            "'Festival intro' and 'next festival'. 0 = those buttons do nothing (as before). " +
-            "The amounts in the table are generated, not retail."),
-        Switch(ServerRateKeys.VillageLeaderBooks, 40, "Village Leader re-issues portal and riding books", 0m, // RELEASE: default off
+            "Makes the Festival Envoy hand out holiday gifts. On: on a listed festival day, " +
+            "characters of level 30 or more get that day's gift once, until 23:55 server time. " +
+            "Off: the buttons do nothing. The gift amounts are our own, not from the original " +
+            "game."),
+        Switch(ServerRateKeys.VillageLeaderBooks, 40, "Village Leader re-issues portal and riding books", 1m, // B21 item 17: default on (live is on)
             "Game/GameClientHandler.Villagers.cs",
-            "1 = talking to the Village Leader (Admes / Stefanos, 164,-34) at level 40+ hands " +
-            "out Book: Marathon Portal (Athens) or Book: Peloponnesus Portal (Sparta) and " +
-            "Book: Riding Skills when the character has neither learned the skill nor owns " +
-            "the book. 0 = description only (as before).")
+            "Lets the Village Leader replace lost skill books. On: at level 40 or more he gives " +
+            "the faction's portal book and Book: Riding Skills to a character who has neither the " +
+            "skill nor the book. Off: he only shows his text.")
     ];
 
     private static ServerRateDefinition Switch(

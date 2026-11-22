@@ -36,7 +36,11 @@ CURRENCY_BYTES = {2: "gold", 3: "silver", 4: "bgold", 5: "honour", 6: "points", 
 POINT_EXCHANGER = "PointExchanger"
 POINT_EXCHANGER_ITEMS = dict(
     [(i, "honour") for i in (9940, 9941, 9942, 9943, 9944, 9945, 9946, 9947, 9948, 9949, 9963, 9991, 4223, 4233,
-                             9030, 9031, 9040, 9041, 9042, 9050, 9021, 4266, 4267, 4269)] +
+                             9030, 9031, 9040, 9041, 9042, 9050, 9021, 4266, 4267, 4269,
+                             # B22 W11 d29: the 37 rows that used to fall back to the tab's B-Gold (server mirror)
+                             9970, 9971, 9972, 9973, 9974, 9975, 9976, 9977, 9978, 9979, 9980, 9981, 9982, 9983, 9984, 9985,
+                             9025, 9032, 9090, 9091, 9092, 9093, 9068, 9069, 9088, 9089, 4272, 4273,
+                             16300, 16303, 16306, 16309, 16312, 16315, 16318, 14029, 14030)] +
     [(i, "points") for i in (4213, 3931, 3962, 9950, 9951, 9952, 9953, 9954, 9955, 9956, 9957,
                              10090, 10100, 10083, 4502, 4524, 3819, 11010)] +
     [(i, "medals") for i in (9958, 9959, 14069, 4193)])
@@ -313,3 +317,8 @@ def teleport_reset(ctx):
                    ["npc_teleport_overrides.*"], target="teleport " + npc)
     _reload(ctx)
     return out
+
+
+# B22 P1 (d32): teleporter menus (order, hidden, added, price) - modules/_teleport_menu.py.
+from . import _teleport_menu  # noqa: E402
+_teleport_menu.register(M)

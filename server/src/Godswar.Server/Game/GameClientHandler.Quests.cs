@@ -131,7 +131,7 @@ internal sealed partial class GameClientHandler
             : StarterQuestChain.Find(changedQuestId) is { } changed
                 ? ResolveQuestNpcId(changed.GiverKey)
                 : 0u;
-        if (npcId == 0 || npcId == LocalPlayerObjectId)
+        if (npcId == 0 || npcId == LocalPlayerObjectId || SuppressQuestFunctionHere(npcId)) // B22 B23-R
         {
             return;
         }
@@ -330,6 +330,7 @@ internal sealed partial class GameClientHandler
             }
         }
 
+        givers.RemoveWhere(SuppressQuestFunctionHere); // B22 B23-R: no marks on the Sanctum exit
         foreach (var npcId in givers)
         {
             await _session.SendAsync(
@@ -1562,7 +1563,7 @@ internal sealed partial class GameClientHandler
     /// </remarks>
     private bool HasQuestFunctionFor(uint interactionId)
     {
-        if (_character is null)
+        if (_character is null || SuppressQuestFunctionHere(interactionId)) // B22 B23-R
         {
             return false;
         }
@@ -1612,7 +1613,8 @@ internal sealed partial class GameClientHandler
         for (var index = 0; index < spawns.Count; index++)
         {
             var spawn = spawns[index];
-            if (!IsQuestChainNpc(spawn.InteractionId))
+            if (!IsQuestChainNpc(spawn.InteractionId) ||
+                IsSanctumExitTransporter(spawn.MapId, spawn.InteractionId)) // B22 B23-R
             {
                 continue;
             }

@@ -375,6 +375,7 @@ internal sealed partial class GameClientHandler
         }
 
         _clientReadyReceived = true;
+        Journey.Mark("client_ready"); // W6A
         Console.WriteLine(
             $"[game] ClientReady " +
             $"character={_character?.Name ?? "<none>"}");

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block main %}
+<div class="pagehead">
+  <div class="container">
+    <p class="crumbs"><a href="/">Home</a> › {% block crumb %}<a href="/guides">Guides</a>{% endblock %}</p>
+    <h1>{% block heading %}{% endblock %}</h1>
+    <p>{% block intro %}{% endblock %}</p>
+  </div>
+</div>
+<div class="container with-side">
+  <aside class="side">
+    <nav aria-label="Guides">
+      {% set here = self.slug() | trim %}
+      <h4>New players</h4>
+      <ul>
+        <li><a href="/guides/getting-started"{% if here == 'start' %} class="on"{% endif %}>Getting started</a></li>
+        <li><a href="/guides/classes"{% if here == 'classes' %} class="on"{% endif %}>Classes</a></li>
+        <li><a href="/guides/factions"{% if here == 'factions' %} class="on"{% endif %}>Athens and Sparta</a></li>
+        <li><a href="/guides/rank-effects"{% if here == 'rank' %} class="on"{% endif %}>Rank effects and /rank</a></li>
+        <li><a href="/static/player-guide.html">Install help</a></li>
+      </ul>
+      <h4>Instances</h4>
+      <ul>
+        <li><a href="/instances"{% if here == 'instances' %} class="on"{% endif %}>All instances</a></li>
+        <li><a href="/instances/bay-under-attack"{% if here == 'bay' %} class="on"{% endif %}>Bay Under Attack</a></li>
+        <li><a href="/instances#training">Trials of Hercules</a></li>
+        <li><a href="/instances/medusa"{% if here == 'medusa' %} class="on"{% endif %}>Medusa's Island</a></li>
+        <li><a href="/instances/atlantis"{% if here == 'atlantis' %} class="on"{% endif %}>Atlantis</a></li>
+        <li><a href="/instances/wonderland"{% if here == 'wonderland' %} class="on"{% endif %}>Wonderland</a></li>
+      </ul>
+      <h4>Events</h4>
+      <ul>
+        <li><a href="/guides/events"{% if here == 'events' %} class="on"{% endif %}>Event calendar</a></li>
+        <li><a href="/guides/cursed-zone"{% if here == 'cursed' %} class="on"{% endif %}>Cursed Zone</a></li>
+      </ul>
+    </nav>
+  </aside>
+  <article class="article">
+    {% block article %}{% endblock %}
+  </article>
+</div>
+{% endblock %}
+{% block slug %}{% endblock %}

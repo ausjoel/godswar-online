@@ -18,13 +18,34 @@ What the server does with each value (stage2-on-r3 f541eed, read for this module
     level and kill EXP keep reading the packet, so they would drift apart).
   * Combat stats are per (map, template). When one template spawns at several levels on a map, the page shows the spread
     and you choose which level the row is computed at (lowest / middle / highest); nothing is picked silently.
+Damage to a character (2026-11-19, the admin: "a calculator for character stats and damage that would be received ... built into
+the monster sliders page"): route calc + static/shared/damage_calc.js. Read-only. For the ticked maps it shows each monster's
+hit on a chosen character today and with the curve; for Wonderland it reads data/wonderland-roster.json (the roster only exists
+in server code, see tools/build_wonderland_roster.py) with what-if HP % / damage % boxes that preview only.
+Every map with monsters (2026-11-19, the admin: "the monster editor map doesnt have medusa, atlantis, wonderland, bay under attack"):
+  * Spawn-row maps (monster_spawn_definitions / gm_monster_spawns) as above; this includes the instance and event maps the server
+    fills from generated GM rows: Bay under Attack 208/209, The Trials of Hercules 210, Treasure Land 1, Sicily 1, Lelantine Farm,
+    Parnassus (and the Warriors' Training Grounds 201-203/206 as soon as their GM rows are written).
+  * Medusa's Island (204 = Normal = difficulty 1, 200 = Enhanced 2 and Mythic 3; MedusaIslandEncounterPolicy): the roster and
+    placement are server code, level and HP are medusa_monster_rules (MedusaWorldInstanceEntryPreparation.Attach builds each
+    spawn's packet from the rule; MedusaMonsterBootstrapPolicy refuses a packet whose HP differs). So HP is written there, per
+    difficulty and monster, as stock HP x the curve; stock = data/medusa-stock-hp.json (the server migration's own values), so a
+    second write never compounds. Attack is fixed per difficulty in code (MedusaIslandCombatOverride.ApplyMonsterAttackProfile),
+    and the rules name aliases, not template keys, so no attack / defence / rating rows are written for Medusa.
+  * VIEW ONLY: Atlantis 205 (AtlantisSpawnBalancePolicy: level = the party's highest level, HP = rank base x party size, both in
+    code; a fixed gm_monster_attributes row would replace that party scaling) and Wonderland 207 (WonderlandMonsterPlan: the whole
+    roster is code; see the damage calculator's Wonderland view). The picker shows them with the reason; load/preview/apply refuse
+    them.
 All of it is start-up content: it applies after a gw251 restart. Writes go through world._write (backup, version check,
 guard, change log, Undo).
 """
+import json
 import re
 import struct
 
-from . import common, world as W
+import os
+
+from . import common, world as W, _monster_sections as SEC
 from .common import Bad, lit
 
 M = common.module(
@@ -33,7 +54,7 @@ M = common.module(
     order=61,
     status="ready",
     description="Plot monster level against HP, attack and defence for one or more maps, drag a multiplier curve, preview, "
-                "and write it (per-spawn HP, per-template combat stats). After a gw251 restart.",
+                "and save it. Applies after a server restart.",
     needs_character=False,
 )
 
@@ -46,16 +67,54 @@ INT_MAX = 2_147_483_647
 ACTOR = "gwadmin-curve"
 
 PRESETS = [
-    {"key": "north3x", "generated": True, "title": "North maps 3x at Lv200 (GENERATED)",
-     "why": "GENERATED for the admin's ask (B9), not from IGG or the wiki: x1 at level 140 rising in a straight line to x3 at 200 "
+    {"key": "north3x", "generated": True, "title": "North maps 3x at Lv200",
+     # made up for the owner's request (triage B9); not from IGG or the wiki. Map set: SCALE-PROPOSAL-V2
+     "why": "Our own curve, not from the original game: x1 at level 140 rising in a straight line to x3 at 200 "
             "(x1.33 at 150, x1.67 at 160, x2.33 at 180) for HP, attack and defence; hit / dodge / crit unchanged. "
-            "Maps: Mycenae, Olympia, Larissa, Delphi Forest, Olympus, Elasson (the SCALE-PROPOSAL-V2 north set).",
+            "Maps: Mycenae, Olympia, Larissa, Delphi Forest, Olympus, Elasson.",
      "maps": [6, 7, 10, 20, 21, 22],
      "curves": {"hp": [[140, 1.0], [200, 3.0]], "attack": [[140, 1.0], [200, 3.0]], "defence": [[140, 1.0], [200, 3.0]], "rating": [[1, 1.0], [200, 1.0]]}},
     {"key": "flat", "generated": False, "title": "No change (x1 everywhere)",
      "why": "Writing this removes the curve's own rows and puts every HP back to the value before the first curve write.",
      "maps": [], "curves": {g: [[1, 1.0], [200, 1.0]] for g in GROUPS}},
 ]
+
+
+# Medusa's Island: map -> medusa_monster_rules.difficulty (MedusaIslandEncounterPolicy: Normal 204, Enhanced + Mythic 200).
+MEDUSA_MAPS = {204: (1,), 200: (2, 3)}
+DIFFICULTY = {1: "Normal", 2: "Enhanced", 3: "Mythic"}
+MEDUSA_STOCK = os.path.join(common.HERE, "data", "medusa-stock-hp.json")
+VIEW_ONLY = {
+    205: "Atlantis monsters are made by the server when a party enters: level = the party's highest level and HP = the rank's "
+         "base x party size (AtlantisSpawnBalancePolicy). Nothing in the database holds them, and a fixed attack/defence row "
+         "would replace the party scaling, so this page does not write Atlantis.",
+    207: "Wonderland's whole roster (levels, HP, attacks, defences) is in the server code (WonderlandMonsterPlan), not the "
+         "database, so this page cannot change it. See its numbers under Damage to a character -> Wonderland.",
+}
+
+
+def _medusa_stock():
+    try:
+        with open(MEDUSA_STOCK, encoding="utf-8") as f:
+            d = json.load(f)
+        return {k: int(v) for k, v in d["normal_hp"].items()}, {int(k): int(v) for k, v in d["difficulty_multiplier"].items()}
+    except (OSError, ValueError, KeyError):
+        return {}, {}
+
+
+def _medusa_difficulties(maps):
+    return sorted({d for m in maps for d in MEDUSA_MAPS.get(int(m), ())})
+
+
+def _alias_name(alias):
+    parts = alias.split("-")
+    return " ".join(w.capitalize() for w in (parts[1:] if parts[0] in ("boss", "elite", "normal") else parts))
+
+
+def _check_maps(maps):
+    for m in maps:
+        if m in VIEW_ONLY:
+            raise Bad("map %d is view only: %s" % (m, VIEW_ONLY[m]))
 
 
 def formula(level, elite=False, boss=False):
@@ -117,17 +176,26 @@ def _maps_sql(maps):
     return "ARRAY[%s]::smallint[]" % ",".join(str(int(m)) for m in maps)
 
 
+def _medusa_where(maps):
+    return "difficulty = ANY(ARRAY[%s]::smallint[])" % ",".join(str(d) for d in _medusa_difficulties(maps))
+
+
 def _parts(maps):
     w = "map_id = ANY(%s)" % _maps_sql(maps)
-    return [("gm_monster_attributes", w, "map_id, template_key"), ("gm_monster_spawn_edits", w, "map_id, object_id"),
-            ("gm_monster_spawns", w, "id")]
+    parts = [("gm_monster_attributes", w, "map_id, template_key"), ("gm_monster_spawn_edits", w, "map_id, object_id"),
+             ("gm_monster_spawns", w, "id")]
+    if _medusa_difficulties(maps):
+        parts.append(("medusa_monster_rules", _medusa_where(maps), "difficulty, template_alias"))
+    return parts
 
 
 def load(ctx, maps):
     """Every spawn of the maps with what the server will use: level, HP now, base HP, rank, formula stats."""
     if not maps:
         raise Bad("choose at least one map")
+    _check_maps(maps)
     arr = _maps_sql(maps)
+    difs = _medusa_difficulties(maps)
     d = W._q(ctx, """json_build_object(
       'published', (SELECT coalesce(json_agg(json_build_object('map', d.map_id, 'object', d.object_id, 'template', d.template_key, 'name', d.display_name,
            'head', encode(substring(d.clear_bytes from 1 for 32), 'hex'))), '[]') FROM monster_spawn_definitions d
@@ -136,8 +204,11 @@ def load(ctx, maps):
            'enabled', g.enabled, 'note', g.note, 'head', encode(substring(g.clear_bytes from 1 for 32), 'hex'))), '[]') FROM gm_monster_spawns g WHERE g.map_id = ANY(%(a)s)),
       'edits', (SELECT coalesce(json_agg(to_jsonb(e)), '[]') FROM gm_monster_spawn_edits e WHERE e.map_id = ANY(%(a)s)),
       'attributes', (SELECT coalesce(json_agg(to_jsonb(t)), '[]') FROM gm_monster_attributes t WHERE t.map_id = ANY(%(a)s)),
-      'ranks', (SELECT coalesce(json_agg(json_build_object('template', g.template_key, 'map', g.source_map_id, 'elite', g.is_elite, 'boss', g.is_boss)), '[]')
-           FROM gameplay_monster_templates g JOIN gameplay_content_publication p ON p.revision = g.revision))""" % {"a": arr})
+      'ranks', (SELECT coalesce(json_agg(json_build_object('template', g.template_key, 'map', g.source_map_id, 'elite', g.is_elite, 'boss', g.is_boss, 'attack_type', g.attack_type)), '[]')
+           FROM gameplay_monster_templates g JOIN gameplay_content_publication p ON p.revision = g.revision),
+      'medusa', (SELECT coalesce(json_agg(json_build_object('difficulty', r.difficulty, 'alias', r.template_alias, 'level', r.monster_level,
+           'hp', r.maximum_health) ORDER BY r.difficulty, r.template_alias), '[]') FROM medusa_monster_rules r
+           WHERE r.enabled AND r.difficulty = ANY(ARRAY[%(d)s]::smallint[])))""" % {"a": arr, "d": ",".join(str(x) for x in difs) or "0"})
     exact, fallback = {}, {}
     for r in d["ranks"]:
         if r["map"] is not None:
@@ -166,7 +237,19 @@ def load(ctx, maps):
             spawns.append({"source": src, "id": s.get("id"), "map": key[0], "object": key[1], "template": s["template"],
                            "name": _name(ctx, s["template"]) or s.get("name") or s["template"],
                            "level": level, "hp": hp_now, "base_hp": base, "tagged": tagged, "elite": bool(rk.get("elite")), "boss": bool(rk.get("boss")),
+                           "magic": rk.get("attack_type") == 2,
                            "edit": bool(e)})
+    stock, mult = _medusa_stock()
+    map_of = {dd: m for m, ds in MEDUSA_MAPS.items() for dd in ds}
+    for r in d.get("medusa") or []:
+        dif, alias = int(r["difficulty"]), r["alias"]
+        if dif not in difs:                # only the ticked Medusa maps
+            continue
+        base = stock[alias] * mult[dif] if alias in stock and dif in mult else int(r["hp"])
+        spawns.append({"source": "medusa", "id": None, "map": map_of[dif], "object": dif, "difficulty": dif, "template": alias,
+                       "name": "%s (%s)" % (_alias_name(alias), DIFFICULTY.get(dif, dif)), "level": int(r["level"]),
+                       "hp": int(r["hp"]), "base_hp": base, "tagged": alias in stock, "elite": alias.startswith("elite-"),
+                       "boss": alias.startswith("boss-"), "magic": False, "edit": False})
     attrs = {(int(a["map_id"]), a["template_key"]): a for a in d["attributes"]}
     return spawns, attrs, edits
 
@@ -176,8 +259,10 @@ def _templates(spawns, attrs):
     for s in spawns:
         k = (s["map"], s["template"])
         x = t.setdefault(k, {"map": s["map"], "template": s["template"], "name": s["name"], "elite": s["elite"], "boss": s["boss"],
+                              "magic": s.get("magic", False), "hp_only": s["source"] == "medusa",
                               "levels": {}, "count": 0})
         x["levels"][s["level"]] = x["levels"].get(s["level"], 0) + 1
+        x.setdefault("hp_list", []).append(s["hp"])
         x["count"] += 1
     for k, x in t.items():
         lv = sorted(x["levels"])
@@ -204,6 +289,8 @@ def plan(ctx, maps, curves, anchor):
         if new != s["hp"] or (s["source"] == "gm" and not s["tagged"] and abs(m - 1.0) > 1e-9):
             hp_rows.append(dict(s, new_hp=new, mult=round(m, 4)))
     for k, t in temps.items():
+        if t.get("hp_only"):               # Medusa: attack is code, the rules have no template key (module docstring)
+            continue
         L = anchor_level(t["level_list"], anchor)
         base = formula(L, t["elite"], t["boss"])
         vals, changed = {}, False
@@ -226,14 +313,57 @@ def plan(ctx, maps, curves, anchor):
 
 @M.get("maps")
 def maps(ctx):
-    rows = W._q(ctx, """(SELECT coalesce(json_agg(r ORDER BY r.map_id), '[]') FROM (SELECT m.map_id,
+    lv = "(get_byte(%(c)s, 12) + get_byte(%(c)s, 13) * 256 + get_byte(%(c)s, 14) * 65536)"
+    rows = W._q(ctx, """(SELECT coalesce(json_agg(r ORDER BY r.map_id), '[]') FROM (SELECT m.map_id, m.scene_key AS scene,
         (SELECT count(*) FROM monster_spawn_definitions d JOIN monster_content_publication p ON p.family = 'monsters' AND p.revision = d.revision
           WHERE d.map_id = m.map_id) AS published,
-        (SELECT count(*) FROM gm_monster_spawns g WHERE g.map_id = m.map_id AND g.enabled) AS gm FROM map_templates m) r
-        WHERE r.published + r.gm > 0)""")
+        (SELECT count(*) FROM gm_monster_spawns g WHERE g.map_id = m.map_id AND g.enabled) AS gm,
+        (SELECT count(*) FROM medusa_monster_rules x WHERE x.enabled AND x.difficulty = ANY(%(md)s)) AS medusa,
+        (SELECT count(*) FROM gameplay_monster_templates t JOIN gameplay_content_publication p ON p.revision = t.revision
+          WHERE t.source_map_id = m.map_id) AS templates,
+        (SELECT json_build_array(min(x.l), max(x.l), percentile_disc(0.5) WITHIN GROUP (ORDER BY x.l)) FROM (
+          SELECT %(d)s AS l FROM monster_spawn_definitions d JOIN monster_content_publication p ON p.family = 'monsters'
+            AND p.revision = d.revision WHERE d.map_id = m.map_id AND length(d.clear_bytes) >= 16
+          UNION ALL SELECT %(g)s FROM gm_monster_spawns g WHERE g.map_id = m.map_id AND g.enabled AND length(g.clear_bytes) >= 16
+          UNION ALL SELECT x.monster_level FROM medusa_monster_rules x WHERE x.enabled AND x.difficulty = ANY(%(md)s)) x) AS levels
+        FROM map_templates m) r
+        WHERE r.published + r.gm + r.medusa > 0 OR r.map_id IN (%(vo)s))""" % {
+        "d": lv % {"c": "d.clear_bytes"}, "g": lv % {"c": "g.clear_bytes"},
+        "md": "CASE m.map_id %s ELSE ARRAY[]::smallint[] END" % " ".join(
+            "WHEN %d THEN ARRAY[%s]::smallint[]" % (k, ",".join(map(str, v))) for k, v in sorted(MEDUSA_MAPS.items())),
+        "vo": ",".join(str(k) for k in sorted(VIEW_ONLY))})
     for r in rows:
-        r["name"] = W._map_name(ctx, r["map_id"])
-    return {"maps": rows, "presets": PRESETS, "groups": GROUPS}
+        r["name"] = SEC.section_name(r["map_id"]) or W._map_name(ctx, r["map_id"])
+        decorate(r)
+        r["medusa"] = int(r.get("medusa") or 0) if int(r["map_id"]) in MEDUSA_MAPS else 0
+        r["spawns"] = int(r.get("published") or 0) + int(r.get("gm") or 0) + r["medusa"]
+        if int(r["map_id"]) in VIEW_ONLY:
+            r.update(view_only=True, why=VIEW_ONLY[int(r["map_id"])], edits=[])
+        elif r["medusa"] and not (r.get("published") or r.get("gm")):
+            r.update(view_only=False, edits=["hp"], why="Medusa's Island: HP is written to medusa_monster_rules (%s); attack, "
+                     "defence and ratings are fixed in the server code." % " + ".join(DIFFICULTY[d] for d in MEDUSA_MAPS[int(r["map_id"])]))
+        else:
+            r.update(view_only=False, edits=list(GROUPS), why=None)
+    sections = SEC.grouped([dict(r, id=r["map_id"]) for r in rows])
+    for g in sections:                     # regular maps in game order (median spawn level), towns first
+        g["maps"].sort(key=lambda m: (not m.get("town"), (m.get("levels") or [0, 0, SEC.TYPICAL_LEVEL.get(m["map_id"], 0)])[2] or 0,
+                                      m["map_id"]))   # code-spawned maps (no level to read) sort at their typical level
+    return {"maps": rows, "presets": PRESETS, "groups": GROUPS, "sections": sections}
+
+
+MINIMAPS = os.path.join(common.HERE, "static", "modules", "character-minimaps")
+
+
+def decorate(r):
+    """Section and a picture for the map picker: the client minimap (static/modules/character-minimaps/<scene>.png)."""
+    info = SEC.map_info(r["map_id"])
+    r.update(section=info["section"], section_title=info["section_title"], town=info["town"])
+    scene = (r.get("scene") or "").lower()
+    r["thumb"] = ("/static/modules/character-minimaps/%s.png" % scene) if scene and os.path.exists(os.path.join(MINIMAPS, scene + ".png")) else None
+    lv = r.get("levels")
+    if not (isinstance(lv, list) and len(lv) == 3 and lv[0] is not None):
+        r["levels"] = None
+    return r
 
 
 @M.post("load")
@@ -253,8 +383,10 @@ def preview(ctx):
     anchor = b.get("anchor") if b.get("anchor") in ("lowest", "middle", "highest") else "middle"
     spawns, temps, hp_rows, attr_rows, keep = plan(ctx, mp, cv, anchor)
     spread = [{"map": t["map"], "template": t["template"], "name": t["name"], "levels": t["level_list"]} for t in temps.values() if len(t["level_list"]) > 1]
+    off = [{"name": x["name"], "hp": x["hp"], "stock": x["base_hp"]} for x in spawns if x["source"] == "medusa" and x["hp"] != x["base_hp"]]
     return {"hp_rows": len(hp_rows), "attr_rows": len(attr_rows), "kept_foreign": keep, "spread": spread,
-            "sample": attr_rows[:40], "anchor": anchor}
+            "sample": attr_rows[:40], "anchor": anchor, "medusa_hp_rows": sum(1 for x in hp_rows if x["source"] == "medusa"),
+            "medusa_off_stock": off}
 
 
 @M.post("apply")
@@ -267,7 +399,10 @@ def apply(ctx):
     note = str(b.get("note") or "")[:200]
     stmts = [W._ver_guard(_parts(mp), b.get("version"), "the monsters of these maps")]
     for r in hp_rows:
-        if r["source"] == "published":
+        if r["source"] == "medusa":
+            stmts.append("UPDATE medusa_monster_rules SET maximum_health = %d, updated_at = now() WHERE difficulty = %d AND "
+                         "template_alias = %s" % (r["new_hp"], r["difficulty"], lit(r["template"])))
+        elif r["source"] == "published":
             m = r["mult"]
             hp = None if abs(m - 1.0) < 1e-9 else r["new_hp"]
             stmts.append("INSERT INTO gm_monster_spawn_edits (map_id, object_id, maximum_health, current_health, note, updated_by) VALUES "
@@ -300,8 +435,65 @@ def apply(ctx):
     act = "monster stat curve on %s: %d HP values, %d combat-stat rows%s" % (names, len(hp_rows), len(attr_rows),
                                                                            " (kept %d rows written by others)" % len(keep) if keep else "")
     w = "map_id = ANY(%s)" % _maps_sql(mp)
-    r = W._write(ctx, [common.scope("gm_monster_attributes", w), common.scope("gm_monster_spawn_edits", w), common.scope("gm_monster_spawns", w)],
-                 act, stmts, ["gm_monster_attributes.*", "gm_monster_spawn_edits.*", "gm_monster_spawns.*"], guard=["gm_monsters"],
-                 applies="after_restart", target="monster curve")
+    scopes = [common.scope("gm_monster_attributes", w), common.scope("gm_monster_spawn_edits", w), common.scope("gm_monster_spawns", w)]
+    fields, guard = ["gm_monster_attributes.*", "gm_monster_spawn_edits.*", "gm_monster_spawns.*"], ["gm_monsters"]
+    if _medusa_difficulties(mp):
+        scopes.append(common.scope("medusa_monster_rules", _medusa_where(mp)))
+        fields.append("medusa_monster_rules.maximum_health")
+        guard.append("medusa")
+    r = W._write(ctx, scopes, act, stmts, fields, guard=guard, applies="after_restart", target="monster curve")
     r.update(hp_rows=len(hp_rows), attr_rows=len(attr_rows), kept_foreign=keep)
     return r
+
+
+# ---- "Damage to a character" (static/shared/damage_calc.js) ----------------------------------------------------------
+WONDERLAND = os.path.join(common.HERE, "data", "wonderland-roster.json")
+
+
+@M.get("calc")
+def calc(ctx):
+    """Characters for the damage calculator plus the code-defined Wonderland roster.
+
+    Character values are an estimate from character_stat_summary (equipment, holy stones, talents ... as that view sums them;
+    no buffs, pet merge or zodiac). Its damage_absorb adds InjureImbibe (both channels), PhysicalDamageAbsorb and
+    MagicDamageAbsorb; the server keeps physical and magic absorb apart, so the typed equipment parts are split out here
+    (PostgresCharacterCombatSecondaryProjectionSql). Read-only."""
+    rows = W._q(ctx, """(SELECT coalesce(json_agg(r ORDER BY r.level DESC, r.name), '[]') FROM (
+        SELECT s.user_id, s.name, s.profession, s.level, s.max_hp, s.physical_defense, s.magic_defense, s.dodge,
+               s.critical_resistance, s.damage_absorb,
+               coalesce((SELECT sum(CASE WHEN v.vals IS NULL THEN 0 ELSE coalesce(nullif(v.vals[least(greatest(ce.item_quality::int, 1),
+                   array_length(v.vals, 1))], '')::numeric, 0) END) FILTER (WHERE k.key = 'PhysicalDamageAbsorb')
+                 FROM character_equip ce JOIN official_item_template_content it ON it.id = ce.prop_id
+                 CROSS JOIN (VALUES ('PhysicalDamageAbsorb'), ('MagicDamageAbsorb')) k(key)
+                 LEFT JOIN LATERAL (SELECT string_to_array(it.stats->>k.key, ',') AS vals WHERE it.stats ? k.key) v ON true
+                 WHERE ce.user_id = s.user_id), 0) AS phys_only,
+               coalesce((SELECT sum(CASE WHEN v.vals IS NULL THEN 0 ELSE coalesce(nullif(v.vals[least(greatest(ce.item_quality::int, 1),
+                   array_length(v.vals, 1))], '')::numeric, 0) END) FILTER (WHERE k.key = 'MagicDamageAbsorb')
+                 FROM character_equip ce JOIN official_item_template_content it ON it.id = ce.prop_id
+                 CROSS JOIN (VALUES ('PhysicalDamageAbsorb'), ('MagicDamageAbsorb')) k(key)
+                 LEFT JOIN LATERAL (SELECT string_to_array(it.stats->>k.key, ',') AS vals WHERE it.stats ? k.key) v ON true
+                 WHERE ce.user_id = s.user_id), 0) AS magic_only
+        FROM character_stat_summary s WHERE s.level >= 1 ORDER BY s.level DESC LIMIT 400) r)""")
+    chars = []
+    for r in rows:
+        ab, po, mo = int(r.get("damage_absorb") or 0), int(r.get("phys_only") or 0), int(r.get("magic_only") or 0)
+        chars.append({"id": r["user_id"], "name": r["name"], "profession": r["profession"], "level": int(r["level"] or 1),
+                      "hp": max(1, int(r["max_hp"] or 1)), "pd": int(r["physical_defense"] or 0), "md": int(r["magic_defense"] or 0),
+                      "pabs": max(0, ab - mo), "mabs": max(0, ab - po), "dodge": int(r["dodge"] or 0),
+                      "crit_res": int(r["critical_resistance"] or 0), "pred": 0, "mred": 0, "cred": 0,
+                      "source": "Estimated from equipment and the stat summary: no buffs, pet merge or zodiac. Change any box to try other gear."})
+    wonder = None
+    if os.path.exists(WONDERLAND):
+        with open(WONDERLAND, encoding="utf-8") as f:
+            wonder = json.load(f)
+    # WL-SLIDERS: the live per-island HP % / damage % sliders (Server rates > Wonderland islands); 100 when absent.
+    sliders = {str(i): {"hp": 100, "damage": 100} for i in range(1, 9)}
+    try:
+        for r in W._q(ctx, "(SELECT coalesce(json_agg(json_build_object('k', rate_key, 'v', value)), '[]') FROM public.server_rates "
+                           "WHERE rate_key LIKE 'instance.wonderland_island%_percent')") or []:
+            m = re.match(r"instance\.wonderland_island(\d)_(hp|damage)_percent$", r["k"])
+            if m:
+                sliders[m.group(1)][m.group(2)] = float(r["v"])
+    except Exception:  # an older server without the sliders: stock values
+        pass
+    return {"characters": chars, "wonderland": wonder, "wonderland_sliders": sliders, "attack_interval": 23 / 12}

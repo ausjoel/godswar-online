@@ -63,28 +63,34 @@ internal static class TroyEvent
 
     private static ServerRateDefinition Points(string key, string label, decimal value, int order) =>
         new(key, Category, label, "points", ServerRateKind.Absolute, value, 0m, 1000m, 1m, order,
-            "Application/Troy/TroyEvent.cs", "Personal and guild points for one kill on map 44 while the event is open (IGG 2010: 1 / 5 / 10).");
+            "Application/Troy/TroyEvent.cs", "Points for killing this kind of Trojan during the " +
+                "event, for the player and their guild. The original game gave 1 for a normal " +
+                "Trojan, 5 for an elite and 10 for a hero.");
 
     public static IReadOnlyList<ServerRateDefinition> Definitions { get; } =
     [
         Switch(CoordinatorSwitch, "Trojan War Coordinator answers (HP recovery, backdrop, main city, rewards)", 1m, 1,
-            "1 = the Trojan War Coordinator (Athens_125 / Sparta_125) answers its buttons: HP and MP recovery for 5,000 " +
-            "Silver, the backdrop story, back to the main city, and the reward pages of the awarder. 0 = page only, as before."),
+            "Makes the Trojan War Coordinator's buttons work. On: HP and MP recovery for 5,000 " +
+            "Silver, the background story, a trip back to the capital and the reward pages. Off: " +
+            "he only shows his page."),
         Switch(EntrySwitch, "Event Transporter: To the Trojan Expedition (opening hours, Lv50+)", 0m, 2,
-            "1 = the capital Event Transporter shows '*To the Trojan Expedition' and sends Lv50+ players to the Troy beach " +
-            "while the event.troy gate is open (Thursday 20:00-21:00 AEST, Gates page); players still in Troy when it " +
-            "closes go back to their capital. OFF by default: Troy has no monsters yet (GM spawns only). 0 = the captured menu."),
+            "Opens the way to the Trojan Expedition. On: the capital Event Transporter sends " +
+            "players of level 50 or more to the Troy beach during the event's opening hours (set " +
+            "on the Gates page). Off: the transporter does not offer it. Players still in Troy " +
+            "when it closes are sent back to their capital."),
         Switch(AwardsSwitch, "Event Awarders: Troy scores, guild and personal rewards", 1m, 3,
-            "1 = kills on map 44 while the event is open score for the player and their guild; the Event Awarders " +
-            "(Athens_124 / Sparta_124) show the guild ranking and pay guild Silver / Gold, Exp Pills and the 'Top Greek " +
-            "Guild' title, claimable from the end of the event until 23:55 the same day. 0 = the captured pages only."),
+            "Runs Troy scoring and rewards. On: kills in Troy during the event score for the " +
+            "player and their guild, and the Event Awarders show the guild ranking and pay guild " +
+            "Silver and Gold, Exp Pills and the 'Top Greek Guild' title. Off: the Awarders only " +
+            "show their pages. Rewards can be claimed from the end of the event until 23:55 the " +
+            "same day."),
         Points(NormalPoints, "Points: normal Trojan", 1m, 4),
         Points(ElitePoints, "Points: elite Trojan", 5m, 5),
         Points(BossPoints, "Points: Trojan hero (boss)", 10m, 6),
         new(RewardPercent, Category, "Reward size", "%", ServerRateKind.Absolute, 100m, 0m, 1000m, 5m, 7,
             "Application/Troy/TroyEvent.cs",
-            "100 = IGG's rewards: 1 Exp Pill per personal point, guild Silver = guild score x 1,000 and guild Gold = guild " +
-            "score x 10 (one value: the client prints the gold as silver / 100).")
+            "Size of the Troy rewards, as a percent of the original game's. 100 = 1 Exp Pill per " +
+            "personal point, and the guild gets 1,000 Silver and 10 Gold per guild point.")
     ];
 
     /// <summary>Thursday 20:00-21:00 realm time: NF_L0_TR2801 and the Event Transporter's timetable (IGG 2010: 20:00-21:30).</summary>

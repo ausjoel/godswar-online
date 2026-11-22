@@ -24,6 +24,15 @@ internal static class AtlantisPetSpawnPolicy
     public static bool BlocksMermaidKillDrop(int mapId, string? templateKey, uint itemId) =>
         mapId == 205 && templateKey == MermaidTemplateKey && IsMermaidDewItem(itemId);
 
+    /// <summary>EXP Stone 4 (AddEXP4, stacks to 99).</summary>
+    public const uint MermaidKillStoneItemId = 4_173;
+
+    /// <summary>the admin 2026-11-11: "Mermaid should actually give an exp stone 4 as well". Killing the Atlantis Mermaid
+    /// puts one EXP Stone 4 in the corpse (100%, quantity 1, outside the loot table and the drop rates). Hot switch
+    /// <c>atlantis.mermaid_kill_exp_stone</c> (default 1).</summary>
+    public static bool DropsMermaidKillStone(int mapId, string? templateKey) =>
+        mapId == 205 && templateKey == MermaidTemplateKey && Finalise2Rates.On(Finalise2RateKeys.MermaidKillExpStone);
+
     public static bool Matches(uint objectId, string templateKey) => objectId switch
     {
         MermaidObjectId => templateKey == MermaidTemplateKey,

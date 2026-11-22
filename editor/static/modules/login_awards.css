@@ -1,0 +1,10 @@
+.gw-mod-login_awards .gw-la-section{margin:1.2rem 0;padding:1rem;border-top:1px solid #1d3a4a}
+.gw-mod-login_awards .gw-la-table{border-collapse:collapse;width:100%}
+.gw-mod-login_awards .gw-la-table th,.gw-mod-login_awards .gw-la-table td{padding:.35rem .5rem;border-bottom:1px solid #1d3a4a;text-align:left;vertical-align:top}
+.gw-mod-login_awards .gw-la-row,.gw-mod-login_awards .gw-la-money,.gw-mod-login_awards .gw-la-item{display:flex;flex-wrap:wrap;gap:.6rem 1rem;align-items:center;margin:.5rem 0}
+.gw-mod-login_awards .gw-la-num{width:7rem}
+.gw-mod-login_awards .gw-la-chips{display:flex;flex-wrap:wrap;gap:.4rem;margin:.4rem 0}
+.gw-mod-login_awards .gw-la-chip{padding:.15rem .5rem;border:1px solid #1d3a4a;border-radius:3px}
+.gw-mod-login_awards.gw-la-form label{display:inline-block;margin:.3rem 0}
+.gw-mod-login_awards .gw-la-result{margin-top:.6rem}
+@media(max-width:700px){.gw-mod-login_awards .gw-la-table{display:block;overflow-x:auto}}

@@ -13,7 +13,8 @@ internal enum ClassSuitCommandOperation : short
     ConvertToCommon = 104,
     UpgradeTierII = 105,
     UpgradeTierIII = 106,
-    UpgradeTierIV = 108
+    UpgradeTierIV = 108,
+    UpgradeTierBeyond = 109 // B22 G2 (d36): Class Suit IV -> V -> VI -> VII
 }
 
 internal enum ClassSuitItemLocation : byte
@@ -183,6 +184,8 @@ internal static class ClassSuitCommandEnvelope
                 CommandFamily.ClassSuitUpgradeTierIII,
             ClassSuitCommandOperation.UpgradeTierIV =>
                 CommandFamily.ClassSuitUpgradeTierIV,
+            ClassSuitCommandOperation.UpgradeTierBeyond => // B22 G2
+                CommandFamily.ClassSuitUpgradeTierBeyond,
             ClassSuitCommandOperation.AddAttribute =>
                 CommandFamily.ClassSuitAddAttribute,
             ClassSuitCommandOperation.DeleteAttribute =>

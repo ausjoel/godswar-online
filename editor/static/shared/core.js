@@ -127,12 +127,26 @@
   // ------------------------------------------------------------ icons and cells
   // catalog-icons.png: 36 x 36 tiles, 64 per row (catalog-origin/catalog.json "sprites")
   GW.SPRITE_FILE = "/static/catalog-icons.png";
+  GW.ART_SHEETS = {   // package E (tools/graphics/build_thumbs.py, build_maps.py, build_icons.py)
+    monster: { url: "/static/graphics/thumbs-monster.png", cols: 32 }, npc: { url: "/static/graphics/thumbs-npc.png", cols: 32 },
+    pet: { url: "/static/graphics/thumbs-pet.png", cols: 32 }, ride: { url: "/static/graphics/thumbs-ride.png", cols: 32 },
+    map: { url: "/static/graphics/map-thumbs.jpg", cols: 16 }, icon: { url: "/static/graphics/icons-extra.png", cols: 32 } };
   GW.icon = function (sprite, opts) {
     const o = opts || {};
     const el = h("span", { class: "gw-icon" + (o.class ? " " + o.class : ""), "aria-hidden": "true" });
     if (sprite === null || sprite === undefined || sprite === "") {
       el.classList.add("none");
       el.textContent = (o.name || "?").slice(0, 2);
+      return el;
+    }
+    if (typeof sprite === "string" && sprite.startsWith("art:")) {
+      // "art:<sheet>:<tile>" = a picture from a package-E sheet (static/graphics/*: rendered monsters / NPCs / pets /
+      // mounts, map thumbnails, re-cut icons), scaled into the 36 px icon box
+      const [, sheet, t] = sprite.split(":"), def = GW.ART_SHEETS[sheet], k = Number(t);
+      if (!def || !isFinite(k)) { el.classList.add("none"); el.textContent = (o.name || "?").slice(0, 2); return el; }
+      el.style.backgroundImage = `url(${def.url})`;
+      el.style.backgroundSize = `${def.cols * 36}px auto`;
+      el.style.backgroundPosition = `-${(k % def.cols) * 36}px -${Math.floor(k / def.cols) * 36}px`;
       return el;
     }
     const n = Number(sprite);

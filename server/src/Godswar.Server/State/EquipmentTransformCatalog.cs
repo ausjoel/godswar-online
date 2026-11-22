@@ -10,9 +10,10 @@ namespace Godswar.Server.State;
 /// the preview window (0x5ea8f0) lists every RltID entry of the source
 /// item's EquipForge.xml row except the source itself; the gear slot accepts
 /// any equipment, the second slot only a BijouForge MaterialType 7 item
-/// (4252, Level 3 Amethyst). The client never sends which preview entry was
-/// clicked (0x5eb02e sends the source id, 0 and slot 2), so the server picks
-/// the result from the same list. The S2C 10112 reply (0x5614c0) rewrites the
+/// (4252, Level 3 Amethyst). The preview pick (0x5eb02e) sends the source id,
+/// the clicked button index, slot 2 and tab 3; with GODSWAR_AMETHYST_PICK=1 the
+/// server makes exactly that entry (see <see cref="EquipmentTransformPick"/>),
+/// otherwise it picks at random from the same list. The S2C 10112 reply (0x5614c0) rewrites the
 /// staged gear to the returned id, keeps quality, grade, attributes and
 /// sockets, binds it when the amethyst was bound, and spends one amethyst.
 /// </remarks>
@@ -22,6 +23,13 @@ internal static partial class EquipmentTransformCatalog
 
     public static bool IsTransformable(uint sourceItemId) =>
         Targets.ContainsKey(sourceItemId);
+
+    /// <summary>
+    /// The preview list in client button order (RltID minus the source,
+    /// unfiltered): button i of the preview window shows entry i.
+    /// </summary>
+    public static IReadOnlyList<uint> GetPreviewList(uint sourceItemId) =>
+        Targets.TryGetValue(sourceItemId, out var targets) ? targets : [];
 
     /// <summary>
     /// The transform targets that exist in the published item content.
@@ -80,7 +88,8 @@ internal enum AmethystTransformStatus
     CharacterNotFound,
     StaleSelection,
     NotTransformable,
-    NoAmethyst
+    NoAmethyst,
+    PickUnavailable
 }
 
 internal sealed record AmethystTransformResult(

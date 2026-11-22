@@ -1,0 +1,78 @@
+{
+ "tables.server": {
+  "group": "realm",
+  "label": "Realm row (name, address, ports, time zone)",
+  "editor": "edit_advanced",
+  "server_reads": "per_login (realm list) + startup",
+  "server_writes": "realm calendar store",
+  "applies": "after_restart",
+  "online": {
+   "edit": "n/a"
+  },
+  "why": "Name, address, port, limit, order, enable and recommended: Operations -> Servers (validated like the server's RealmCatalogEntry; the login list is re-read at every login). Identifier and id stay fixed; calendar changes use audited revisions.",
+  "rows_live": 2,
+  "class": "runtime_setting",
+  "fields": {
+   "id": {
+    "editor": "read_only",
+    "applies": "not_editable"
+   },
+   "name": {
+    "editor": "edit_advanced",
+    "applies": "next_login",
+    "rule": "1..35 printable ASCII bytes; the server list has a 36-byte terminated name field."
+   },
+   "identifier": {
+    "editor": "read_only",
+    "applies": "not_editable"
+   },
+   "ip_address": {
+    "editor": "edit_advanced",
+    "applies": "next_login",
+    "rule": "IPv4 or DNS name, at most 23 ASCII bytes (RealmCatalogEntry.MaximumLegacyHostBytes); the address the client's game connection goes to."
+   },
+   "server_limit": {
+    "editor": "edit_advanced",
+    "applies": "next_login",
+    "rule": "1..2147483647 (RealmCatalogEntry: positive)."
+   },
+   "enabled": {
+    "editor": "edit_advanced",
+    "applies": "next_login",
+    "rule": "At least 1 and at most 16 enabled realms (RealmCatalogSnapshot.MaximumEntries); add realms disabled."
+   },
+   "display_order": {
+    "editor": "edit_advanced",
+    "applies": "next_login",
+    "rule": "0 or more; order in the server list."
+   },
+   "game_port": {
+    "editor": "edit_advanced",
+    "applies": "next_login",
+    "rule": "1..65535; a game process for this realm must listen there."
+   },
+   "recommended": {
+    "editor": "edit_advanced",
+    "applies": "next_login",
+    "rule": "At most one enabled realm is recommended."
+   },
+   "time_zone_id": {
+    "editor": "edit_advanced",
+    "applies": "after_restart",
+    "rule": "IANA name recognized by host and PostgreSQL; next revision and trigger-generated audit required."
+   },
+   "time_zone_revision": {
+    "editor": "read_only",
+    "applies": "not_editable"
+   },
+   "time_zone_updated_at": {
+    "editor": "read_only",
+    "applies": "not_editable"
+   },
+   "time_zone_updated_by": {
+    "editor": "read_only",
+    "applies": "not_editable"
+   }
+  }
+ }
+}

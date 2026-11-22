@@ -48,6 +48,17 @@ internal static class LegacyGameLoginHandoffChecks
         Check.Equal(false, LegacyGameLoginHandoff.ReadEnabled("0"), "0: off");
         Check.Equal(false, LegacyGameLoginHandoff.ReadEnabled(" false "), "false: off");
         Check.Equal(false, LegacyGameLoginHandoff.ReadEnabled("OFF"), "off: off");
+        // ROUND-SHAREDHANDOFF: a handoff is bound to the realm it was issued for.
+        LegacyGameLoginHandoff.Issue(7, "1.2.3.4:1000", now, realmId: 2);
+        Check.Equal(false, LegacyGameLoginHandoff.TryConsume(7, "1.2.3.4:1001", now + 1, realmId: 1), "realm: another realm's worker refuses it");
+        Check.Equal(true, LegacyGameLoginHandoff.TryConsume(7, "1.2.3.4:1001", now + 1, realmId: 2), "realm: its own realm's worker admits it");
+        Check.Equal(false, LegacyGameLoginHandoff.ReadWantsSharedStore(null), "store unset: memory");
+        Check.Equal(false, LegacyGameLoginHandoff.ReadWantsSharedStore(" memory "), "store memory: memory");
+        Check.Equal(true, LegacyGameLoginHandoff.ReadWantsSharedStore("Postgres"), "store postgres: shared");
+        var refusedUnknownStore = false;
+        try { LegacyGameLoginHandoff.ReadWantsSharedStore("redis"); }
+        catch (InvalidOperationException) { refusedUnknownStore = true; }
+        Check.True(refusedUnknownStore, "an unknown store refuses to start");
         LegacyGameLoginHandoff.ClearForTests();
         return Task.CompletedTask;
     }

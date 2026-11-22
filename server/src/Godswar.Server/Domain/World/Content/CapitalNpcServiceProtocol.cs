@@ -526,9 +526,13 @@ internal static class CapitalNpcServiceProtocol
             CapitalNpcServiceKind.BoundGoldVendor =>
                 CapitalNpcShopCurrency.Gold,
             CapitalNpcServiceKind.BindingGoldShop or
-            CapitalNpcServiceKind.SkillVendor or
             CapitalNpcServiceKind.PointExchanger =>
                 CapitalNpcShopCurrency.BindingGold,
+            // B22 W11 d58: the skill shelf (Athens_036, both Newbie_004) and the Athens props shelf charge silver now,
+            // like Sparta's (frames rewritten in PacketBuilder.CapturedCapitalNpcShops.cs).
+            CapitalNpcServiceKind.SkillVendor or // B22
+            CapitalNpcServiceKind.PropsVendor => // B22
+                CapitalNpcShopCurrency.Silver,
             CapitalNpcServiceKind.PetMerchant or
             // The farm quartermaster's captured frames carry currency byte 1,
             // which is silver, so it prices in the character's own silver.
@@ -537,6 +541,8 @@ internal static class CapitalNpcServiceProtocol
             // Athens merchant quarter. The charge each one advertises is the
             // currency byte its captured frames carry, so this table restates the
             // capture rather than choosing a balance.
+            // B21 (item 15): these shelves are rewritten to silver (PacketBuilder.CapturedAthensMerchantShops.cs);
+            // they used to charge B-Gold (the Jewellery Merchant Gold) at the silver price.
             CapitalNpcServiceKind.AthensWarriorEquipmentVendor or
             CapitalNpcServiceKind.AthensScholarEquipmentVendor or
             CapitalNpcServiceKind.AthensJewelryEquipmentVendor or
@@ -545,10 +551,8 @@ internal static class CapitalNpcServiceProtocol
             CapitalNpcServiceKind.AthensSkillMerchant or
             CapitalNpcServiceKind.AthensArmorMerchant or
             CapitalNpcServiceKind.AthensScholarSupplier or
-            CapitalNpcServiceKind.AthensIngredientsVendor =>
-                CapitalNpcShopCurrency.BindingGold,
-            CapitalNpcServiceKind.AthensJewelryMerchant =>
-                CapitalNpcShopCurrency.Gold,
+            CapitalNpcServiceKind.AthensIngredientsVendor or
+            CapitalNpcServiceKind.AthensJewelryMerchant or
             CapitalNpcServiceKind.AthensAlchemyRecipeVendor or
             CapitalNpcServiceKind.AthensForgingRecipeVendor or
             CapitalNpcServiceKind.AthensMythcraftingRecipeVendor or
@@ -577,6 +581,7 @@ internal static class CapitalNpcServiceProtocol
             CapitalNpcServiceKind.BindingGoldShop or
             CapitalNpcServiceKind.PetMerchant or
             CapitalNpcServiceKind.SkillVendor or
+            CapitalNpcServiceKind.PropsVendor or // B22
             CapitalNpcServiceKind.PointExchanger or
             CapitalNpcServiceKind.AthensWarriorEquipmentVendor or
             CapitalNpcServiceKind.AthensScholarEquipmentVendor or
@@ -646,7 +651,16 @@ internal static class CapitalNpcServiceProtocol
             9940 or 9941 or 9942 or 9943 or 9944 or 9945 or 9946 or 9947 or
             9948 or 9949 or 9963 or 9991 or 4223 or 4233 or
             9030 or 9031 or 9040 or 9041 or 9042 or 9050 or 9021 or
-            4266 or 4267 or 4269 =>
+            4266 or 4267 or 4269 or
+            // B22 W11 d29 (the admin 2026-11-21): the 37 editor-added rows that fell back to the tab's B-Gold now charge
+            // honour like the rest of the shelf. Their prices were already on the honour scale (Stone of Vitality
+            // 3,600 = Accuracy Stone 3,600; Zephyr Holy Stone 13,300 = the top Heated/Cooled Holy Stone 13,300).
+            9970 or 9971 or 9972 or 9973 or 9974 or 9975 or 9976 or // B22
+            9977 or 9978 or 9979 or 9980 or 9981 or 9982 or 9983 or 9984 or 9985 or // B22
+            9025 or 9032 or 9090 or 9091 or 9092 or 9093 or 9068 or 9069 or 9088 or 9089 or // B22
+            4272 or 4273 or // B22
+            16300 or 16303 or 16306 or 16309 or 16312 or 16315 or 16318 or // B22
+            14029 or 14030 => // B22
                 CapitalNpcShopCurrency.Honor,
             // 0x05 group.
             4213 or

@@ -1,0 +1,47 @@
+{% extends "_article.html" %}
+{% block title %}Classes{% endblock %}
+{% block heading %}The four classes{% endblock %}
+{% block intro %}Two fighters and two casters. Any class can solo, but every instance goes faster with a mix.{% endblock %}
+{% block slug %}classes{% endblock %}
+{% block article %}
+<h2 id="warrior">Warrior</h2>
+<p>The shield-bearer. Warriors fight up close with a sword and shield and take the hits meant for everyone else. In a party the Warrior goes in first, keeps the monsters' attention and holds the line while the others deal the damage.</p>
+<p><b>Plays like:</b> sturdy, forgiving, steady damage. A good first class.<br><b>Skills you'll know:</b> Light Chop, Sword Storm, Blood Claw.</p>
+
+<h2 id="champion">Champion</h2>
+<p>The Warrior's reckless cousin. Champions trade the shield for a long spear and put everything into attack. They hit hard and fast, and they rely on killing things before things kill them.</p>
+<p><b>Plays like:</b> high damage up close, less room for mistakes.<br><b>Skills you'll know:</b> Jab, Rage Spear, Ruined Strike.</p>
+
+<h2 id="mage">Mage</h2>
+<p>Arcane fire at range. Mages wear light robes and burn their enemies from a distance, either one target at a time or a whole pack at once. They are fragile, so stay behind the front line.</p>
+<p><b>Plays like:</b> big area damage, careful positioning.<br><b>Skills you'll know:</b> Lightball, Star Shower.</p>
+
+<h2 id="priest">Priest</h2>
+<p>The gods' envoy. Priests heal the party, lift curses and harmful effects, and fight with the cold power of water and ice. A party with a Priest survives fights that would wipe a party without one.</p>
+<p><b>Plays like:</b> support first, with real damage of its own.<br><b>Skills you'll know:</b> Ice Shot, Dripstone, Stalagmite.</p>
+
+<h2 id="fields">Field skills</h2>
+<p>Every class has one ground-target skill that lays a burning field: cast it on a spot and it hits everything standing there ten times, once a second. The Warrior, Champion and Priest fields also hit enemy players, at half strength; Flame Blast hits monsters only. Learn ranks 1-5 at levels 10, 34, 58, 82 and 106.</p>
+<div class="tablewrap"><table>
+  <thead><tr><th>Class</th><th>Skill</th><th>Damage</th><th>Cast / cooldown</th></tr></thead>
+  <tbody>
+    <tr><td>Warrior</td><td>Earthsplitter</td><td>Physical</td><td>1 s / 6 s</td></tr>
+    <tr><td>Champion</td><td>Storm of Spears</td><td>Physical</td><td>0.5 s / 4 s</td></tr>
+    <tr><td>Mage</td><td>Flame Blast</td><td>Magic, monsters only</td><td>unchanged</td></tr>
+    <tr><td>Priest</td><td>Holy Pyre</td><td>Magic</td><td>1 s / 6 s</td></tr>
+  </tbody>
+</table></div>
+<p>The books drop wherever Flame Blast books drop: when a Flame Blast book falls, a Warrior, Champion or Priest who made the kill also gets their own book of the same rank. Each class's books have their own colour in the bag.</p>
+<p class="generated">Earthsplitter, Storm of Spears and Holy Pyre are new skills made for this server.</p>
+
+<h2>Changing class</h2>
+<p>The <b>Class Shifter</b> in Athens and Sparta changes your class:</p>
+<ul>
+  <li>It is <b>free up to and including level 100</b>. Above that it takes one <b>Class Shift Permit</b>.</li>
+  <li>Take off everything you are wearing first: the Shifter refuses while you have gear equipped.</li>
+  <li>Your old class's skills are sealed and the new class's skills are unsealed. Talent levels from the old class come back as talent points to spend again.</li>
+</ul>
+<h2>Talents and skill books</h2>
+<p>Skills grow by learning higher ranks from skill books, which drop from monsters and instances. Talents are a separate tree that you fill with talent points earned as you play.</p>
+<p><b>Levels 6 to 10.</b> Every skill can go past level 5, up to level 10. The books for levels 6-10 are learnt at character levels 150, 160, 170, 185 and 200, and come from <b>skill-book chests</b>: each of the 19 world bosses has a 5% chance per kill to drop one for your class.</p>
+{% endblock %}

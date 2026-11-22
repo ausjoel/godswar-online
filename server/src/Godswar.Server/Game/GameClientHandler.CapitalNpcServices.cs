@@ -72,6 +72,10 @@ internal sealed partial class GameClientHandler
             packet,
             cancellationToken,
             "CapitalNpcDialogOpenAck");
+        if (service == CapitalNpcServiceKind.PrizeChest)
+        {
+            await OnPrizeChestOpenedAsync(cancellationToken); // W4-B award storage
+        }
         // The sell request carries no NPC identity, so the open shop is kept for
         // the duration of the conversation to authorize and price sales.
         _openCapitalShopService = CapitalNpcServiceProtocol.IsShop(service)

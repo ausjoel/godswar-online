@@ -21,6 +21,7 @@ internal sealed partial class GameSessionRegistry
 
     public async Task RunPopulationNoticesAsync(RealmCalendar calendar,CancellationToken cancellationToken)
     {
+        BoardClock.Calendar=calendar; // B21 item 19: board message times in realm time
         using var timer=new PeriodicTimer(NoticeTick);
         var lastPopulation=DateTimeOffset.UtcNow;
         var previous=calendar.ToRealmTime(lastPopulation).DateTime;

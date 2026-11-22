@@ -145,7 +145,7 @@ def main():
             entry["effects"] = [{"code": None, "value": 0, "label": "Marker only (no numeric effect in Status.ini)"}]
         entries.append(entry)
     # Statuses that only the reborn server defines (State/ExperienceBoostState.cs): ids the client's Status.ini does not have.
-    src = os.path.join(ROOT, "GodsWar-2.51", "Polish", "reborn-src-next", "src", "Godswar.Server", "State", "ExperienceBoostState.cs")
+    src = os.path.join(HERE, "..", "server", "src", "Godswar.Server", "State", "ExperienceBoostState.cs")
     if os.path.exists(src):
         for name, sid in re.findall(r"public const int (\w+) = (\d{3,4});", open(src, encoding="utf-8").read()):
             sid = int(sid)

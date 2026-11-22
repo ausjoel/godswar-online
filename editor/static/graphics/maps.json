@@ -1,0 +1,774 @@
+{
+ "built": "2026-11-12 13:44:21",
+ "maps": {
+  "0": {
+   "hmp": "Map/Sparta.hmp",
+   "id": 0,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Sparta.gwo",
+   "name": "Sparta",
+   "scene": "Sparta",
+   "terrain": true,
+   "thumb": 0,
+   "underlay": "minimap"
+  },
+  "1": {
+   "hmp": "Map/Athens.hmp",
+   "id": 1,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Athens.gwo",
+   "name": "Athens",
+   "scene": "Athens",
+   "terrain": true,
+   "thumb": 1,
+   "underlay": "minimap"
+  },
+  "10": {
+   "hmp": "Map/Larissa_All.hmp",
+   "id": 10,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Larissa_All.gwo",
+   "name": "Larissa",
+   "scene": "Larissa_All",
+   "terrain": true,
+   "thumb": 10,
+   "underlay": "minimap"
+  },
+  "11": {
+   "hmp": "Map/Marathon_All.hmp",
+   "id": 11,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Marathon_All.gwo",
+   "name": "Marathon",
+   "scene": "Marathon_All",
+   "terrain": true,
+   "thumb": 11,
+   "underlay": "minimap"
+  },
+  "12": {
+   "hmp": "Map/Parnitha_2.hmp",
+   "id": 12,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Parnitha_2.gwo",
+   "name": "Parnitha Port",
+   "scene": "Parnitha_2",
+   "terrain": true,
+   "thumb": 12,
+   "underlay": "minimap"
+  },
+  "13": {
+   "hmp": "Map/Peloponnese_ALL.hmp",
+   "id": 13,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Peloponnese_All.gwo",
+   "name": "Peloponnese",
+   "scene": "Peloponnese_All",
+   "terrain": true,
+   "thumb": 13,
+   "underlay": "minimap"
+  },
+  "14": {
+   "hmp": "Map/Nemea_2.hmp",
+   "id": 14,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Nemea_2.gwo",
+   "name": "Nemea Forest",
+   "scene": "Nemea_2",
+   "terrain": true,
+   "thumb": 14,
+   "underlay": "minimap"
+  },
+  "15": {
+   "hmp": "Map/Derveni_All.hmp",
+   "id": 15,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Derveni_All.gwo",
+   "name": "Derveni",
+   "scene": "Derveni_All",
+   "terrain": true,
+   "thumb": 15,
+   "underlay": "minimap"
+  },
+  "16": {
+   "hmp": "Map/Argolis_All.hmp",
+   "id": 16,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Argolis_All.gwo",
+   "name": "Argolis",
+   "scene": "Argolis_All",
+   "terrain": true,
+   "thumb": 16,
+   "underlay": "minimap"
+  },
+  "17": {
+   "hmp": "Map/Isthmus_of_Corinth_All.hmp",
+   "id": 17,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Isthmus_of_Corinth_All.gwo",
+   "name": "Isthmus",
+   "scene": "Isthmus_of_Corinth_All",
+   "terrain": true,
+   "thumb": 17,
+   "underlay": "minimap"
+  },
+  "18": {
+   "hmp": "Map/Megara_All.hmp",
+   "id": 18,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Megara_All.gwo",
+   "name": "Megara",
+   "scene": "Megara_All",
+   "terrain": true,
+   "thumb": 18,
+   "underlay": "minimap"
+  },
+  "19": {
+   "hmp": "Map/Plataea_All.hmp",
+   "id": 19,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Plataea_All.gwo",
+   "name": "Plataea",
+   "scene": "Plataea_All",
+   "terrain": true,
+   "thumb": 19,
+   "underlay": "minimap"
+  },
+  "2": {
+   "hmp": "Map/Athens_Newbie.hmp",
+   "id": 2,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Athens_Newbie.gwo",
+   "name": "Athens' Suburb",
+   "scene": "Athens_Newbie",
+   "terrain": true,
+   "thumb": 2,
+   "underlay": "minimap"
+  },
+  "20": {
+   "hmp": "Map/Oracle_of_Delphi_All.hmp",
+   "id": 20,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Oracle_of_Delphi_All.gwo",
+   "name": "Delphi Forest",
+   "scene": "Oracle_of_Delphi_All",
+   "terrain": true,
+   "thumb": 20,
+   "underlay": "minimap"
+  },
+  "200": {
+   "hmp": "Map/Medusa_Island.hmp",
+   "id": 200,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Medusa_Island.gwo",
+   "name": "Medusa's Island",
+   "scene": "Medusa_Island",
+   "terrain": true,
+   "thumb": 51,
+   "underlay": "minimap"
+  },
+  "201": {
+   "hmp": "Map/Field_Test.hmp",
+   "id": 201,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Field_Test.gwo",
+   "name": "Training Ground",
+   "scene": "Field_Test",
+   "terrain": true,
+   "thumb": 52,
+   "underlay": "minimap"
+  },
+  "202": {
+   "hmp": "Map/Field_Test2.hmp",
+   "id": 202,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Field_Test2.gwo",
+   "name": "Training Ground 1",
+   "scene": "Field_Test2",
+   "terrain": true,
+   "thumb": 53,
+   "underlay": "minimap"
+  },
+  "203": {
+   "hmp": "Map/Field_Test3.hmp",
+   "id": 203,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Field_Test3.gwo",
+   "name": "Training Ground 2",
+   "scene": "Field_Test3",
+   "terrain": true,
+   "thumb": 54,
+   "underlay": "minimap"
+  },
+  "204": {
+   "hmp": "Map/Medusa_Island2.hmp",
+   "id": 204,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Medusa_Island2.gwo",
+   "name": "Medusa's Island 2",
+   "scene": "Medusa_Island2",
+   "terrain": true,
+   "thumb": 55,
+   "underlay": "minimap"
+  },
+  "205": {
+   "hmp": "Map/Atlantis_Entrance.hmp",
+   "id": 205,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Atlantis_Entrance.gwo",
+   "name": "Atlantis Portal",
+   "scene": "Atlantis_Entrance",
+   "terrain": true,
+   "thumb": 56,
+   "underlay": "minimap"
+  },
+  "206": {
+   "hmp": "Map/Field_Test4.hmp",
+   "id": 206,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Field_Test4.gwo",
+   "name": "Training Ground 3",
+   "scene": "Field_Test4",
+   "terrain": true,
+   "thumb": 57,
+   "underlay": "minimap"
+  },
+  "207": {
+   "hmp": "Map/Fane.hmp",
+   "id": 207,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Fane.gwo",
+   "name": "Wonderland",
+   "scene": "Fane",
+   "terrain": true,
+   "thumb": 58,
+   "underlay": "minimap"
+  },
+  "208": {
+   "hmp": "Map/Salame.hmp",
+   "id": 208,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Salame.gwo",
+   "name": "Bay under Attack",
+   "scene": "Salame",
+   "terrain": true,
+   "thumb": 59,
+   "underlay": "minimap"
+  },
+  "209": {
+   "hmp": "Map/Salame2.hmp",
+   "id": 209,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Salame2.gwo",
+   "name": "Bay under Attack",
+   "scene": "Salame2",
+   "terrain": true,
+   "thumb": 60,
+   "underlay": "minimap"
+  },
+  "21": {
+   "hmp": "Map/Olympus_All.hmp",
+   "id": 21,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Olympus_All.gwo",
+   "name": "Olympus",
+   "scene": "Olympus_All",
+   "terrain": true,
+   "thumb": 21,
+   "underlay": "minimap"
+  },
+  "210": {
+   "hmp": "Map/Heracles.hmp",
+   "id": 210,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Heracles.gwo",
+   "name": "The Trials of Hercules",
+   "scene": "Heracles",
+   "terrain": true,
+   "thumb": 61,
+   "underlay": "minimap"
+  },
+  "22": {
+   "hmp": "Map/Elasson_All.hmp",
+   "id": 22,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Elasson_All.gwo",
+   "name": "Elasson",
+   "scene": "Elasson_All",
+   "terrain": true,
+   "thumb": 22,
+   "underlay": "minimap"
+  },
+  "23": {
+   "hmp": "Map/GM.hmp",
+   "id": 23,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/GM.gwo",
+   "name": "Sealed Spot",
+   "scene": "GM",
+   "terrain": true,
+   "thumb": 23,
+   "underlay": "minimap"
+  },
+  "24": {
+   "hmp": "Map/Execrativelys.hmp",
+   "id": 24,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Execrativelys.gwo",
+   "name": "Cursed Zone 1",
+   "scene": "Execrativelys",
+   "terrain": true,
+   "thumb": 24,
+   "underlay": "minimap"
+  },
+  "25": {
+   "hmp": "Map/Agate.hmp",
+   "id": 25,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Agate.gwo",
+   "name": "Treasure Land 1",
+   "scene": "Agate",
+   "terrain": true,
+   "thumb": 25,
+   "underlay": "minimap"
+  },
+  "26": {
+   "hmp": "Map/Sealbox.hmp",
+   "id": 26,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Sealbox.gwo",
+   "name": "Epimetheus' Home",
+   "scene": "Sealbox",
+   "terrain": true,
+   "thumb": 26,
+   "underlay": "minimap"
+  },
+  "27": {
+   "hmp": "Map/Guardwar.hmp",
+   "id": 27,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Guardwar.gwo",
+   "name": "Mantinea 1",
+   "scene": "Guardwar",
+   "terrain": true,
+   "thumb": 27,
+   "underlay": "minimap"
+  },
+  "28": {
+   "hmp": "Map/Execratively2.hmp",
+   "id": 28,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Execratively2.gwo",
+   "name": "Cursed Zone 2",
+   "scene": "Execratively2",
+   "terrain": true,
+   "thumb": 28,
+   "underlay": "minimap"
+  },
+  "29": {
+   "hmp": "Map/Execratively3.hmp",
+   "id": 29,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Execratively3.gwo",
+   "name": "Cursed Zone 3",
+   "scene": "Execratively3",
+   "terrain": true,
+   "thumb": 29,
+   "underlay": "minimap"
+  },
+  "3": {
+   "hmp": "Map/Parnitha_1.hmp",
+   "id": 3,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Parnitha_1.gwo",
+   "name": "Parnitha",
+   "scene": "Parnitha_1",
+   "terrain": true,
+   "thumb": 3,
+   "underlay": "minimap"
+  },
+  "30": {
+   "hmp": "Map/Labyrint2.hmp",
+   "id": 30,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Labyrint2.gwo",
+   "name": "Cyclades",
+   "scene": "Labyrint2",
+   "terrain": true,
+   "thumb": 30,
+   "underlay": "minimap"
+  },
+  "31": {
+   "hmp": "Map/Labyrinth.hmp",
+   "id": 31,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Labyrinth.gwo",
+   "name": "Dodecanese",
+   "scene": "Labyrinth",
+   "terrain": true,
+   "thumb": 31,
+   "underlay": "minimap"
+  },
+  "32": {
+   "hmp": "Map/Sicily.hmp",
+   "id": 32,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Sicily.gwo",
+   "name": "Sicily 1",
+   "scene": "Sicily",
+   "terrain": true,
+   "thumb": 32,
+   "underlay": "minimap"
+  },
+  "33": {
+   "hmp": "Map/Sicily2.hmp",
+   "id": 33,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Sicily2.gwo",
+   "name": "Sicily 2",
+   "scene": "Sicily2",
+   "terrain": true,
+   "thumb": 33,
+   "underlay": "minimap"
+  },
+  "34": {
+   "hmp": "Map/Guardwar2.hmp",
+   "id": 34,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Guardwar2.gwo",
+   "name": "Mantinea 2",
+   "scene": "Guardwar2",
+   "terrain": true,
+   "thumb": 34,
+   "underlay": "minimap"
+  },
+  "35": {
+   "hmp": "Map/Guardwar3.hmp",
+   "id": 35,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Guardwar3.gwo",
+   "name": "Mantinea 3",
+   "scene": "Guardwar3",
+   "terrain": true,
+   "thumb": 35,
+   "underlay": "minimap"
+  },
+  "36": {
+   "hmp": "Map/Guardwar4.hmp",
+   "id": 36,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Guardwar4.gwo",
+   "name": "Mantinea 4",
+   "scene": "Guardwar4",
+   "terrain": true,
+   "thumb": 36,
+   "underlay": "minimap"
+  },
+  "37": {
+   "hmp": "Map/Guardwar5.hmp",
+   "id": 37,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Guardwar5.gwo",
+   "name": "Mantinea 5",
+   "scene": "Guardwar5",
+   "terrain": true,
+   "thumb": 37,
+   "underlay": "minimap"
+  },
+  "38": {
+   "hmp": "Map/WarField.hmp",
+   "id": 38,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/WarField.gwo",
+   "name": "Mt. Pindus",
+   "scene": "WarField",
+   "terrain": true,
+   "thumb": 38,
+   "underlay": "minimap"
+  },
+  "39": {
+   "hmp": "Map/Agate2.hmp",
+   "id": 39,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Agate2.gwo",
+   "name": "Treasure Land 2",
+   "scene": "Agate2",
+   "terrain": true,
+   "thumb": 39,
+   "underlay": "minimap"
+  },
+  "4": {
+   "hmp": "Map/Sparta_Newbie.hmp",
+   "id": 4,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Sparta_Newbie.gwo",
+   "name": "Sparta's Suburb",
+   "scene": "Sparta_Newbie",
+   "terrain": true,
+   "thumb": 4,
+   "underlay": "minimap"
+  },
+  "40": {
+   "hmp": "Map/Pans_Labyrinth.hmp",
+   "id": 40,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Pans_Labyrinth.gwo",
+   "name": "Pan's Labyrinth",
+   "scene": "Pans_Labyrinth",
+   "terrain": true,
+   "thumb": 40,
+   "underlay": "minimap"
+  },
+  "41": {
+   "hmp": "Map/Alcatraz_Island.hmp",
+   "id": 41,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Alcatraz_Island.gwo",
+   "name": "Hemlock Island",
+   "scene": "Alcatraz_Island",
+   "terrain": true,
+   "thumb": 41,
+   "underlay": "minimap"
+  },
+  "42": {
+   "hmp": "Map/Lelantine_Farm.hmp",
+   "id": 42,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Lelantine_Farm.gwo",
+   "name": "Lelantine_Farm",
+   "scene": "Lelantine_Farm",
+   "terrain": true,
+   "thumb": 42,
+   "underlay": "minimap"
+  },
+  "43": {
+   "hmp": "Map/Guardwa2.hmp",
+   "id": 43,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Guardwa2.gwo",
+   "name": "Ni Mini",
+   "scene": "Guardwa2",
+   "terrain": true,
+   "thumb": 43,
+   "underlay": "minimap"
+  },
+  "44": {
+   "hmp": "Map/Troy.hmp",
+   "id": 44,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Troy.gwo",
+   "name": "Troy",
+   "scene": "Troy",
+   "terrain": true,
+   "thumb": 44,
+   "underlay": "minimap"
+  },
+  "45": {
+   "hmp": "Map/Love_Island.hmp",
+   "id": 45,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Love_Island.gwo",
+   "name": "Romance Island",
+   "scene": "Love_Island",
+   "terrain": true,
+   "thumb": 45,
+   "underlay": "minimap"
+  },
+  "46": {
+   "hmp": "Map/Colosseum.hmp",
+   "id": 46,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Colosseum.gwo",
+   "name": "Arena",
+   "scene": "Colosseum",
+   "terrain": true,
+   "thumb": 46,
+   "underlay": "minimap"
+  },
+  "47": {
+   "id": 47,
+   "name": "Arena",
+   "note": "no map file of its own; the client shows Colosseum",
+   "same_as": 46,
+   "scene": "Colosseu1"
+  },
+  "48": {
+   "id": 48,
+   "name": "Arena",
+   "note": "no map file of its own; the client shows Colosseum",
+   "same_as": 46,
+   "scene": "Colosseu2"
+  },
+  "49": {
+   "id": 49,
+   "name": "Arena",
+   "note": "no map file of its own; the client shows Colosseum",
+   "same_as": 46,
+   "scene": "Colosseu3"
+  },
+  "5": {
+   "hmp": "Map/Nemea_1.hmp",
+   "id": 5,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Nemea_1.gwo",
+   "name": "Nemea",
+   "scene": "Nemea_1",
+   "terrain": true,
+   "thumb": 5,
+   "underlay": "minimap"
+  },
+  "50": {
+   "id": 50,
+   "name": "Arena",
+   "note": "no map file of its own; the client shows Colosseum",
+   "same_as": 46,
+   "scene": "Colosseu4"
+  },
+  "51": {
+   "id": 51,
+   "name": "Arena",
+   "note": "no map file of its own; the client shows Colosseum",
+   "same_as": 46,
+   "scene": "Colosseu5"
+  },
+  "52": {
+   "id": 52,
+   "name": "Arena",
+   "note": "no map file of its own; the client shows Colosseum",
+   "same_as": 46,
+   "scene": "Colosseu6"
+  },
+  "53": {
+   "id": 53,
+   "name": "Arena",
+   "note": "no map file of its own; the client shows Colosseum",
+   "same_as": 46,
+   "scene": "Colosseu7"
+  },
+  "54": {
+   "id": 54,
+   "name": "Arena",
+   "note": "no map file of its own; the client shows Colosseum",
+   "same_as": 46,
+   "scene": "Colosseu8"
+  },
+  "55": {
+   "id": 55,
+   "name": "Arena",
+   "note": "no map file of its own; the client shows Colosseum",
+   "same_as": 46,
+   "scene": "Colosseu9"
+  },
+  "56": {
+   "hmp": "Map/WarHall.hmp",
+   "id": 56,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/WarHall.gwo",
+   "name": "Hall of Peace",
+   "scene": "WarHall",
+   "terrain": true,
+   "thumb": 47,
+   "underlay": "minimap"
+  },
+  "57": {
+   "hmp": "Map/Arena.hmp",
+   "id": 57,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Arena.gwo",
+   "name": "Duel Arena",
+   "scene": "Arena",
+   "terrain": true,
+   "thumb": 48,
+   "underlay": "minimap"
+  },
+  "58": {
+   "id": 58,
+   "name": "Arena",
+   "note": "no map file of its own; the client shows Colosseum",
+   "same_as": 46,
+   "scene": "Colosse10"
+  },
+  "59": {
+   "id": 59,
+   "name": "Arena",
+   "note": "no map file of its own; the client shows Colosseum",
+   "same_as": 46,
+   "scene": "Colosse11"
+  },
+  "6": {
+   "hmp": "Map/Mycenae_All.hmp",
+   "id": 6,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Mycenae_All.gwo",
+   "name": "Mycenae",
+   "scene": "Mycenae_All",
+   "terrain": true,
+   "thumb": 6,
+   "underlay": "minimap"
+  },
+  "60": {
+   "id": 60,
+   "name": "Arena",
+   "note": "no map file of its own; the client shows Colosseum",
+   "same_as": 46,
+   "scene": "Colosse13"
+  },
+  "61": {
+   "id": 61,
+   "name": "Arena",
+   "note": "no map file of its own; the client shows Colosseum",
+   "same_as": 46,
+   "scene": "Colosse13"
+  },
+  "62": {
+   "id": 62,
+   "name": "Arena",
+   "note": "no map file of its own; the client shows Colosseum",
+   "same_as": 46,
+   "scene": "Colosse14"
+  },
+  "63": {
+   "id": 63,
+   "name": "Arena",
+   "note": "no map file of its own; the client shows Colosseum",
+   "same_as": 46,
+   "scene": "Colosse15"
+  },
+  "64": {
+   "id": 64,
+   "name": "Arena",
+   "note": "no map file of its own; the client shows Colosseum",
+   "same_as": 46,
+   "scene": "Colosse16"
+  },
+  "65": {
+   "id": 65,
+   "name": "Arena",
+   "note": "no map file of its own; the client shows Colosseum",
+   "same_as": 46,
+   "scene": "Colosse17"
+  },
+  "66": {
+   "id": 66,
+   "name": "Arena",
+   "note": "no map file of its own; the client shows Colosseum",
+   "same_as": 46,
+   "scene": "Colosse18"
+  },
+  "67": {
+   "id": 67,
+   "name": "Arena",
+   "note": "no map file of its own; the client shows Colosseum",
+   "same_as": 46,
+   "scene": "Colosse19"
+  },
+  "68": {
+   "hmp": "Map/Parnassus.hmp",
+   "id": 68,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Parnassus.gwo",
+   "name": "Parnassus",
+   "scene": "Parnassus",
+   "terrain": true,
+   "thumb": 49,
+   "underlay": "minimap"
+  },
+  "69": {
+   "hmp": "Map/Tartarus.hmp",
+   "id": 69,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Tartarus.gwo",
+   "name": "Tartarus",
+   "scene": "Tartarus",
+   "terrain": true,
+   "thumb": 50,
+   "underlay": "minimap"
+  },
+  "7": {
+   "hmp": "Map/Olympia_All.hmp",
+   "id": 7,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Olympia_All.gwo",
+   "name": "Olympia",
+   "scene": "Olympia_All",
+   "terrain": true,
+   "thumb": 7,
+   "underlay": "minimap"
+  },
+  "8": {
+   "hmp": "Map/Thermopylae_All.hmp",
+   "id": 8,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Thermopylae_All.gwo",
+   "name": "Thermopylae",
+   "scene": "Thermopylae_All",
+   "terrain": true,
+   "thumb": 8,
+   "underlay": "minimap"
+  },
+  "9": {
+   "hmp": "Map/Thebes_All.hmp",
+   "id": 9,
+   "minimap": "Localization/en_us/UI/Texture/MinMap/Thebes_All.gwo",
+   "name": "Thebes",
+   "scene": "Thebes_All",
+   "terrain": true,
+   "thumb": 9,
+   "underlay": "minimap"
+  }
+ },
+ "thumbs": {
+  "columns": 16,
+  "file": "/static/graphics/map-thumbs.jpg",
+  "tile": 96
+ },
+ "world": {
+  "note": "pixel (col,row) = ((x+256)*s, (256-z)*s), s = width/512",
+  "x": [
+   -256,
+   256
+  ],
+  "z": [
+   -256,
+   256
+  ]
+ }
+}

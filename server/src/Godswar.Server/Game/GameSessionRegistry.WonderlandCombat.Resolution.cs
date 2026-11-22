@@ -59,7 +59,15 @@ internal sealed partial class GameSessionRegistry
         ulong eventId, DateTimeOffset now)
     {
         if (runtime.MapId != 207)
-            return MonsterIncomingCombatPolicy.ResolveAttack(profile, target.Character, mitigation, eventId);
+        {
+            var ordinary = MonsterIncomingCombatPolicy.ResolveAttack(profile, target.Character, mitigation, eventId);
+            // B23-S: the Aether Sanctum boss damage % slider (default 200), every hit a Sanctum boss lands.
+            return ordinary.Damage == 0 ? ordinary : ordinary with
+            {
+                Damage = AetherSanctumBossScale.ScaleDamage(attack.Monster.Definition.MapId,
+                    attack.Monster.Definition.TemplateKey, ordinary.Damage)
+            };
+        }
         var targetStats = MonsterIncomingCombatPolicy.ResolveTargetStats(target.Character, mitigation);
         if (TryGetWonderlandEffectsLocked(target.Session, ref now, out var effects) && effects.ArmorPenaltyUntil > now)
             targetStats = targetStats with
@@ -81,9 +89,11 @@ internal sealed partial class GameSessionRegistry
             ? AuthoredCombatPveCurrent.ResolveSkillDamage(attacker, targetStats,
                 skill.Magical ? 1 : 0, skill.DamageMultiplier - 1m, 0m, eventId)
             : AuthoredCombatPveCurrent.ResolveBasicAttack(attacker, targetStats, eventId);
+        // WL-SLIDERS: the attacker's island damage % slider (100 = stock), for every hit a Wonderland monster lands.
+        var island = runtime.Map.TryGetWonderlandSpawnPolicy(attack.Monster.ObjectId, out var source) ? source.Stage : 0;
         if (attack.WonderlandReflectedDamage is { } reflected)
-            return resolution with { Damage = reflected, Outcome = CombatHitOutcome.Normal };
-        return resolution;
+            return resolution with { Damage = WonderlandIslandScale.ScaleDamage(island, reflected), Outcome = CombatHitOutcome.Normal };
+        return resolution.Damage == 0 ? resolution : resolution with { Damage = WonderlandIslandScale.ScaleDamage(island, resolution.Damage) };
     }
 
     private bool IsWonderlandIncomingAttackAllowedLocked(WorldInstanceRuntime runtime, MonsterRuntimeUpdate attack,

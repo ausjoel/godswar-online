@@ -25,8 +25,30 @@ internal sealed partial class ClientSession : IAsyncDisposable
     internal ushort LastCompletedSendOpcode { get; private set; }
     internal int LastCompletedSendLength { get; private set; }
     internal string? TerminalErrorType { get; private set; }
+
+    /// <summary>W6A: why the server closed this session ("replaced", "kicked", "banned"), for the health record.</summary>
+    internal string? EndHint { get; set; }
     private int _authenticated;
     private int _disconnected;
+
+    // ENTRY-TIMING (w6c): cheap always-on counters for the "[entry-timing]"
+    // summary, plus an opt-in per-packet trace (no payload, no endpoint) for
+    // measuring a login on a rig: GODSWAR_ENTRY_TRACE=1.
+    private static readonly bool EntryTraceEnabled = string.Equals(
+        Environment.GetEnvironmentVariable("GODSWAR_ENTRY_TRACE"),
+        "1",
+        StringComparison.Ordinal);
+    private static int _nextEntryTraceId;
+    private readonly int _entryTraceId =
+        Interlocked.Increment(ref _nextEntryTraceId);
+    private readonly long _entryTraceStart =
+        System.Diagnostics.Stopwatch.GetTimestamp();
+    private long _packetsSent;
+    private long _bytesSent;
+    private long _packetsReceived;
+    internal long PacketsSent => Volatile.Read(ref _packetsSent);
+    internal long BytesSent => Volatile.Read(ref _bytesSent);
+    internal long PacketsReceived => Volatile.Read(ref _packetsReceived);
 
     public ClientSession(
         ILegacyByteTransport transport,
@@ -240,6 +262,12 @@ internal sealed partial class ClientSession : IAsyncDisposable
                     packet.Value.Opcode);
             packetReadCompleted = true;
             _hasReceivedPacket = true;
+            Interlocked.Increment(ref _packetsReceived);
+            if (EntryTraceEnabled)
+            {
+                Console.WriteLine(
+                    $"[entry-trace] s={_entryTraceId} role={_endpointRole} t={System.Diagnostics.Stopwatch.GetElapsedTime(_entryTraceStart).TotalMilliseconds:F1} rx opcode={packet.Value.Opcode} len={packet.Value.Length}");
+            }
             return new GamePacket(
                 packet.Value.Buffer,
                 clientOperationId);
@@ -337,7 +365,21 @@ internal sealed partial class ClientSession : IAsyncDisposable
             QuestFrameTrace.Append(label, clearPacket.Span);
         }
 
+        var entryTraceSendStart = EntryTraceEnabled
+            ? System.Diagnostics.Stopwatch.GetTimestamp()
+            : 0L;
         await _egress.WriteAsync(clearPacket, cancellationToken);
+        Interlocked.Increment(ref _packetsSent);
+        Interlocked.Add(ref _bytesSent, clearPacket.Length);
+        if (EntryTraceEnabled)
+        {
+            var traceOpcode = framed && clearPacket.Length >= 4
+                ? BinaryPrimitives.ReadUInt16LittleEndian(clearPacket.Span[2..])
+                : (ushort)0;
+            Console.WriteLine(
+                $"[entry-trace] s={_entryTraceId} role={_endpointRole} t={System.Diagnostics.Stopwatch.GetElapsedTime(_entryTraceStart).TotalMilliseconds:F1} tx opcode={traceOpcode} len={clearPacket.Length} writeMs={System.Diagnostics.Stopwatch.GetElapsedTime(entryTraceSendStart).TotalMilliseconds:F2} label={label}");
+        }
+
         if (framed && clearPacket.Length >= 4)
         {
             LastCompletedSendOpcode = BinaryPrimitives.ReadUInt16LittleEndian(clearPacket.Span[2..]);

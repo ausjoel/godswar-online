@@ -28,6 +28,12 @@ internal static class FriendlySkillStatusCatalog
 
     public static bool TryGetHealOverTime(int skillId, out SkillStatusEffectDefinition definition)
     {
+        // B22: Area Heal 6-10 (765-769) = Grace of Vitality, heal per second scaled
+        if (SkillLevelExtension.TryGetLevelFive(skillId, out var five, out var steps) && five == 764)
+        {
+            definition = SkillLevelExtension.Scale(Grace, skillId, steps) with { Priority = Grace.Priority };
+            return true;
+        }
         definition = skillId switch
         {
             763 => Radiance,
@@ -40,7 +46,7 @@ internal static class FriendlySkillStatusCatalog
     /// <summary>The 1 s Divine Intervention icon shown after the cleanse (no stat effect).</summary>
     public static bool TryGetCleanse(int skillId, out SkillStatusEffectDefinition icon)
     {
-        icon = skillId is 753 or 754
+        icon = skillId is 753 or 754 or (>= 755 and <= 759) // B22: Heal 6-10 cleanse like Heal 4/5
             ? new(skillId, DivineInterventionStatusId, DivineInterventionKind, 1, true,
                 TimeSpan.FromSeconds(1), TimeSpan.Zero, 0, 0)
             : default;

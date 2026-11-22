@@ -1,3 +1,5 @@
+using Godswar.Server.Application.Rates;
+using Godswar.Server.Domain.Characters;
 using System.Buffers.Binary;
 using System.Reflection;
 using Godswar.Server.Application.WorldInstances;
@@ -27,9 +29,16 @@ internal static partial class WonderlandCombatChecks
         }
     }
 
+    internal static Task CheckIslandSliderAttackAsync() =>
+        CheckCapturedSilenceAttackAsync(MonsterRuntimeMode.Ecs, PlayerRuntimeMode.Ecs, 6, "platinum", 2022, 15153, 4213, 50);
+
     private static async Task CheckCapturedSilenceAttackAsync(MonsterRuntimeMode monsters,
-        PlayerRuntimeMode players, int island, string key, uint nativeSkill, uint normalDamage, uint fallbackDamage)
+        PlayerRuntimeMode players, int island, string key, uint nativeSkill, uint normalDamage, uint fallbackDamage,
+        int damagePercent = 100)
     {
+        // WL-SLIDERS: the island damage % slider scales the committed hit; the formula prediction stays stock.
+        uint Scaled(uint d) => damagePercent == 100 ? d :
+            (uint)Math.Max(1m, decimal.Round(d * damagePercent / 100m, 0, MidpointRounding.AwayFromZero));
         var setup = await CreateBirdPresentationFixtureAsync(monsters, players);
         await using var f = setup.Fixture;
         await using var observer = setup.Observer;
@@ -78,8 +87,9 @@ internal static partial class WonderlandCombatChecks
             f.Now = expires;
             await EmitAndCheckAsync(monster, nativeSkill, normalDamage);
 
-            async Task EmitAndCheckAsync(MonsterRuntimeSnapshot source, uint primary, uint expectedDamage)
+            async Task EmitAndCheckAsync(MonsterRuntimeSnapshot source, uint primary, uint stockDamage)
             {
+                var expectedDamage = Scaled(stockDamage);
                 Check.True(f.Runtime.Map.TryGetWonderlandSpawnPolicy(source.ObjectId, out var spawn),
                     "the source has a published captured policy");
                 var baseProfile = f.Registry.AdjustPveMonsterAttackerProfile(f.Session, source, f.Now,
@@ -88,7 +98,7 @@ internal static partial class WonderlandCombatChecks
                 do { eventId++; }
                 while (MonsterIncomingCombatPolicy.ResolveAttack(profile, f.Character, default, eventId).Outcome !=
                     CombatHitOutcome.Normal);
-                Check.Equal(expectedDamage, MonsterIncomingCombatPolicy.ResolveAttack(profile, f.Character,
+                Check.Equal(stockDamage, MonsterIncomingCombatPolicy.ResolveAttack(profile, f.Character,
                     default, eventId).Damage, "the fully populated reference target predicts the exact captured hit");
                 var attack = new MonsterRuntimeUpdate(MonsterRuntimeUpdateKind.Attacked, source,
                     TargetCharacterId: f.Character.Id, TargetObjectId: WorldObjectIds.ForPlayer(f.Character.Id),
@@ -136,4 +146,46 @@ internal static partial class WonderlandCombatChecks
     private static bool HasSourceCombat(IEnumerable<byte[]> packets, uint source) => packets.Any(packet =>
         packet.Length >= 8 && BinaryPrimitives.ReadUInt32LittleEndian(packet.AsSpan(4)) == source &&
         BinaryPrimitives.ReadUInt16LittleEndian(packet.AsSpan(2)) is 10026 or 10046);
+}
+
+internal static class WonderlandIslandScaleChecks
+{
+    public const string CheckName = "Wonderland island sliders: HP % scales one island's enemies at run start, damage % every hit at once";
+
+    public static async Task RunAsync()
+    {
+        try
+        {
+            var stock = Enumerable.Range(1, 8).Select(i => WonderlandMonsterPlan.Create(i, 2, FactionPortalSkillPolicy.AthensCamp)).ToArray();
+            Check.Equal(10_000_000u, stock[5][0].Stats.MaximumHealth, "stock island-6 dragon HP at 100%");
+            Check.True(WonderlandIslandScale.Definitions.Count == 16 &&
+                WonderlandIslandScale.Definitions.All(d => d.DefaultValue == 100m && ServerRateCatalog.Get(d.Key).DefaultValue == 100m),
+                "16 island sliders, all registered, all default 100 (stock)");
+            Install((WonderlandIslandScale.HpKey(6), 50m), (WonderlandIslandScale.HpKey(5), 200m));
+            var scaled = Enumerable.Range(1, 8).Select(i => WonderlandMonsterPlan.Create(i, 2, FactionPortalSkillPolicy.AthensCamp)).ToArray();
+            Check.True(scaled[5].Zip(stock[5]).All(p => p.First.Stats.MaximumHealth * 2 == p.Second.Stats.MaximumHealth),
+                "island 6 HP 50%: every island-6 actor has half its stock HP");
+            Check.True(scaled[4].Zip(stock[4]).All(p => p.First.IsAllied
+                    ? p.First.Stats.MaximumHealth == p.Second.Stats.MaximumHealth
+                    : p.First.Stats.MaximumHealth == p.Second.Stats.MaximumHealth * 2),
+                "island 5 HP 200%: enemies doubled, allied helpers keep stock HP");
+            foreach (var i in new[] { 0, 1, 2, 3, 6, 7 })
+                Check.True(scaled[i].Zip(stock[i]).All(p => p.First.Stats == p.Second.Stats), $"island {i + 1} is untouched");
+            Install((WonderlandIslandScale.DamageKey(6), 50m));
+            Check.Equal(7_577u, WonderlandIslandScale.ScaleDamage(6, 15_153u), "damage 50% rounds half away from zero");
+            Check.Equal(1u, WonderlandIslandScale.ScaleDamage(6, 1u), "a hit above 0 never drops to 0");
+            Check.Equal(15_153u, WonderlandIslandScale.ScaleDamage(7, 15_153u), "another island's damage is untouched");
+            // The committed-hit path (ResolveWonderlandMonsterAttack) is exercised on the rig: the unregistered
+            // complete-capture check that would cover it already fails at its packet-layout assertion on main.
+            await Task.CompletedTask;
+        }
+        finally
+        {
+            ServerRates.ResetToDefaults();
+        }
+    }
+
+    private static void Install(params (string Key, decimal Value)[] values) =>
+        ServerRates.Install(ServerRatesSnapshot.Create(values.Select(v => KeyValuePair.Create(v.Key, v.Value)), 1,
+            DateTimeOffset.UtcNow, "check", "test"));
 }

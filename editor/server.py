@@ -1636,6 +1636,10 @@ def main(argv=None):
             return 2
         print("note: 1.0 MariaDB not reachable (%s); --reborn-only" % str(e)[:200], file=sys.stderr)
     Handler.app = app
+    try:                                          # B21 item 22: timed event buffs keep running after an editor restart
+        __import__("modules.buff_tools", fromlist=["JOB"]).JOB.ensure(app)
+    except Exception as e:                        # noqa: BLE001 - the editor works without it; the page says so
+        print("note: event-buff job not started: %s" % e, file=sys.stderr)
     srv = ThreadingHTTPServer(("127.0.0.1", http_port), Handler)
     srv.daemon_threads = True
     banner = "** LIVE databases %s / %s **" % (app.ctx.db.game, app.ctx.db.acc) if app.ctx.db.live else "databases %s / %s" % (app.ctx.db.game, app.ctx.db.acc)

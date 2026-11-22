@@ -67,6 +67,16 @@ internal static class PetItemCatalog
     public const uint RestrictedJuiceOfRebirth = 10146;
     public const uint EmptySealJade = 10108;
     public const uint PackedSealJade = 10109;
+
+    /// <summary>
+    /// W6A: items that only exist together with other rows, so no grant, award, shop or editor path may hand
+    /// them out by id. A packed Seal Jade holds a pet (sealed_pet_items); without one the client record cannot
+    /// be built. Null when the item can be granted; otherwise the reason in plain words.
+    /// </summary>
+    public static string? CannotBeGrantedReason(long itemId) =>
+        itemId == PackedSealJade
+            ? "a packed Seal Jade only comes from sealing a pet (it has no pet inside when added by hand)"
+            : null;
     public const uint RandomEventTalentStick = 10110;
     public const uint QuestDispatchTalentStick = 10111;
     public const uint WorkTalentStick = 10112;

@@ -250,6 +250,9 @@ internal static class DataArchitectureCheckCatalog
             "Game-handler checkpoint lifecycle",
             GameHandlerCheckpointLifecycleChecks.RunAsync),
         (
+            "W14 server log faults: unowned final flush, Hermes Hood timer, session-health prune",
+            GameHandlerCheckpointLifecycleChecks.RunW14Async),
+        (
             "Replacement-session leave ownership",
             PlayerOwnershipSessionRaceChecks.RunAsync),
         (
@@ -327,6 +330,12 @@ internal static class DataArchitectureCheckCatalog
         (
             "Legacy game login handoff",
             LegacyGameLoginHandoffChecks.RunAsync),
+        (
+            SessionHealthChecks.CheckName,
+            SessionHealthChecks.RunAsync),
+        (
+            MedusaTitleOrderChecks.CheckName,
+            MedusaTitleOrderChecks.RunAsync),
         (
             "Legacy talent command envelope",
             LegacyTalentCommandEnvelopeChecks.RunAsync),

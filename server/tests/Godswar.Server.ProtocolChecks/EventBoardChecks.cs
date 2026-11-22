@@ -101,7 +101,9 @@ internal static class EventBoardChecks
     private static void CheckGateDefaultsOff()
     {
         ServerRates.ResetToDefaults();
-        Check.True(!EventBoardRuntime.Enabled, "event.board defaults to 0 (nothing sent)");
+        Check.True(EventBoardRuntime.Enabled, "B21: event.board defaults to 1 (live is on)");
+        ServerRates.Install(ServerRatesSnapshot.Create([KeyValuePair.Create(ServerRateKeys.EventBoard, 0m)], 1, DateTimeOffset.UtcNow, "check", "test")); // B21: switch now defaults on; this part tests it off
+        Check.True(!EventBoardRuntime.Enabled, "event.board = 0 sends nothing");
         Rates((ServerRateKeys.EventBoard, 1m));
         Check.True(EventBoardRuntime.Enabled, "event.board = 1 switches it on");
         ServerRates.ResetToDefaults();

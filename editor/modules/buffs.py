@@ -193,3 +193,23 @@ def remove(ctx,cid):
     if result.get('offline'):raise common.Conflict('The character left the game; refresh active effects.')
     result.update(applies='live',applies_text=common.APPLIES_TEXT['live'])
     return result
+
+
+# W4-B (the admin 2026-11-12: "Allow buffs to be applied to offline characters (applies when logs in)").
+@M.post(r'queue/(\d+)')
+def queue(ctx,cid):
+    """Queue a buff for this character's next world entry (the duration starts then). Meant for an offline character;
+    an online one gets it at its next login too (use Apply buff for now)."""
+    from . import login_awards
+    cid,row=character(ctx,cid);b=ctx.body
+    return login_awards.queue_buff(ctx,[cid],b.get('status_id'),b.get('duration_seconds'),b.get('discard_after'))
+
+
+@M.get(r'queued/(\d+)')
+def queued(ctx,cid):
+    from . import login_awards
+    cid,row=character(ctx,cid)
+    if not login_awards._ready(ctx):return {'supported':False,'rows':[]}
+    ctx.query=dict(ctx.query or {},character=str(cid))
+    return dict(login_awards.buffs_pending(ctx),supported=True)
+

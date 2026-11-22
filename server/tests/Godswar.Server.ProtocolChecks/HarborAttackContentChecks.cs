@@ -36,7 +36,9 @@ internal static class HarborAttackContentChecks
             GameSessionRegistry.MonsterRespawnPolicyForMap(208) == MonsterRespawnPolicy.Never &&
             GameSessionRegistry.MonsterRespawnPolicyForMap(209) == MonsterRespawnPolicy.Never,
             "harbor run monsters never respawn");
-        foreach (var other in new[] { 0, 1, 2, 3, 8, 17, 29, 42, 200, 204, 205, 207, 210 })
+        // B21 (intended change): map 210 is a Training Ground; with instance.training_one_clear on (default) it
+        // never respawns either (TrainingGroundChecks covers both values), so it left this list.
+        foreach (var other in new[] { 0, 1, 2, 3, 8, 17, 29, 42, 200, 204, 205, 207 })
         {
             Check.True(
                 GameSessionRegistry.MonsterRespawnPolicyForMap(other) == MonsterRespawnPolicy.Timed,
