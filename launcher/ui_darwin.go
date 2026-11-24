@@ -11,6 +11,10 @@ import (
 func esc(s string) string { return strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s) }
 
 func notify(c *Config, msg string) {
+	if c != nil && c.Status != nil {
+		c.Status(msg)
+		return
+	}
 	fmt.Println(msg)
 	exec.Command("/usr/bin/osascript", "-e", fmt.Sprintf(`display notification "%s" with title "GodsWar"`, esc(msg))).Run()
 }
@@ -22,6 +26,10 @@ func fail(c *Config, msg string) {
 }
 
 func info(c *Config, msg string) {
+	if c != nil && c.Status != nil {
+		c.Status(msg)
+		return
+	}
 	fmt.Println(msg)
 	exec.Command("/usr/bin/osascript", "-e", fmt.Sprintf(`display dialog "%s" with title "GodsWar" buttons {"OK"} default button 1 giving up after 20`, esc(msg))).Run()
 }

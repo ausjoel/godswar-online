@@ -22,6 +22,7 @@ internal static class Finalise2RateKeys
     public const string QuestCaps120To200 = "quest.caps_120_to_200"; // ROUND3 F-123
     public const string PersonalHelper = "npc.personal_helper"; // W2 F-27
     public const string MountFeeder = "npc.mount_feeder"; // W2 F-52
+    public const string NpcAllFactions = "npc.all_factions"; // W24 (the admin d148): every NPC talks to both factions
     public const string Apothecary = "npc.apothecary"; // W2 F-27
     public const string Lottery = "npc.lottery"; // W2 F-27
     public const string HolyStoneRefund = "npc.holy_stone_refund"; // F-27 / F-140 Holy Stone Redeemer's three pages
@@ -49,6 +50,7 @@ internal static class Finalise2RateKeys
     public const string MagicBellDropChance = "pet.magic_bell_drop_chance_bp"; // F-143: the admin 0.5% = 50 bp
     public const string SkillBookChestDrops = "drop.skill_book_chests"; // B22 K1 (d43): world-boss skill-book chests
     public const string SkillBookChestChance = "drop.skill_book_chest_chance_bp"; // B22 K1 (d43): the admin 5% = 500 bp
+    public const string GoldenGemDropChance = "drop.golden_gem_chance_bp"; // W22 (the admin d141): 0.75% = 75 bp, 0 = off
     public const string GodGemDrops = "gem.god_gem_drops"; // B22 G1 d38: world-boss god gems, default off
     public const string GodGemDropChance = "gem.god_gem_drop_chance_bp"; // B22 G1 d38: about 2% = 200 bp
     public const string MedalDrops = "medal.drops"; // B22 G2 d36: Valour Laurel / Aether Crest drops, default on
@@ -114,6 +116,8 @@ internal static class Finalise2Rates
         new(key, Category, label, "0/1", ServerRateKind.Absolute, 1m, 0m, 1m, 1m, order, source, text);
 
     public const string BoardCategory = "Message board (above the chat box)";
+
+    public const string MonsterAttackCategory = "Monster attack (data steps)"; // W25 d152b
 
     private static ServerRateDefinition BoardSwitch(string key, string label, int order, string text) =>
         new(key, BoardCategory, label, "0/1", ServerRateKind.Absolute, 1m, 0m, 1m, 1m, order,
@@ -304,6 +308,13 @@ internal static class Finalise2Rates
             "Application/World/Content/SkillBookChestLootRule.cs",
             "Chance that a world boss drops its skill-book chest, in hundredths of a percent. 500 = 5%, " +
             "10,000 = always. The drop chance and drop quantity settings do not change it."),
+        // W22 (the admin d141): Golden Gems only from the 19 open-map world bosses, 0.5-1% per kill.
+        new(Finalise2RateKeys.GoldenGemDropChance, Category, "Golden Gem: drop chance per world boss kill (75 = 0.75%)",
+            "basis points", ServerRateKind.Absolute, 75m, 0m, 10_000m, 1m, 75,
+            "Application/World/Content/GoldenGemLootRule.cs",
+            "Chance that one of the 19 open-map world bosses drops a Golden Gem (the Mount Feeder's gear-upgrade " +
+            "material), in hundredths of a percent. 75 = 0.75%, 100 = 1%, 0 = no Golden Gems. No other monster " +
+            "drops them. The drop chance and drop quantity settings do not change it."),
         new(Finalise2RateKeys.MagicBellSlowestMinutes, Category, "Magic Bell: slowest dispatch (rank 0)", "minutes",
             ServerRateKind.Absolute, 70m, 1m, 1440m, 1m, 76, "State/PetQuestDispatchPolicy.cs",
             "Minutes a rank 0 pet takes to finish a quest it was sent on with a Magic Bell. " +
@@ -481,6 +492,31 @@ internal static class Finalise2Rates
             "Makes the Apothecary's exchanges work. On: he trades level 1 and 2 gems and level 1 " +
             "Crystals for pet and EXP potions (daily limits apply) and combines 8 potions into 1 " +
             "of the next tier. Off: he only shows his pages."),
+        // W25 (the admin d152b): one hot switch per reversible monster-attack data step. Off = the attack from before the step.
+        new(Godswar.Server.Application.World.MonsterAttackSwitches.W23NewMaps, MonsterAttackCategory,
+            "W23: 2008 attack for monsters on the newer maps", "0/1", ServerRateKind.Absolute, 1m, 0m, 1m, 1m, 1,
+            "Application/World/MonsterOverrideSnapshot.cs",
+            "Uses the W23 attack for the 257 monster types on the newer maps (Delphi Forest, the north, Aether Sanctum, Troy, " +
+            "Sicily and others): the 2008 attack for their level. On: that attack. Off: the attack they had before W23, " +
+            "including any monster-curve value it replaced. Applies to the next hit; no restart."),
+        new(Godswar.Server.Application.World.MonsterAttackSwitches.W25WorldBosses, MonsterAttackCategory,
+            "W25: 2008 attack for world bosses", "0/1", ServerRateKind.Absolute, 1m, 0m, 1m, 1m, 2,
+            "Application/World/MonsterOverrideSnapshot.cs",
+            "Uses the W25 attack for the world bosses that spawn (Hydra Lord Xausa, Selket and the others): their 2008 " +
+            "attack. On: that attack. Off: the attack they had before W25. Applies to the next hit; no restart."),
+        new(Godswar.Server.Application.World.MonsterAttackSwitches.SuggestedLowLevel, MonsterAttackCategory,
+            "Suggested: low-level physical normals hurt", "0/1", ServerRateKind.Absolute, 0m, 0m, 1m, 1m, 3,
+            "Application/World/MonsterOverrideSnapshot.cs",
+            "Raises the attack of physical normal monsters from Lv30 to Lv109 on the newer maps above their 2008 value, " +
+            "so a same-level character in plain quality-5 gear loses about 3% of its HP a hit. On: the suggested attack " +
+            "(never lower than today). Off: 2008 values. Applies to the next hit; no restart."),
+        // W24 (the admin d148): any faction may talk to any NPC everywhere; off = the original game's own-camp NPCs.
+        Switch(Finalise2RateKeys.NpcAllFactions, "NPCs: every NPC talks to both factions", 59,
+            "Packets/PacketBuilder.NpcDialog.cs",
+            "Lets Athenians and Spartans talk to every NPC: capitals, outposts (Parnitha Port, Nemea Forest), " +
+            "Troy, Parnassus and the Duel Arena. On: every NPC is sent to the game as 'both camps'. Off: as in " +
+            "the original game, an NPC of one camp ignores the other camp. Applies the next time a player enters " +
+            "a map. Not affected: Pindus's per-camp Quartermasters and Altars, and Wonderland's island chests."),
         Switch(Finalise2RateKeys.MountFeeder, "Mount Feeder: upgrade, degrade, re-skin, shifter, bind gear", 60,
             "Game/GameClientHandler.MountFeeder.cs",
             "Makes the Mount Feeder's services work. On: he upgrades mounts with Soul Stones, " +
@@ -563,11 +599,11 @@ internal static class Finalise2Rates
             "Pretty Wig moves to the next hair style; the new hair shows at once. Off: the items " +
             "do nothing."),
         // B22 G1 (d38): god gems from the 19 open-map world bosses
-        new(Finalise2RateKeys.GodGemDrops, Category, "God gems: drops from the 19 world bosses", "0/1",
+        new(Finalise2RateKeys.GodGemDrops, Category, "God gems: drops from the 19 world bosses (used while the end-game master is 2)", "0/1",
             ServerRateKind.Absolute, 0m, 0m, 1m, 1m, 91, "Application/World/Content/GodGemLootRule.cs",
             "Lets the open-map world bosses drop one of the four Olympian god gems. On: each kill " +
             "has the chance set below, on top of the boss's normal loot. Off (default): no god gems. " +
-            "Needs a client that knows items 4910-4913."),
+            "Needs a client that knows items 4910-4913. The end-game master switch decides instead when it is 0 or 1."),
         new(Finalise2RateKeys.GodGemDropChance, Category, "God gems: drop chance per boss kill (200 = 2%)",
             "basis points", ServerRateKind.Absolute, 200m, 0m, 10_000m, 1m, 92,
             "Application/World/Content/GodGemLootRule.cs",

@@ -31,3 +31,15 @@
 .gw-mod-curves .gw-cv-leg { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
 .gw-mod-curves .gw-cv-pts { width: 100%; max-width: 420px; }
 @media (max-width: 900px) { .gw-mod-curves .gw-cv-graphs { grid-template-columns: 1fr; } }
+
+/* Atlantis / Wonderland HP % and damage % sliders */
+.gw-cv-tile.slider { cursor: pointer; }
+.gw-cv-sliders { margin: 12px 0; padding: 10px 12px; border: 1px solid var(--line, #444); border-radius: 6px; }
+.gw-cv-slgrid { display: grid; gap: 6px; }
+.gw-cv-slrow { display: grid; grid-template-columns: minmax(180px, 1.4fr) 1fr 1fr; gap: 10px; align-items: center; padding: 4px 0;
+  border-bottom: 1px solid var(--line, #333); }
+.gw-cv-slcell { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.gw-cv-slcell input[type=range] { flex: 1; min-width: 80px; }
+.gw-cv-slcell input[type=number] { width: 70px; }
+.gw-cv-slcell input.changed { outline: 1px solid var(--accent, #e0b050); }
+@media (max-width: 700px) { .gw-cv-slrow { grid-template-columns: 1fr; } }

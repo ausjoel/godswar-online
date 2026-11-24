@@ -139,7 +139,7 @@ internal sealed partial class GameClientHandler
         Console.WriteLine(
             $"[forge] preview cannot start character={_character.Name} item={equipment.Id} " +
             $"quality={visible.Quality} grade={visible.Grade} gem={primary.Id} reason={error}");
-        var hint = ForgeStagingHint(gemRule.MaterialType, visible, error);
+        var hint = ForgeStagingHint(gemRule.MaterialType, visible, error, primary.Id); // B22 B25-G: material for the rare-gem hints
         var key = $"{equipment.Id}:{visible.Quality}:{visible.Grade}:{primary.Id}:{error}";
         if (hint is null || key == _forgeHintKey)
         {
@@ -150,8 +150,24 @@ internal sealed partial class GameClientHandler
         await _session.SendAsync(PacketBuilder.PersonalGameLog(hint), cancellationToken, "ForgeStagingHint");
     }
 
-    internal static string? ForgeStagingHint(int materialType, CompactItemEntry visible, EquipmentForgeValidationError error)
+    internal static string? ForgeStagingHint(int materialType, CompactItemEntry visible, EquipmentForgeValidationError error,
+        uint materialId = 0)
     {
+        // B22 B25-G: on tier gear at G20+ only a rare gem forges the grade, so the stock advice ("use a Level 5 Emerald",
+        // "use a higher level Emerald") was wrong there: name the gem band instead (rig: Primal on G20 said "Level 5 Emerald").
+        if (materialType == 3 && visible.Grade >= RareGemForgeRules.TierGemFromGrade && RareGemForgeRules.IsTierGear(visible.Id))
+        {
+            var band = visible.Grade switch { <= 21 => "a Radiant", <= 23 => "a Primal", _ => "an Olympian" };
+            if (error == EquipmentForgeValidationError.MaterialRoundNotAllowed)
+            {
+                return $"Grade {visible.Grade} on tier gear needs {band} gem.";
+            }
+            if (error == EquipmentForgeValidationError.BelowClientMinimum && RareGemForgeRules.IsGem(materialId))
+            {
+                return $"Success rate below 5% for Grade {visible.Grade}: add crystals.";
+            }
+        }
+
         var (gem, step, what) = materialType switch
         {
             3 => ("Emerald", (int)visible.Grade, "Grade"),

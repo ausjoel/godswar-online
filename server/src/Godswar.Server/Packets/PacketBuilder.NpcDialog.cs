@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Text;
+using Godswar.Server.Application.Finalise2;
 using Godswar.Server.Domain.World.Content;
 using Godswar.Server.Protocol;
 using Godswar.Server.State;
@@ -27,7 +28,7 @@ internal static partial class PacketBuilder
             ReplaceAscii(packet, AthensTemplatePrefix, SpartaTemplatePrefix);
         }
 
-        return packet;
+        return OpenNpcsToAllFactions(packet);
     }
 
     public static byte[] CapturedNpcSpawns(IReadOnlyList<CapturedNpcSpawn> spawns)
@@ -57,7 +58,7 @@ internal static partial class PacketBuilder
             offset += spawn.Detail10080.Length;
         }
 
-        return stream;
+        return OpenNpcsToAllFactions(stream);
     }
 
     public static byte[] NpcSpawns(IReadOnlyList<NpcSpawnDefinition> spawns)
@@ -91,8 +92,112 @@ internal static partial class PacketBuilder
             offset += spawn.Detail10080.Length;
         }
 
+        return OpenNpcsToAllFactions(stream);
+    }
+
+    /// <summary>
+    /// W24 (the admin d148, 24 Nov: "any faction may talk to any NPC everywhere"). Bits 8-9 of the low word of a 10020
+    /// world-object word are the NPC's camp (0x0011 Sparta, 0x0111 Athens, 0x0211 both); the stock client ignores a click
+    /// on an NPC of the other camp and sends no 10067. With the hot switch npc.all_factions on (default), every NPC in the
+    /// stream is sent as "both camps". Off: each NPC keeps its own stored or captured camp (the original game).
+    /// Wonderland (map 207) is left alone: its island-5 treasure chests are per party camp on purpose.
+    /// Captured streams are only changed on NPC words (low byte 0x11), never on anything else they may carry.
+    /// </summary>
+    internal static byte[] OpenNpcsToAllFactions(byte[] stream)
+    {
+        if (stream.Length == 0 || !Finalise2Rates.On(Finalise2RateKeys.NpcAllFactions))
+        {
+            return stream;
+        }
+
+        OpenNpcWordsToAllFactions(stream);
         return stream;
     }
+
+    internal static int OpenNpcWordsToAllFactions(Span<byte> stream)
+    {
+        var changed = 0;
+        var offset = 0;
+        while (offset + 8 <= stream.Length)
+        {
+            var length = BinaryPrimitives.ReadUInt16LittleEndian(stream[offset..]);
+            if (length < 4 || offset + length > stream.Length)
+            {
+                break;
+            }
+
+            if (length >= 8 && BinaryPrimitives.ReadUInt16LittleEndian(stream.Slice(offset + 2, 2)) == 0x2724)
+            {
+                var word = BinaryPrimitives.ReadUInt32LittleEndian(stream.Slice(offset + 4, 4));
+                var opened = IsCampTransporterFrame(stream.Slice(offset, length)) ? word : AllFactionsNpcWord(word);
+                if (opened != word)
+                {
+                    BinaryPrimitives.WriteUInt32LittleEndian(stream.Slice(offset + 4, 4), opened);
+                    changed++;
+                }
+            }
+
+            offset += length;
+        }
+
+        return changed;
+    }
+
+    /// <summary>
+    /// W25 (the admin 24 Nov: "dont allow factions to use opposite factions transporters. Im sure the defaults were right"):
+    /// transporters keep the camp they were published with, so the client refuses the other faction's transporter as in
+    /// the original game. A transporter is any NPC whose name in the NPC text seed contains "Transporter" or "Teleporter".
+    /// </summary>
+    private static readonly HashSet<string> TransporterNpcKeys = Godswar.Server.State.NpcTemplateSeeds.Texts
+        .Where(static t => t.DisplayName.Contains("Transporter", StringComparison.OrdinalIgnoreCase) ||
+            t.DisplayName.Contains("Teleporter", StringComparison.OrdinalIgnoreCase))
+        .Select(static t => t.NpcKey)
+        .ToHashSet(StringComparer.Ordinal);
+
+    internal static bool IsTransporterNpcKey(string npcKey) => TransporterNpcKeys.Contains(npcKey);
+
+    private static bool IsCampTransporterFrame(ReadOnlySpan<byte> frame)
+    {
+        if (frame.Length < WorldObjectTemplateOffset + WorldObjectTemplateLength)
+        {
+            return false;
+        }
+
+        var raw = frame.Slice(WorldObjectTemplateOffset, WorldObjectTemplateLength);
+        var end = raw.IndexOf((byte)0);
+        var template = Encoding.ASCII.GetString(end < 0 ? raw : raw[..end]);
+        var cut = template.LastIndexOf('_');
+        return cut > 0 && TransporterNpcKeys.Contains(template[..cut]);
+    }
+
+    /// <summary>W24: one 10020 word as npc.all_factions sends it (camp bits 8-9 = 2 on NPC words outside Wonderland).</summary>
+    internal static uint AllFactionsNpcWord(uint word)
+    {
+        var mapId = (short)(word >> 16);
+        var low = word & 0xFFFF;
+        if (mapId == WonderlandTransportProtocol.MapId)
+        {
+            return word;
+        }
+
+        // W24 follow-up (d148): the generated Troy (44) and Parnassus (68) GM rows store 1 or 2, the template's SEX from
+        // NpcTemplateSeed, not an appearance word, so they carry no NPC flags and no camp. Sent as 0x0211 like every other
+        // GM NPC open to both camps. Pindus (38) keeps its per-camp Quartermasters and Altars until the admin decides.
+        if (low is 1 or 2 && mapId != Godswar.Server.Application.WorldInstances.BattlefieldRewardPolicy.PindusMapId)
+        {
+            return (word & 0xFFFF0000u) | 0x0211u;
+        }
+
+        return (low & 0xFF) == 0x11 && ((low >> 8) & 0x3) != 2
+            ? (word & ~0x0300u) | 0x0200u
+            : word;
+    }
+
+    /// <summary>W24: the 10020 word the client receives now (the switch is hot).</summary>
+    internal static uint SentNpcWord(uint word, string? npcKey = null) =>
+        Finalise2Rates.On(Finalise2RateKeys.NpcAllFactions) && (npcKey is null || !IsTransporterNpcKey(npcKey))
+            ? AllFactionsNpcWord(word)
+            : word;
 
     public static int CountCityNpcSpawnPackets(ReadOnlySpan<byte> stream)
     {

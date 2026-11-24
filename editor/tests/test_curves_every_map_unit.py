@@ -1,7 +1,7 @@
 """Monster stat curve: every map with monsters (the admin 2026-11-19: "doesnt have medusa, atlantis, wonderland, bay under attack").
 
-Medusa's Island HP is written to medusa_monster_rules as stock x curve; Atlantis and Wonderland are listed but view only;
-Bay under Attack 1/2 get names that tell them apart."""
+Medusa's Island HP is written to medusa_monster_rules as stock x curve; Atlantis and Wonderland open HP % / damage % sliders
+(server_rates rows, the admin 2026-11-23) and the curve itself refuses them; Bay under Attack 1/2 get names that tell them apart."""
 import copy
 import sys
 import unittest
@@ -64,16 +64,18 @@ class EveryMap(unittest.TestCase):
         self.assertEqual(by[204]['name'], "Medusa's Island (Normal)")
         self.assertEqual(by[200]['name'], "Medusa's Island (Enhanced / Mythic)")
         self.assertEqual(by[2]['name'], "Athens' Suburb")                       # regular maps keep the client name
-        self.assertTrue(by[205]['view_only'] and by[207]['view_only'])
-        self.assertIn('AtlantisSpawnBalancePolicy', by[205]['why'])
-        self.assertIn('WonderlandMonsterPlan', by[207]['why'])
+        self.assertTrue(by[205]['sliders'] and by[207]['sliders'])
+        self.assertFalse(by[205]['view_only'] or by[207]['view_only'])
+        self.assertEqual(by[205]['edits'], ['hp', 'damage'])
+        self.assertIn('party', by[205]['why'])
+        self.assertIn('island', by[207]['why'])
         self.assertEqual(by[200]['edits'], ['hp'])
         self.assertEqual(by[208]['edits'], C.GROUPS)
         self.assertEqual(by[200]['spawns'], 80)
         inst = next(g for g in d['sections'] if g['section'] == 'instance')
         self.assertEqual([m['map_id'] for m in inst['maps']], [208, 209, 200, 204, 205, 207])   # by level; code maps at typical level
 
-    def test_view_only_maps_are_refused(self):
+    def test_slider_maps_are_refused_by_the_curve(self):
         for mid in (205, 207):
             with self.assertRaises(Bad):
                 C.load(Ctx(LOAD), [mid])
@@ -110,6 +112,66 @@ class EveryMap(unittest.TestCase):
         self.assertIn('medusa', seen['guard'])
         self.assertIn('medusa_monster_rules.maximum_health', seen['fields'])
         self.assertIn('medusa_monster_rules', seen['stmts'][0])                    # the version guard covers the rules too
+
+
+class Sliders(unittest.TestCase):
+    RATE = lambda k, v=100: {'rate_key': k, 'label': 'x', 'description': 'd', 'value': v, 'default_value': 100,
+                             'min_value': 10, 'max_value': 500, 'step': 5}
+
+    def setUp(self):
+        self._rb = C.W._rb
+        C.W._rb = lambda c: c.rb
+
+    def tearDown(self):
+        C.W._rb = self._rb
+
+    def test_atlantis_rows_per_rank_with_party_scaled_stock(self):
+        keys = C._slider_keys(205)
+        self.assertEqual(keys, ['instance.atlantis_normal_hp_percent', 'instance.atlantis_normal_damage_percent',
+                                'instance.atlantis_elite_hp_percent', 'instance.atlantis_elite_damage_percent',
+                                'instance.atlantis_boss_hp_percent', 'instance.atlantis_boss_damage_percent'])
+        ctx = Ctx([Sliders.RATE(k, 150 if 'boss_hp' in k else 100) for k in keys])
+        ctx.body = {'map': 205}
+        d = C.sliders(ctx)
+        self.assertEqual(d['missing'], [])
+        self.assertEqual([u['unit'] for u in d['units']], ['atlantis_normal', 'atlantis_elite', 'atlantis_boss'])
+        self.assertEqual(d['units'][2]['rows'][0]['value'], 150.0)
+        self.assertIn('15,000 for one level 90 player', d['units'][0]['stock'])
+        # AtlantisSpawnBalancePolicy at 5 players Lv200 stage 5: 15000 x 200^2 x 120 x 300 / (90^2 x 10^4)
+        self.assertEqual(C._atlantis_hp(15_000, 200, 5, 5), 15_000 * 200 * 200 * 120 * 300 // (90 * 90 * 100 * 100))
+
+    def test_wonderland_rows_per_island_and_missing_on_an_old_server(self):
+        ctx = Ctx([])
+        ctx.body = {'map': 207}
+        d = C.sliders(ctx)
+        self.assertEqual(len(d['units']), 8)
+        self.assertEqual(len(d['missing']), 16)
+        self.assertTrue(d['note'])
+        self.assertIn('Alpha Demon', d['units'][0]['title'])
+
+    def test_save_goes_through_the_rates_write_and_only_this_maps_keys(self):
+        seen = {}
+        o_save, o_ans = C.RATES._save, C.RATES._answer
+        C.RATES._save = lambda ctx, v, e, s, se, note: seen.update(v=v, e=e, s=s, note=note) or {'id': 'c'}
+        C.RATES._answer = lambda ctx, c: {'change': c}
+        try:
+            ctx = Ctx([])
+            ctx.body = {'map': 205, 'values': {'instance.atlantis_boss_hp_percent': 200}, 'expected': {'instance.atlantis_boss_hp_percent': 100}}
+            C.sliders_save(ctx)
+            self.assertEqual(seen['v'], {'instance.atlantis_boss_hp_percent': 200})
+            self.assertEqual(seen['e'], {'instance.atlantis_boss_hp_percent': 100})
+            self.assertEqual(seen['s'], {})
+            ctx.body = {'map': 205, 'values': {'exp.monster': 5}}
+            with self.assertRaises(Bad):
+                C.sliders_save(ctx)
+            ctx.body = {'map': 207, 'values': {'instance.atlantis_boss_hp_percent': 200}}
+            with self.assertRaises(Bad):
+                C.sliders_save(ctx)
+            ctx.body = {'map': 2, 'values': {}}
+            with self.assertRaises(Bad):
+                C.sliders_save(ctx)
+        finally:
+            C.RATES._save, C.RATES._answer = o_save, o_ans
 
 
 if __name__ == '__main__':

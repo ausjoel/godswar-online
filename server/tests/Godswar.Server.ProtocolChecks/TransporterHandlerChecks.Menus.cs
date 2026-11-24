@@ -91,7 +91,7 @@ internal static partial class TransporterHandlerChecks
             fixture.Character.CurrentMap == endpoint.SourceMapId &&
             fixture.Store.PositionWrites.Count == 0,
             $"{endpoint.NpcKey} rejects level {level} through the native " +
-            $"96-byte dialog 2/sub-ID {expectedResultSubId} result without " +
+            $"96-byte type 1 (B26-T: was dialog 2)/sub-ID {expectedResultSubId} result without " +
             "moving the character");
     }
 }

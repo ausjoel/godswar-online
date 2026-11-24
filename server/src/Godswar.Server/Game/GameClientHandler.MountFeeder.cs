@@ -16,16 +16,21 @@ namespace Godswar.Server.Game;
 /// bound; the old family's shifter is given back (T203/T994).</item>
 /// <item>Exchange for a shifter (104/204): a Lv40 mount (not Argent Armored Dragon) -> its family's shifter (T204/T996).</item>
 /// <item>Bind mount gear (106/206): unbound mount gear -> bound (T206/T988/T989).</item>
+/// <item>B27 (the admin d138) Upgrading Mount Gear (105/205): mount gear + 1 Golden Gem (4259) -> the next grade of the same
+/// line (item id + 1: PlayLv +10, Boorish Lv40 ... Faithcreed Lv120), bound (NF_HF_T205). Results T990 done, T991 already
+/// the top grade (x08), T992 wrong items. Each appended attribute keeps its kind; a tier the new grade does not allow is
+/// raised to the lowest tier it does allow (item_allowed_attributes), so no stat is dropped (GENERATED rule).</item>
 /// </list>
 /// The submit packet of these forms has never been captured: the item slots are read where every other item form puts
 /// them (argument 6 and 7 = page*100 + slot, PetManager/HolySuit/FactionCrier) and the action from the first path value
-/// (menu or page id). Every submission is logged raw so the first real-client try settles it. Mount Gear upgrade (105)
-/// is NOT DONE. Hot rate npc.mount_feeder (1 = on).
+/// (menu or page id). Every submission is logged raw so the first real-client try settles it. Hot rate npc.mount_feeder
+/// (1 = on).
 /// </summary>
 internal sealed partial class GameClientHandler
 {
     private const int MountFeederFunction = 21;
     private const uint ArgentArmoredDragonShifter = 6205;
+    private const int GoldenGem = 4259; // B27 (d138): Material4259, "raise the levels of your mount's gear"
 
     private enum MountFeederAction { None, Upgrade, Degrade, Alter, Exchange, BindGear, GearUpgrade }
 
@@ -62,10 +67,11 @@ internal sealed partial class GameClientHandler
             105 or 205 => MountFeederAction.GearUpgrade,
             _ => subId switch { 100 or 200 => MountFeederAction.Upgrade, 102 or 201 => MountFeederAction.Degrade,
                 103 or 203 => MountFeederAction.Alter, 104 or 204 => MountFeederAction.Exchange,
-                106 or 206 => MountFeederAction.BindGear, _ => MountFeederAction.None }
+                106 or 206 => MountFeederAction.BindGear, 105 or 205 => MountFeederAction.GearUpgrade, // B27
+                _ => MountFeederAction.None }
         };
         Console.WriteLine($"[mount-feeder] character={_character.Name} sub={subId} args=[{string.Join(',', args)}] action={action}");
-        if (action is MountFeederAction.None or MountFeederAction.GearUpgrade)
+        if (action is MountFeederAction.None) // B27: GearUpgrade is built (d138)
         {
             await SendFinalise2ReplyAsync(npc, MountFeederFunction, [993], "MountFeederUnsupported", cancellationToken);
             return true;
@@ -81,6 +87,7 @@ internal sealed partial class GameClientHandler
 
     private static async Task<int> MountFeederAsync(EventsNpcTransaction tx, MountFeederAction action, int slot, int secondSlot)
     {
+        if (action == MountFeederAction.GearUpgrade) return await MountGearUpgradeAsync(tx, slot, secondSlot); // B27
         var item = await tx.ReadSlotAsync(slot);
         if (action == MountFeederAction.BindGear)
         {
@@ -147,4 +154,41 @@ internal sealed partial class GameClientHandler
         }
         return 993;
     }
+
+    /// <summary>
+    /// B27 (the admin d138): NF_HF_T205. The gear and the Golden Gem are found by content in the two slots (either order).
+    /// 992 = not mount gear plus a Golden Gem; 991 = already the line's top grade (x08, Lv120); 990 = upgraded.
+    /// </summary>
+    private static async Task<int> MountGearUpgradeAsync(EventsNpcTransaction tx, int slot, int secondSlot)
+    {
+        var a = await tx.ReadSlotAsync(slot);
+        var b = secondSlot >= 0 && secondSlot != slot ? await tx.ReadSlotAsync(secondSlot) : null;
+        var gear = a is { } x && MountFamilyCatalog.IsMountGear((uint)x.ItemId) ? a
+            : b is { } y && MountFamilyCatalog.IsMountGear((uint)y.ItemId) ? b : null;
+        var gem = a is { ItemId: GoldenGem } ? a : b is { ItemId: GoldenGem } ? b : null;
+        if (gear is not { } piece) return 992;
+        var next = MountGearNextGrade(piece.ItemId);
+        if (next == 0) return 991;
+        if (gem is null || !await tx.ConsumeAsync(GoldenGem, 1)) return 992;
+        await tx.ReplaceItemAsync(piece.Id, next, bound: true);
+        await tx.ScalarAsync(MountGearAttributeSql, ("id", piece.Id), ("i", next));
+        return 990;
+    }
+
+    /// <summary>B27: the next grade of a mount gear line (x00-x07 -> +1), 0 at the top (x08) or for anything else.</summary>
+    internal static int MountGearNextGrade(int itemId) =>
+        MountFamilyCatalog.IsMountGear((uint)itemId) && itemId % 100 < 8 ? itemId + 1 : 0;
+
+    /// <summary>
+    /// B27: every appended attribute (attribute1-5, id = kind*10 + tier) that the new item does not allow moves to the
+    /// lowest allowed tier of the same kind at or above its own (or the highest allowed when none is above); NULLs and
+    /// kinds the item does not list stay as they are.
+    /// </summary>
+    private static readonly string MountGearAttributeSql =
+        "UPDATE public.character_items ci SET " + string.Join(", ", Enumerable.Range(1, 5).Select(static n =>
+            $"attribute{n} = COALESCE((SELECT min(a.attribute_id) FROM public.item_allowed_attributes a WHERE a.item_id = @i " +
+            $"AND a.attribute_id / 10 = ci.attribute{n} / 10 AND a.attribute_id >= ci.attribute{n}), " +
+            $"(SELECT max(a.attribute_id) FROM public.item_allowed_attributes a WHERE a.item_id = @i " +
+            $"AND a.attribute_id / 10 = ci.attribute{n} / 10), ci.attribute{n})")) +
+        " WHERE ci.id = @id AND ci.user_id = @c RETURNING ci.id;";
 }

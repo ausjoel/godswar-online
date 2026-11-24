@@ -167,7 +167,7 @@ internal static partial class Program
             ((uint)(ushort)definition.MapId << 16) |
             (definition.AppearanceType & ushort.MaxValue);
         Check.Equal(
-            expectedObjectType,
+            PacketBuilder.SentNpcWord(expectedObjectType, definition.NpcKey), // W24: npc.all_factions opens camp NPCs to both camps
             ReadUInt32(stream, offset + 4),
             $"NPC {definition.NpcKey} map and appearance type");
         Check.Equal(definition.ObjectId, ReadUInt32(stream, offset + 8), $"NPC {definition.NpcKey} object id");

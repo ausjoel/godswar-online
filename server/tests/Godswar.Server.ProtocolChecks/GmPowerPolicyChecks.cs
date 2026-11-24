@@ -34,7 +34,7 @@ internal static class GmPowerPolicyChecks
             // does not list).
             var words = new[]
             {
-                "/announce", "/kick", "/mute", "/unmute", "/ban", "/unban", "/goto", "/leave", "/testrun", "/summon",
+                "/announce", "/kick", "/mute", "/unmute", "/ban", "/unban", "/goto", "/leave", "/testrun", "/wlclear", "/summon",
                 "/move", "/where", "/instances", "/gm", "/panel", "/**", "/god", "/walls", "/speed", "/power", "/armor",
                 "/bufflock", "/petlock", "/powers", "/buff", "/give", "/bag", "/bind", "/dupe", "/itemset", "/commands",
                 "/mall", "/craft",

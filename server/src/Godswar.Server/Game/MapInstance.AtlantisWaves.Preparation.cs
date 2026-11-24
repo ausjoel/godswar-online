@@ -28,7 +28,9 @@ internal sealed partial class MapInstance
                 throw new InvalidDataException($"Atlantis requires one published map-205 {slot.Rank} template '{identity.TemplateKey}'.");
             }
             var template = candidates[0];
-            var stats = AtlantisSpawnBalancePolicy.Resolve(party, wave.StageIndex + 1, slot.Rank);
+            // ATL-SLIDERS: the rank HP % slider (100 = stock) on top of the party scaling.
+            var stats = AtlantisRankScale.ScaleHp(
+                AtlantisSpawnBalancePolicy.Resolve(party, wave.StageIndex + 1, slot.Rank), slot.Rank);
             var definition = CreateAtlantisSpawn(nextObjectId++, template, identity, stats);
             definition.Validate(205);
             return definition;

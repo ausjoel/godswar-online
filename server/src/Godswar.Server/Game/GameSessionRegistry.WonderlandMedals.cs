@@ -13,7 +13,9 @@ internal sealed partial class GameSessionRegistry
     // Rate instance.wonderland_medals = 0 turns it off.
     private IWonderlandMedalStore? _wonderlandMedals;
     private readonly ConcurrentDictionary<(WorldInstanceId Instance, int Island), WonderlandTitleRequest> _wonderlandMedalPending = [];
-    private readonly ConcurrentDictionary<(WorldInstanceId Instance, int Island), DateTimeOffset> _wonderlandMedalLastLog = [];
+    // S5b: a deterministic failure (or a transient one past SettlementRetryPolicy.TransientGiveUp) is parked once
+    // with its evidence instead of logging every 30 s until restart.
+    private readonly SettlementRetryTracker<(WorldInstanceId Instance, int Island)> _wonderlandMedalRetries = new();
 
     private void QueueWonderlandMedals(WonderlandTitleRequest request)
     {
@@ -23,22 +25,52 @@ internal sealed partial class GameSessionRegistry
 
     private async Task RetryWonderlandMedalsAsync(DateTimeOffset now, CancellationToken cancellationToken)
     {
-        foreach (var entry in _wonderlandMedalPending.OrderBy(pair => pair.Value.ClearedAtUtc))
+        foreach (var entry in _wonderlandMedalPending.OrderBy(pair => pair.Value.ClearedAtUtc).ToArray())
         {
+            if (_wonderlandMedalRetries.IsInBackground(entry.Key) && !_wonderlandMedalRetries.BackgroundRetryDue(entry.Key, now))
+                continue;
             try
             {
                 await SettleWonderlandMedalsAsync(entry.Value, cancellationToken);
                 _wonderlandMedalPending.TryRemove(entry);
-                _wonderlandMedalLastLog.TryRemove(entry.Key, out _);
+                if (_wonderlandMedalRetries.IsInBackground(entry.Key))
+                    ParkedSettlements.MarkRecovered("wonderland-medals", WonderlandTitleKey(entry.Key), now);
+                _wonderlandMedalRetries.Forget(entry.Key);
             }
             catch (Exception error) when (error is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
-                if (!_wonderlandMedalLastLog.TryGetValue(entry.Key, out var last) || now - last >= TimeSpan.FromSeconds(30))
+                var kind = SettlementRetryPolicy.Classify(error);
+                var decision = _wonderlandMedalRetries.RecordFailure(entry.Key, now, kind, out var log);
+                var attempts = _wonderlandMedalRetries.AttemptsFor(entry.Key);
+                if (decision == SettlementRetryDecision.Retry)
                 {
-                    _wonderlandMedalLastLog[entry.Key] = now;
-                    Console.Error.WriteLine($"[wonderland] medals will retry instance={entry.Key.Instance} " +
-                        $"island={entry.Key.Island} characters={string.Join(',', entry.Value.CharacterIds)}: {error.Message}");
+                    if (log)
+                        Console.Error.WriteLine($"[wonderland] medals will retry instance={entry.Key.Instance} " +
+                            $"island={entry.Key.Island} kind={kind} attempt={attempts} " +
+                            $"characters={string.Join(',', entry.Value.CharacterIds)}: {error.Message}");
+                    continue;
                 }
+                // Medals never hold the run, so a long transient failure keeps retrying quietly in the background
+                // (parked once for the alert); a deterministic one, or one past the give-up time, stops here.
+                var background = decision == SettlementRetryDecision.ParkAndRetryInBackground;
+                if (!background)
+                {
+                    _wonderlandMedalPending.TryRemove(entry);
+                    _wonderlandMedalRetries.Forget(entry.Key);
+                }
+                if (decision == SettlementRetryDecision.GiveUp)
+                {
+                    Console.Error.WriteLine($"[wonderland] medals GAVE UP instance={entry.Key.Instance} " +
+                        $"island={entry.Key.Island}: {error.Message} (evidence was logged when it was parked)");
+                    continue;
+                }
+                var evidence = DescribeWonderlandTitleEvidence(entry.Value, null,
+                    WonderlandMedalPolicy.Scaled(entry.Value.IslandNumber));
+                ParkedSettlements.Record(new ParkedSettlement("wonderland-medals", WonderlandTitleKey(entry.Key), kind,
+                    now, attempts, background, error.Message, evidence));
+                Console.Error.WriteLine($"[wonderland] medals PARKED instance={entry.Key.Instance} " +
+                    $"island={entry.Key.Island} kind={kind} attempts={attempts} " +
+                    $"background-retry={(background ? "yes" : "no")}: {error.Message} | {evidence}");
             }
         }
     }

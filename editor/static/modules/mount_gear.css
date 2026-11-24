@@ -5,3 +5,7 @@
 /* B21 item 26: in-game slots */
 .gw-mod-mount_gear .mg-slots{margin:6px 0 10px}
 .gw-mod-mount_gear .mg-beforeafter{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:6px 0}
+/* W23: mount gear adder */
+.gw-mod-mount_gear .mg-adder{padding:10px 12px;margin:8px 0 18px;border:1px solid #36505b;background:#0b171f}
+.gw-mod-mount_gear .mg-num{width:4.5em}
+.gw-mod-mount_gear .mg-adder-tbl td,.gw-mod-mount_gear .mg-adder-tbl th{padding:2px 8px;text-align:left}

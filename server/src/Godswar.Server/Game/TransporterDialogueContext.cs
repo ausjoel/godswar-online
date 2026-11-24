@@ -17,4 +17,10 @@ internal sealed record TransporterDialogueContext(
 {
     /// <summary>B22 (d32): the buttons this menu actually showed; a click on any other sub-id is refused.</summary>
     public IReadOnlyList<int>? MenuSubIds { get; init; }
+
+    /// <summary>B22 B26-T: the page-1 button whose page is open (null = page 1 is showing).</summary>
+    public int? PageSubId { get; init; }
+
+    /// <summary>B22 B26-T: the buttons that page showed; a page click on any other sub-id is refused.</summary>
+    public IReadOnlyList<int>? PageMenuSubIds { get; init; }
 }

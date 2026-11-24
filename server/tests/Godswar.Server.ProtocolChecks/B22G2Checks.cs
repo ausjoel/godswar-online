@@ -64,6 +64,16 @@ internal static class B22G2Checks
             // The game-log line is a native centred announcement: at most 126 ASCII bytes (the rig caught 130).
             Check.True(hint is { Length: > 0 and <= 126 } && hint.All(static c => c < 128), $"hint for {refusal} fits the announcement ({hint?.Length})");
         }
+        // B22 B25-G: a gem of the wrong band on tier gear names the right gem, not the Level 5 Emerald.
+        var band = Godswar.Server.Game.GameClientHandler.ForgeStagingHint(
+            3, CompactItemEntry.Empty with { Id = TitanSpear, Quality = 20, Grade = 20, Stack = 1 },
+            EquipmentForgeValidationError.MaterialRoundNotAllowed, 4906);
+        Check.True(band is not null && band.Contains("Radiant") && !band.Contains("Emerald") && band.Length <= 126,
+            $"wrong-band gem hint on Titan G20 names Radiant ({band})");
+        var odds = Godswar.Server.Game.GameClientHandler.ForgeStagingHint(
+            3, CompactItemEntry.Empty with { Id = TitanSpear, Quality = 20, Grade = 22, Stack = 1 },
+            EquipmentForgeValidationError.BelowClientMinimum, 4906);
+        Check.True(odds is not null && !odds.Contains("Emerald"), $"low-odds hint with a gem does not ask for an Emerald ({odds})");
         return Task.CompletedTask;
     }
 

@@ -19,3 +19,10 @@ Set `GODSWAR_EDITION` in `config/godswar.env` (setup.sh asks), then restart the 
 
 Switching a running world from reborn to classic does not reduce items that are already
 above the classic limits; they stay as they are but cannot be forged further.
+
+## Editions and the end-game switch
+
+The edition only caps the forge. Class Suit IV to VII, 4 holy-stone sockets, Holy Suit past Platinum and the
+Olympian god gems are opened or closed by the hot end-game master switch (`endgame.enabled`, editor "Server rates").
+For the original game use `classic` with the end-game at 0; for everything use `reborn` with the end-game at 1.
+See [ENDGAME.md](ENDGAME.md).

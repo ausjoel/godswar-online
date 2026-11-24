@@ -115,6 +115,8 @@ DUMP_TABLES_EXTRA = [
     ("medusa_daily_entries", "character_id = {cid}", ("realm_id", "realm_day", "character_id", "reservation_id")),
     ("guild_members", "character_id = {cid}", ("character_id",)),
     ("guild_altar_worship", "character_id = {cid}", ("guild_id", "character_id", "building_type")),
+    # W23: the maxer's quest finisher puts rewards that do not fit the bag into the Prize Chest; one Undo takes them back
+    ("prize_chest_entries", "character_id = {cid}", ("id",)),
 ]
 
 # Columns the reborn server owns as bookkeeping (measured: information_schema of the live schema, 2026-10-28).
@@ -130,7 +132,7 @@ SERVER_COUNTERS = {
                        "online_award_revision", "pet_shed_revision", "position_revision", "progression_reward_revision",
                        "vitals_revision", "wallet_revision"},
     "character_pets": {"revision"}, "character_pet_stat_values": {"revision"}, "character_pet_skills": {"revision"},
-    "character_pet_character_bonuses": {"revision"}, "character_talents": {"outbox_revision"},
+    "character_pet_character_bonuses": {"revision"},
 }
 #   warehouse_revision / warehouse_capacity only move together with a warehouse_expansion_settlements row
 #     (triggers guard_character_warehouse_capacity, require_warehouse_capacity_evidence); the editor never writes them,
@@ -139,6 +141,10 @@ SERVER_FROZEN = {
     "character_base": {"checkpoint_owner_id", "checkpoint_owner_generation", "lifecycle_version", "LastLogin_time",
                        "zodiac_last_online_at", "zodiac_online_day", "zodiac_online_duration_ticks",
                        "warehouse_revision", "warehouse_capacity"},
+    # W15: the talent outbox stream is STRICT (talent_projection_v1), not ordered_sparse. Moving outbox_revision
+    #   without an outbox event left a hole the server waited on forever (live character 13 talent 150, 31 Oct);
+    #   the server now numbers its talent events from the stream, so the editor must never write this column.
+    "character_talents": {"outbox_revision"},
 }
 # columns ignored when comparing "has the server changed this row since the admin write" (no game data)
 NOISE_COLS = {"updated_at"}

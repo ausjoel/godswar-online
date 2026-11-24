@@ -13,22 +13,27 @@
     let M = null, rows = [];
 
     async function load() {
+      // B22 B26-T: menu pages (static/modules/teleport-pages.js)
+      if (!window.GWTelePages) await new Promise(r => { const sc = document.createElement("script"); sc.src = "/static/modules/teleport-pages.js"; sc.onload = r; sc.onerror = r; document.head.append(sc); });
       try { M = await o.ctx.api("teleport/menu/" + o.npc); }
       catch (e) { GW.clear(box).append(h("p", { class: "gw-dim" }, "Menu editing: " + e.message)); return; }
       const byPos = M.rows.slice().sort((a, b) => a.position - b.position);
       rows = byPos.length ? byPos.map(r => ({ sub: r.sub_id, hidden: r.hidden, price: r.price, currency: r.currency, map: r.target_map_id,
-        x: r.pos_x, z: r.pos_z, level: r.minimum_level, name: r.display_name }))
+        x: r.pos_x, z: r.pos_z, level: r.minimum_level, name: r.display_name, page: r.parent_sub_id ?? null }))
         : M.compiled.map(c => ({ sub: c.sub, hidden: false, price: null, currency: "silver", map: null, x: null, z: null, level: null, name: null }));
+      if (window.GWTelePages) window.GWTelePages.fromServer(rows); // B22 B26-T
       draw();
     }
     const info = sub => (M.choices || []).find(c => c.sub === sub) || (M.compiled || []).find(c => c.sub === sub) || { sub };
 
     function draw() {
       GW.clear(box);
+      const P = window.GWTelePages; // B22 B26-T
+      if (P) rows = P.ordered(rows);
       const shown = rows.filter(r => !r.hidden).length;
       box.append(h("h4", null, "Menu: buttons, order and price"),
         h("p", { class: "gw-dim" }, M.rows.length ? "Edited menu. " : "Original menu (nothing edited yet). ",
-          shown + " of " + M.maximum_buttons + " buttons shown. Use the arrows to reorder, untick to hide a button, and set a price. " +
+          (P && rows.some(r => r.page_button) ? P.summary(rows, M.maximum_buttons) : shown + " of " + M.maximum_buttons + " buttons shown.") + " Use the arrows to reorder, untick to hide a button, and set a price. " +
           "An empty price keeps the original fee (20,000 Silver for Mycenae from a capital, otherwise free); 0 makes it free."));
       const list = h("div", { class: "gw-npc-tmenu-list" });
       rows.forEach((r, i) => {
@@ -41,7 +46,7 @@
         const show = h("input", { type: "checkbox", "aria-label": "Show this button", onchange: e => { r.hidden = !e.target.checked; draw(); } });
         show.checked = !r.hidden;
         const move = d => { const j = i + d; if (j < 0 || j >= rows.length) return; [rows[i], rows[j]] = [rows[j], rows[i]]; draw(); };
-        const isNew = !c.compiled_here && !c.borrowed;
+        const isNew = !c.compiled_here && !c.borrowed && !r.page_button;
         const chips = [
           c.borrowed ? h("span", { class: "gw-chip", "data-help": "Another teleporter has this destination; this one copies it." }, "copied from another teleporter") : null,
           isNew ? h("span", { class: "gw-chip", "data-help": "A destination of your own: it goes to the map and point below." }, "new destination") : null,
@@ -52,11 +57,13 @@
             h("button", { class: "gw-btnx small", type: "button", "aria-label": "Move down", onclick: () => move(1) }, "↓"),
             h("label", null, show, " show"),
             h("span", { class: "gw-npc-tele-label" }, label), ...chips,
-            h("span", { class: "gw-dim" }, " button " + r.sub + (c.name ? " → " + c.name : ""))),
+            h("span", { class: "gw-dim" }, " button " + r.sub + (c.name ? " → " + c.name : "")),
+            P ? P.control(r, rows, M, draw) : null),
           h("div", { class: "gw-npc-tele-form gw-npc-tmenu-form" },
             h("label", null, "Price ", price, " ", cur), h("label", null, "Minimum level ", lv),
             isNew || r.map !== null ? targetForm(r) : null,
-            isNew ? h("button", { class: "gw-btnx small", type: "button", onclick: () => { rows.splice(i, 1); draw(); } }, "Remove") : null));
+            isNew || r.page_button ? h("button", { class: "gw-btnx small", type: "button", onclick: () => { rows.splice(i, 1); draw(); } }, "Remove") : null));
+        if (r.page) item.classList.add("gw-npc-tele-page2"); // B22 B26-T: indented under its page button
         list.append(item);
       });
       const free = [];
@@ -64,8 +71,10 @@
       const others = (M.choices || []).filter(c => !c.compiled_here && c.borrowed && !rows.some(r => r.sub === c.sub));
       const addSel = h("select", { "aria-label": "Add a button" }, h("option", { value: "" }, "+ Add a button ..."),
         others.map(c => h("option", { value: c.sub }, (c.label ? strip(c.label) : c.name) + " (button " + c.sub + ", from another teleporter)")),
-        free.map(s => { const c = info(s); return h("option", { value: s }, "New destination (button " + s + (c.label ? ": " + strip(c.label) : ", words come with a client update") + ")"); }));
+        free.map(s => { const c = info(s); return h("option", { value: s }, "New destination (button " + s + (c.label ? ": " + strip(c.label) : ", words come with a client update") + ")"); }),
+        P && M.page_support ? P.addOptions(free, info, strip) : []);
       addSel.addEventListener("change", () => {
+        if (P && addSel.value.startsWith("page:")) { rows.push(P.newPageButton(Number(addSel.value.slice(5)))); draw(); return; } // B22 B26-T
         const s = Number(addSel.value); if (!s) return;
         rows.push({ sub: s, hidden: false, price: null, currency: "silver", map: info(s).borrowed ? null : M.source_map, x: null, z: null, level: null, name: null });
         draw();

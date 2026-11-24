@@ -21,7 +21,7 @@ internal sealed partial class GameSessionRegistry
                 !admission.Sealed || !admission.Entrants.Contains(actor.CharacterId) ||
                 !TryGetWonderlandEncounterSnapshot(currentInstance, out var run) ||
                 run.State != WonderlandRunState.Completed || run.CompletedIslands != 8 ||
-                !_wonderlandTitleSettled.ContainsKey((currentInstance, 8)) || HasPendingWonderlandTitles(currentInstance))
+                !IsWonderlandTitleResolved(currentInstance, 8) || HasPendingWonderlandTitles(currentInstance)) // S5b: parked counts
                 return false;
             var exit = WonderlandTraversalPolicy.GetTeleporter(8);
             var dx = (double)actor.Character.PositionX - exit.X;

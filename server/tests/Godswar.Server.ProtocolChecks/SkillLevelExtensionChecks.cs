@@ -81,6 +81,21 @@ internal static class SkillLevelExtensionChecks
             "switch off: no chests");
         Console.WriteLine($"    B22 chest rolls over {Deaths:N0} deaths: {drops} ({drops * 100.0 / Deaths:0.00}%)");
 
+        // W22 (the admin d141): Golden Gem 4259 from the 19 world bosses only, 0.75% by default, 0 = off.
+        Check.Equal(75, Finalise2Rates.Amount(Finalise2RateKeys.GoldenGemDropChance), "Golden Gem chance defaults to 75 bp (0.75%)");
+        Install(dropChance: 3m, on: 1m, chance: 500m);
+        var gems = Enumerable.Range(1, Deaths).Count(i => GoldenGemLootRule.TryRoll("B_boss_dragon_001", 17, Death(i), ServerRates.Current));
+        Check.True(gems is >= 1_300 and <= 1_700, $"~0.75% per world boss kill, drop.chance 3 ignored ({gems}/{Deaths})");
+        Check.True(Enumerable.Range(1, 20_000).All(i =>
+                !GoldenGemLootRule.TryRoll("A_normal_stub_001", 17, Death(i), ServerRates.Current) &&
+                !GoldenGemLootRule.TryRoll("B_boss_dragon_001", 207, Death(i), ServerRates.Current)),
+            "no Golden Gem from another monster, or from a world boss off its open map");
+        ServerRates.Install(ServerRatesSnapshot.Create(
+            [KeyValuePair.Create(Finalise2RateKeys.GoldenGemDropChance, 0m)], 1, DateTimeOffset.UtcNow, "check", "test"));
+        Check.True(Enumerable.Range(1, 20_000).All(i => !GoldenGemLootRule.TryRoll("B_boss_dragon_001", 17, Death(i), ServerRates.Current)),
+            "drop.golden_gem_chance_bp 0: no Golden Gems");
+        Console.WriteLine($"    W22 Golden Gem rolls over {Deaths:N0} deaths: {gems} ({gems * 100.0 / Deaths:0.00}%)");
+
         // Chest contents: own class only, the tier's levels only.
         var books = SkillLevelItemSeeds.All.Where(static s => s.Id < 6520).ToDictionary(static s => (uint)s.Id);
         foreach (var (chestId, levels) in new (uint, int[])[] { (6520, [6]), (6521, [7]), (6522, [8]), (6523, [9, 10]) })

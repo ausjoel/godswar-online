@@ -30,7 +30,10 @@ internal static class TransporterProtocol
     public const uint PublishedAthensNpcId = 5180;
     public const uint MycenaeNpcId = 59721;
     public const int DialogIndex = 1;
-    public const int ResultDialogIndex = 2;
+    // B22 B26-T: was 2. The 10070 +8 value is the client's function TYPE (NpcFun.lua: 1 = NPC_FLAG_SYS_TRANMIT,
+    // 2 = credit exchange), so 2 drew an empty window in the real client (rig, B26-T). The client counts its own
+    // Index (page 1 = 1, a reply after a click = 2, after a page-2 click = 3) and draws 1000/1001/2001 from there.
+    public const int ResultDialogIndex = DialogIndex;
     public const int InitialRequestSubId = -1;
     public const int ActionPacketBytes = 92;
     public const int FunctionArgumentCount = 18;

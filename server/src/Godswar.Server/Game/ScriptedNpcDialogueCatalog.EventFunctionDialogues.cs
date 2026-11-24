@@ -172,7 +172,10 @@ internal sealed partial class GameClientHandler
             [100] = [200],
             [101] = [202],
             [104] = [204],
-            [105] = [205]
+            [105] = [205],
+            // W16 (the admin d128): "Bind mount gear" was silent. 206 is the client's own bind form (NF_HF_T206, one item
+            // slot, NpcFunHorseFeeder.lua Index 2); a placed piece is bound by TryHandleMountFeederAsync (106/206).
+            [106] = [206]
         });
 
     /// <summary>

@@ -102,6 +102,25 @@ internal sealed partial class GameSessionRegistry
     internal Task<bool> SendServerInfoAsync(ClientSession session, string text, CancellationToken cancellationToken)
     {
         var clean = BoardText.Clip(new string(text.Where(static c => c is >= ' ' and <= '~').ToArray()).Trim());
-        return clean.Length == 0 ? Task.FromResult(false) : SendBoardToAsync(session, 'M', clean, cancellationToken);
+        if (clean.Length == 0) return Task.FromResult(false);
+        // W20: this is the answer to the player's own NPC click, so it must not wait for the board hold; a 10038 game
+        // log line shows it at once without touching the open form's NPC context (a board 10070 frame would).
+        if (IsBoardCapable(session) && NpcFormMayBeOpen(session, DateTimeOffset.UtcNow))
+            return SendServerInfoLineAsync(session, clean, cancellationToken);
+        return SendBoardToAsync(session, 'M', clean, cancellationToken);
+    }
+
+    private static async Task<bool> SendServerInfoLineAsync(ClientSession session, string clean, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await session.SendAsync(PacketBuilder.PersonalGameLog(clean), cancellationToken, "ServerInfoDuringNpcForm"); // W20
+            return true;
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            Console.WriteLine($"[board] server info skipped: {error.GetType().Name}");
+            return false;
+        }
     }
 }

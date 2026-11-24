@@ -4,7 +4,7 @@ The writing pages keep their own limits. This one looks at a whole character at 
 deliberate edit shows up here without being refused anywhere. Every rule names where its number comes from.
 Severity "impossible": the server or client cannot produce or show it. "unnatural": it works, but play can't reach it.
 """
-from . import character, common, inventory, skills
+from . import character, common, inventory, skills, _attribute_families as AF
 from .common import Bad
 
 M = common.module("natural", "Natural check", icon={"sprite": 684}, order=27, status="ready",
@@ -126,7 +126,8 @@ def _item_checks(b, rows, meta_of, client_items, attributes, equip_location, out
             name = _attr_name(a)    # B21 item 30: the attribute's name, not its number
             if lv is not None and int(lv) > mx:
                 _f(out, "impossible", "attribute-level", where, "%s at level %s; its maximum is %d." % (name, lv, mx))
-            if allowed and int(a) not in allowed:
+            # the stone family rule of Item legality (an enhanced id such as 14 is the family the item rolls, 10/11)
+            if allowed and not AF.rolls_on(a, allowed):
                 _f(out, "unnatural", "attribute", where, "%s can't roll on this item." % name)
         sockets = int(r.get("holy_socket_count") or 0)
         if sockets > SOCKETS_MAX:

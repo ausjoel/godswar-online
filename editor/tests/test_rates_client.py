@@ -8,6 +8,9 @@ so the login server answers after 2-6 s; the probe gives up after 2 s ("login re
 import os
 import sys
 
+if len(sys.argv) < 2:                               # a rig test: it needs a probe and a server (exit 2 = usage)
+    print("usage: " + __doc__.strip().splitlines()[-1].strip(), file=sys.stderr)
+    sys.exit(2)
 probe = os.path.abspath(sys.argv[1])
 src = open(probe, encoding="utf-8").read()
 old = "r = c.recv(2)\nif not r or r[0][0] != 3"

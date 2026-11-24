@@ -73,11 +73,12 @@
 
 <section>
   <h2>Step 2 · Windows</h2>
-  <div class="step"><div class="n">1</div><div>Download <a href="https://YOUR-DOMAIN.example/downloads/files/GodsWar-Launcher-windows.exe">GodsWar-Launcher-windows.exe</a> (6 MB). Put it anywhere you like.</div></div>
-  <div class="step"><div class="n">2</div><div>Double-click it. If Windows says it protected your PC, click <b>More info</b>, then <b>Run anyway</b>.</div></div>
+  <div class="step"><div class="n">1</div><div>Download <a href="https://YOUR-DOMAIN.example/downloads/files/GodsWar-Launcher-windows.exe">GodsWar-Launcher-windows.exe</a> (9 MB). Put it anywhere you like.</div></div>
+  <div class="step"><div class="n">2</div><div>Double-click it. The launcher isn't code-signed, so SmartScreen may say "Windows protected your PC": click <b>More info</b>, then <b>Run anyway</b>.</div></div>
   <div class="step"><div class="n">3</div><div>If Windows asks about the firewall, choose <b>Allow</b>.</div></div>
-  <div class="step"><div class="n">4</div><div>The first start downloads the game (about 550 MB) into <code>%LOCALAPPDATA%\GodsWar</code>. A black window shows the progress and the game opens when it is ready. Next time it only checks for updates.</div></div>
-  <div class="step"><div class="n">5</div><div>Closes straight away or mentions <code>MSVCR80</code> or <code>d3dx9</code>? Install Microsoft's <i>Visual C++ 2005 Redistributable (x86)</i> and the <i>DirectX End-User Runtime</i>, then start it again.</div></div>
+  <div class="step"><div class="n">4</div><div>The first start downloads the game (about 550 MB) into <code>%LOCALAPPDATA%\GodsWar</code>. A black window shows the progress and the game opens when it is ready. If your PC doesn't have Microsoft's Visual C++ 2005 runtime, the launcher installs it first: Windows shows one prompt ("Win32 Cabinet Self-Extractor", from Microsoft Corporation), click <b>Yes</b>. After that the launcher keeps the game up to date by downloading only the files that changed, not the whole game.</div></div>
+  <div class="step"><div class="n">5</div><div>Clicked <b>No</b> on that prompt, or Windows still says <code>MSVCP80.dll</code> is missing? Install the <i>Visual C++ 2005 SP1 Redistributable (x86)</i> from <a href="https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist#visual-studio-2005-vc-80-sp1-no-longer-supported">Microsoft's download page</a>, then start the launcher again. If it mentions <code>d3dx9</code>, install Microsoft's <i>DirectX End-User Runtime</i>.</div></div>
+  <p class="tip">Always start the game from the launcher. It keeps its own copy up to date; a game zip you unzip yourself never gets updates.</p>
   <p class="warn">The Windows version has not been test-played yet. If it fails, tell the admin what you saw.</p>
 </section>
 </div>

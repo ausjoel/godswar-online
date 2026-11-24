@@ -67,6 +67,7 @@ internal static partial class PostgresTalentInboxOutboxIntegrationChecks
         await AssertPreCommitFaultRollbackAsync(connectionString);
         await AssertAfterCommitRecoveryAsync(connectionString);
         await AssertOwnershipFencingAsync(connectionString);
+        await AssertOutsideRevisionBumpKeepsStreamContiguousAsync(connectionString); // W15
     }
 
     private static PostgresTalentUpgradeCommandExecutor CreateExecutor(

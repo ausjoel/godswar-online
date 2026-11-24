@@ -262,7 +262,38 @@ internal static class AccountAuthenticationJsonChecks
             CryptographicOperations.ZeroMemory(wrongPassword);
         }
 
+        // B22 W15: legacy raw registration follows AllowRegistration (it used to be forced on).
+        var closedOptions = TestOptions();
+        closedOptions.AllowRegistration = false;
+        await using (var closed =
+            AccountAuthenticationService.CreateLegacyRaw(
+                store,
+                store,
+                closedOptions))
+        {
+            var closedPassword = "new-account"u8.ToArray();
+            try
+            {
+                var refused = await closed.AuthenticateAsync(
+                    "auth-flow-closed",
+                    closedPassword);
+                Check.Equal(
+                    (int)AccountAuthenticationStatus.Rejected,
+                    (int)refused.Status,
+                    "legacy raw with registration off rejects a missing account");
+                Check.True(
+                    await store.FindAccountCredentialAsync(
+                        "auth-flow-closed") is null,
+                    "legacy raw with registration off creates no account");
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(closedPassword);
+            }
+        }
+
         var registrationOptions = TestOptions();
+        registrationOptions.AllowRegistration = true;
         await using var registration =
             AccountAuthenticationService.CreateLegacyRaw(
                 store,

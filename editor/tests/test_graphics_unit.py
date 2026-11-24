@@ -158,5 +158,22 @@ class ShippedIndex(unittest.TestCase):
         self.assertTrue(new and all("new" in v["model"].lower() for v in new))
 
 
+class MapImage(unittest.TestCase):
+    """EDITOR-SMOKE: GET graphics/mapimage without ?id= was a 500 (TypeError) with a traceback in the editor log."""
+    class QCtx(Ctx):
+        def qint(self, k, d=None, lo=None, hi=None):
+            v = self.query.get(k)
+            return d if v in (None, "") else int(v)
+
+    def test_missing_id_is_a_clear_400(self):
+        with self.assertRaises(Bad) as e:
+            G.mapimage(self.QCtx({}))
+        self.assertIn("id is required", str(e.exception))
+
+    def test_bad_kind_is_still_refused(self):
+        with self.assertRaises(Bad):
+            G.mapimage(self.QCtx({"id": "1", "kind": "x"}))
+
+
 if __name__ == "__main__":
     unittest.main()

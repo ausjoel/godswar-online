@@ -77,21 +77,23 @@ internal sealed partial class GameSessionRegistry
         PopulationNotice.Build(SnapshotWorldReadySessions().Select(s => (s.CharacterId, s.Character.Camp)));
 
     /// <summary>Sends one board text to one session: board frames for a 1.4.3 client, else a personal info line.</summary>
-    internal async Task<bool> SendBoardToAsync(ClientSession session, char kind, string text, CancellationToken cancellationToken)
+    internal Task<bool> SendBoardToAsync(ClientSession session, char kind, string text, CancellationToken cancellationToken) =>
+        SendBoardToAsync(session, kind, text, DateTimeOffset.UtcNow, cancellationToken); // W20
+
+    internal async Task<bool> SendBoardToAsync(
+        ClientSession session, char kind, string text, DateTimeOffset now, CancellationToken cancellationToken)
     {
         try
         {
             if (IsBoardCapable(session))
             {
-                // Board.lua cuts a line at 46 characters, so a message wraps over up to 3 board lines instead.
-                var lines = kind == 'M' ? BoardText.Wrap(BoardClock.Stamp(text, DateTimeOffset.UtcNow)) : [text]; // B21
-                foreach (var line in lines)
-                foreach (var frame in GameClientHandler.BuildGmPanelTextFrames(kind + line, BoardWindowId))
-                    await session.SendAsync(frame, cancellationToken, "Board");
+                var stamped = kind == 'M' ? BoardClock.Stamp(text, now) : text; // B21
+                if (TryHoldBoardLine(session, kind, stamped, now)) return true; // W20: an NPC form may be open
+                await SendBoardFramesAsync(session, kind, stamped, cancellationToken);
             }
             else
             {
-                var line = kind == 'M' ? BoardClock.Stamp(text, DateTimeOffset.UtcNow) : text; // B21
+                var line = kind == 'M' ? BoardClock.Stamp(text, now) : text; // B21
                 await session.SendAsync(PacketBuilder.PersonalGameLog(BoardText.Clip(line)), cancellationToken, "BoardFallback");
             }
             return true;
@@ -101,6 +103,16 @@ internal sealed partial class GameSessionRegistry
             Console.WriteLine($"[board] delivery skipped: {error.GetType().Name}");
             return false;
         }
+    }
+
+    // W20: Board.lua cuts a line at 46 characters, so a message wraps over up to 3 board lines instead.
+    private static async Task SendBoardFramesAsync(
+        ClientSession session, char kind, string stamped, CancellationToken cancellationToken)
+    {
+        var lines = kind == 'M' ? BoardText.Wrap(stamped) : [stamped];
+        foreach (var line in lines)
+        foreach (var frame in GameClientHandler.BuildGmPanelTextFrames(kind + line, BoardWindowId))
+            await session.SendAsync(frame, cancellationToken, "Board");
     }
 
     /// <summary>A message line on everyone's board (instant editor post, board notice, mirrored announcement).</summary>

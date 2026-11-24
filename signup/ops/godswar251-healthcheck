@@ -27,6 +27,26 @@ notify /var/lib/godswar251-health.state "$problem" "GodsWar server DOWN" \
   "ssh vps, then: sudo gw251 status / sudo gw251 restart" "GodsWar server back up"
 game_problem=$problem
 
+# --- parked instance reward settlements (S5b): a Wonderland title/medal or Atlantis completion that the server
+# stopped retrying (deterministic rejection, or a database outage longer than 15 min). The server keeps a count
+# since its start at GET /settlement/parked; alert once per increase. A lower count means the server restarted.
+parked_state=/var/lib/godswar251-parked-settlements.state
+parked_json=$(curl -sf -m 10 http://127.0.0.1:9090/settlement/parked 2>/dev/null)
+if [ -n "$parked_json" ]; then
+  parked_total=$(printf '%s' "$parked_json" | python3 -c 'import json,sys; print(int(json.load(sys.stdin)["total"]))' 2>/dev/null)
+  parked_prev=$(cat "$parked_state" 2>/dev/null || echo 0)
+  if [ -n "$parked_total" ]; then
+    if [ "$parked_total" -gt "$parked_prev" ]; then
+      latest=$(printf '%s' "$parked_json" | python3 -c 'import json,sys; e=json.load(sys.stdin)["entries"][-1]; print(e["kind"], e["key"], e["failure"], "-", e["error"])' 2>/dev/null)
+      curl -s -m 15 -H "Title: GodsWar reward settlement parked" -H "Priority: high" -H "Tags: warning" \
+        -d "$((parked_total - parked_prev)) new ($(date -u '+%F %H:%M') UTC). Latest: $latest. ssh vps, then: curl -s 127.0.0.1:9090/settlement/parked; journalctl -u godswar251 | grep PARKED" \
+        "$NTFY_URL" >/dev/null && echo "$parked_total" > "$parked_state"
+    elif [ "$parked_total" -lt "$parked_prev" ]; then
+      echo "$parked_total" > "$parked_state"
+    fi
+  fi
+fi
+
 # --- sign-up website (GodsWar-VPS/signup): only checked once it is installed
 signup_problem=""
 if [ -f /etc/systemd/system/gwsignup.service ]; then
@@ -39,6 +59,10 @@ if [ -f /etc/systemd/system/gwsignup.service ]; then
     "ssh vps, then: systemctl status gwsignup caddy / journalctl -u gwsignup -n 50" "GodsWar sign-up site back up"
 fi
 
+# >>> godswar251-backup-freshness (GodsWar-VPS/ops/backup-drill; uninstall.sh removes this block)
+# Own state file /var/lib/godswar251-backup-health.state; does not change this script's exit status.
+[ -x /usr/local/sbin/godswar251-backup-freshness ] && /usr/local/sbin/godswar251-backup-freshness --notify
+# <<< godswar251-backup-freshness
 [ -n "$game_problem" ] && echo "$game_problem"
 [ -n "$signup_problem" ] && echo "signup: $signup_problem"
 [ -z "$game_problem$signup_problem" ]

@@ -169,6 +169,9 @@ internal static class NpcContentRuntime
             PRIMARY KEY (npc_key, sub_id),
             CHECK ((target_map_id IS NULL) = (pos_x IS NULL) AND (pos_x IS NULL) = (pos_z IS NULL))
         );
+        -- B22 B26-T (the admin d121-d123): a second page. NULL = page 1; else the sub_id of the page-1 button that opens it.
+        ALTER TABLE public.npc_teleport_menu ADD COLUMN IF NOT EXISTS parent_sub_id integer
+            CHECK (parent_sub_id IS NULL OR parent_sub_id BETWEEN 1 AND 9999);
         DO $$ BEGIN
             IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'gweditor') THEN
                 GRANT SELECT, INSERT, UPDATE, DELETE ON public.npc_teleport_menu TO gweditor;
@@ -318,7 +321,7 @@ internal static class NpcContentRuntime
             // B22 (d32): editor teleporter menus. A row the policy cannot resolve is skipped when the menu is built.
             var teleportMenus = new List<NpcTeleportMenuRow>();
             await using (var command = new NpgsqlCommand(
-                "SELECT npc_key, position, sub_id, hidden, price, currency, target_map_id, pos_x, pos_z, minimum_level, display_name " +
+                "SELECT npc_key, position, sub_id, hidden, price, currency, target_map_id, pos_x, pos_z, minimum_level, display_name, parent_sub_id " +
                 "FROM public.npc_teleport_menu ORDER BY npc_key, position, sub_id",
                 connection))
             await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
@@ -336,7 +339,8 @@ internal static class NpcContentRuntime
                         reader.IsDBNull(7) ? null : reader.GetFloat(7),
                         reader.IsDBNull(8) ? null : reader.GetFloat(8),
                         reader.IsDBNull(9) ? null : reader.GetInt16(9),
-                        reader.IsDBNull(10) ? null : reader.GetString(10));
+                        reader.IsDBNull(10) ? null : reader.GetString(10),
+                        reader.IsDBNull(11) ? null : reader.GetInt32(11)); // B22 B26-T
                     teleportMenus.Add(menuRow);
                     fingerprint.Append("menu").Append(menuRow).Append('\n');
                 }
@@ -682,6 +686,7 @@ internal static class NpcContentRuntime
         return new
         {
             maximum_buttons = TransporterMenuPolicy.MaximumButtons,
+            page_support = true, // B22 B26-T: rows may carry parent_sub_id (a second page)
             slot_first = TransporterMenuPolicy.FirstSlotSubId,
             slot_last = TransporterMenuPolicy.LastSlotSubId,
             currencies = new[] { TransporterMenuPolicy.Silver, TransporterMenuPolicy.Gold, TransporterMenuPolicy.BindingGold },
@@ -691,6 +696,14 @@ internal static class NpcContentRuntime
                 source_map = (int)n.Map,
                 compiled = TransporterMenuPolicy.CompiledMenu(n.Published, n.Key, n.Id),
                 effective = TransporterMenuPolicy.EffectiveMenu(n.Published, n.Key, n.Id, n.Map, snapshot),
+                // B22 B26-T: page button -> the buttons its page shows.
+                pages = TransporterMenuPolicy.RowsFor(snapshot, n.Key)
+                    .Where(static r => r.ParentSubId is not null)
+                    .Select(static r => r.ParentSubId!.Value)
+                    .Distinct()
+                    .ToDictionary(
+                        static p => p.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        p => TransporterMenuPolicy.PageMenu(n.Key, n.Id, n.Map, p, snapshot)),
                 rows = TransporterMenuPolicy.RowsFor(snapshot, n.Key).Count,
                 compiled_fees = TransporterProtocol.Destinations
                     .Where(d => d.NpcKey == n.Key)

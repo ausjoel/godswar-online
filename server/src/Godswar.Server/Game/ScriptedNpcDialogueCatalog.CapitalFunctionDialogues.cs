@@ -129,6 +129,9 @@ internal sealed partial class GameClientHandler
     /// whose <c>+20</c> value is unmeasured; and every Index 3 result, because reaching
     /// one needs a real class or weapon conversion, which this server does not perform.
     /// </remarks>
+    // B22 B27-C (the admin d136): with npc.class_shift_equipment = 1 (default) the weapon (101) and armour (102) pages
+    // and their submits are answered by TryHandleEquipmentShiftAsync (GameClientHandler.EquipmentShift.cs) before this
+    // table; the [101] and [102] rows below are the answers while it is off.
     // CLASSCHANGE (2026-11-03): with GODSWAR_CLASS_CHANGE=true or server rate npc.class_change = 1,
     // the four class buttons are answered by TryHandleClassChangeAsync
     // (ScriptedNpcDialogueCatalog.ClassChange.cs), which performs the change. Off, this table is unchanged.
@@ -147,6 +150,9 @@ internal sealed partial class GameClientHandler
             [100] = [110, 111, 112, 113, 114],
             [112] = [202],
             [101] = [116, 117, 118, 119],
+            // W16 (the admin d128): "Please shift my armor" was silent. 123 is the client's own armour page,
+            // NF_L0_WK129 "Armor shifting is not available yet." (NpcFunWork.lua Index 2).
+            [102] = [123],
             [103] = [128]
         });
 

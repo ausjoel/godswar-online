@@ -31,12 +31,14 @@ backup first, one guarded transaction, change log, Undo.
 """
 import datetime
 import json
+import os
 import re
 
 from . import common
 from .common import Bad, Refused, NotFound, Conflict, OnlineRefused, lit, ident
 
 from . import _account_holds as AH       # W4A: soft delete, user-name holds, e-mail verification reset
+from . import _account_purge as AP       # W23: delete an account completely + Restore from its backup
 from . import _character_identity as CI  # W4A: faction / gender / class change, hair + face, legal limits
 
 try:
@@ -963,9 +965,16 @@ def _delete_plan(ctx, aid, preview=False):
     """What DELETE FROM accounts WHERE id = <aid> removes (the ON DELETE CASCADE closure, parents first), what keeps a
     row pointing at it (RESTRICT / NO ACTION = evidence: blocks the delete), and what only loses its link (SET NULL)."""
     fks = _fk_graph(ctx)
+    where, seq = _cascade_closure(fks, aid)
+    meta = _table_meta(ctx, seq)
+    return _delete_plan_counts(ctx, fks, where, seq, meta, preview)
+
+
+def _cascade_closure(fks, aid):
+    """W23: the ON DELETE CASCADE closure from accounts #aid (no row counts, so it needs no table rights):
+    ({table: condition}, [tables parents first])."""
     where = {"accounts": "id = %d" % int(aid)}
     parents = {"accounts": []}
-    order = ["accounts"]
     changed = True
     while changed:                               # closure over ON DELETE CASCADE
         changed = False
@@ -994,7 +1003,10 @@ def _delete_plan(ctx, aid, preview=False):
                 pending.remove(t)
     if pending:
         raise Bad("cannot order the cascade tables (%s)" % ", ".join(pending))
-    meta = _table_meta(ctx, seq)
+    return where, seq
+
+
+def _delete_plan_counts(ctx, fks, where, seq, meta, preview):
     counts = _rb(ctx).pg.json(_jobj(["%s, (SELECT count(*) FROM %s WHERE %s)" % (lit(t), t, where[t]) for t in seq]))
     blockers, setnull = [], []
     for f in fks:
@@ -1157,6 +1169,233 @@ def account_delete(ctx, aid):
         a["username"], " (with its kill, loot and claim records)" if wipe else "",
         (" (except %s: kept in the backup folder)" % ", ".join(not_restorable)) if not_restorable else ""))
     return r
+
+
+# ------------------------------------------------------------------ W23: delete an account COMPLETELY (+ one-click Restore)
+def _full_plan(ctx, aid, a=None):
+    """What a complete delete of account #aid removes (modules/_account_purge.py), what stays and why, what blocks it.
+    Reads no row counts until the editor's rights are known, so a missing grant is reported, not a crash."""
+    rb = _rb(ctx)
+    a = a or _account(ctx, aid)
+    aid = int(aid)
+    fks = _fk_graph(ctx)
+    cwhere, cseq = _cascade_closure(fks, aid)
+    # the evidence tables point at the account / its characters with RESTRICT foreign keys (character.WIPE_EVIDENCE)
+    ev = {}
+    for f in fks:
+        if f["parent"] in cwhere and f["child"] in WIPE_EVIDENCE and f["child"] not in cwhere:
+            ev.setdefault(f["child"], []).append(_in(f["cols"], f["pcols"], f["parent"], cwhere[f["parent"]]))
+    ev_where = {t: " OR ".join("(%s)" % c for c in cs) for t, cs in ev.items()}
+    cids = [c["id"] for c in a["characters"]]
+    pids = rb.pg.json("(SELECT coalesce(jsonb_agg(id ORDER BY id), '[]') FROM character_pets WHERE user_id IN (%s))"
+                      % (", ".join(str(int(x)) for x in cids) or "NULL")) or []
+    covered, kept, unreviewed = AP.classify(rb.pg.json(AP.columns_sql()) or [])
+    id_where = AP.id_conditions(covered, aid, cids, pids)
+    where, order = AP.merge_plan(cwhere, cseq, ev_where, id_where)
+    rights = AP.missing_rights(rb, order + ["public.account_username_holds"])
+    plan = {"account": {"id": aid, "username": a["username"], "characters": [c["name"] for c in a["characters"]],
+                        "online": a["online"], "deleted": a.get("deleted")},
+            "rights": rights, "kept": kept, "unreviewed": unreviewed, "archive_schemas": list(AP.ARCHIVE_SCHEMAS),
+            "blockers": [], "tables": [], "total_rows": 0, "writable": bool(rb.writable)}
+    if rights:
+        plan["can_delete"] = False
+        plan["blockers"].append("this editor's database login may not %s. The lead runs editor/sql/w23-account-delete-grants.sql "
+                                "once (as postgres), then the complete delete works here." % "; ".join(rights))
+        return plan, None
+    # rows of OTHER tables that point at the set with a RESTRICT / NO ACTION key and are not part of it (a guild this
+    # account's character leads): another player depends on them, so the delete is refused until they are moved
+    for f in fks:
+        pq, cq = AP.qualify(f["parent"]), AP.qualify(f["child"])
+        if pq in where and cq not in where and f["del"] in ("r", "a"):
+            n = rb.pg.json("(SELECT to_jsonb(count(*)) FROM %s WHERE %s)" % (AP.qsql(cq), _in(f["cols"], f["pcols"], AP.qsql(pq), where[pq])))
+            if n:
+                g = _gtable(f["child"])
+                plan["blockers"].append("%s: %d row%s (%s) point at it. %s" % (
+                    f["child"], n, "" if n == 1 else "s", g.get("description") or g.get("label") or "another player's data",
+                    "Transfer or disband the guild in the Guild editor first." if f["child"] == "guilds" else "Remove that first."))
+    lead = rb.pg.json("(SELECT coalesce(jsonb_agg(jsonb_build_object('id', id, 'name', name)), '[]') FROM guilds WHERE lord_character_id IN (%s))"
+                      % (", ".join(str(int(x)) for x in cids) or "NULL")) if cids else []
+    for gd in lead or []:
+        msg = "a character of this account leads the guild %s (#%s): transfer or disband it in the Guild editor first." % (gd.get("name"), gd.get("id"))
+        if msg not in plan["blockers"]:
+            plan["blockers"].append(msg)
+    if a["online"]:
+        plan["blockers"].append("the account is logged in: log it out first.")
+    ids = ", ".join(str(int(x)) for x in cids) or "NULL"
+    # W23: rows shared with ANOTHER player go too (marriage, mentor, friend list); an online partner's game session holds
+    # its copy in memory and could write it back, so the delete waits until those players are logged out
+    partners = rb.pg.json("""(SELECT coalesce(jsonb_agg(DISTINCT c.name), '[]') FROM character_base c JOIN accounts pa ON pa.id = c.account_id
+        WHERE c.account_id <> %d AND (c.checkpoint_owner_id IS NOT NULL OR pa.login_status <> 0 OR pa.login_presence_token IS NOT NULL)
+          AND c.id IN (%s))""" % (aid, " UNION ".join(q % {"ids": ids} for q in AP.PARTNER_SQL if AP.exists(rb, q)) or "SELECT NULL::int")) if cids else []
+    if partners:
+        plan["blockers"].append("linked players are online (%s): the marriage, mentor or friend-list rows they share with this "
+                                "account would be removed under them. Wait until they log out." % ", ".join(partners))
+    # W23: server events for the account's characters not delivered yet (a dispatcher would keep retrying them)
+    pending = rb.pg.json("""(SELECT to_jsonb(count(*)) FROM outbox_events WHERE delivered_at IS NULL AND poisoned_at IS NULL
+        AND (aggregate_key ~ ('^character:(' || %s || ')(:|$)') OR aggregate_key ~ ('^%d:')))""" % (
+        lit("|".join(str(int(x)) for x in cids) or "0"), aid)) if AP.exists(rb, "SELECT 1 FROM outbox_events") else 0
+    if pending:
+        plan["blockers"].append("%d server event%s for this account %s not delivered yet: start the game server and let it finish "
+                                "them, then delete." % (pending, "" if pending == 1 else "s", "is" if pending == 1 else "are"))
+    counts = rb.pg.json(_jobj(["%s, (SELECT count(*) FROM %s x WHERE %s)" % (lit(t), AP.qsql(t), where[t]) for t in order]))
+    for t in order:
+        n = int(counts.get(t) or 0)
+        if n:
+            g = _gtable(t.split(".", 1)[1]) if t.startswith("public.") else {}
+            why = ("cascade" if t.split(".", 1)[1] in cwhere and t.startswith("public.") else
+                   "evidence" if t.split(".", 1)[1] in ev_where else "sign-up site" if t.startswith("signup.") else "by number")
+            plan["tables"].append({"table": t, "rows": n, "why": why, "label": g.get("description") or g.get("label") or ""})
+    plan["total_rows"] = sum(x["rows"] for x in plan["tables"])
+    plan["can_delete"] = not plan["blockers"] and bool(rb.writable)
+    return plan, {"where": where, "order": order, "fks": fks}
+
+
+@M.get(r"account/(\d+)/full-delete-plan")
+def account_full_delete_plan(ctx, aid):
+    """GET /api/m/character/account/<id>/full-delete-plan - W23: what Delete completely would remove (every table and
+    row count), what it keeps and why, and what blocks it (logged in, a guild it leads, missing database rights)."""
+    return _full_plan(ctx, aid)[0]
+
+
+@M.post(r"account/(\d+)/full-delete")
+def account_full_delete(ctx, aid):
+    """POST /api/m/character/account/<id>/full-delete {confirm: username} - W23: remove the account, all its characters,
+    everything that hangs off them and its sign-up site rows, after writing every row to one backup file. Refused
+    while the account is logged in. Restore: POST full-deletes/restore {file}."""
+    rb = ctx.need_rb()
+    if not rb.writable:
+        raise Refused("this editor is read-only")
+    aid = int(aid)
+    a = _account(ctx, aid)
+    if str((ctx.body or {}).get("confirm") or "") != a["username"]:
+        raise Bad("type the account's user name to confirm")
+    _online_refuse(a, "delete account completely")
+    plan, inner = _full_plan(ctx, aid, a)
+    if not plan["can_delete"]:
+        raise Refused("account %s cannot be deleted completely: %s Nothing was changed." % (a["username"], " ".join(plan["blockers"])))
+    where, order, fks = inner["where"], inner["order"], inner["fks"]
+    stamp = datetime.datetime.now()
+    with rb.lock:
+        snap = AP.raw_rows(rb, where, order)
+        cols = AP.insert_columns(rb, order + ["public.account_username_holds"])
+        hold_key = AH.key(a["username"])
+        holds = AP.raw_rows(rb, {"public.account_username_holds": "username_key = %s" % lit(hold_key)}, ["public.account_username_holds"]) \
+            if _w4_ready(ctx).get("holds") else {}
+        doc = {"kind": AP.KIND, "version": AP.VERSION, "database": rb.db, "created": stamp.isoformat(), "account_id": aid,
+               "username": a["username"], "characters": [{"id": c["id"], "name": c["name"], "state": c["state"]} for c in a["characters"]],
+               "tables": [{"table": t, "rows": snap[t][0], "columns": cols.get(t) or [], "json": snap[t][1]} for t in order],
+               "total_rows": sum(snap[t][0] for t in order), "hold_key": hold_key if holds else None,
+               "holds_json": holds.get("public.account_username_holds", (0, "[]"))[1] if holds else "[]",
+               "holds_columns": cols.get("public.account_username_holds") or []}
+        path = AP.write_backup(rb.backup_dir, doc)
+        hold = AH.hold_insert_sql(a["username"], aid, "deleted", "deleted completely in the editor") if holds is not None and _w4_ready(ctx).get("holds") else ""
+        lines = ["BEGIN;", "SET LOCAL lock_timeout = '5s';", "SET LOCAL statement_timeout = '%ds';" % AP.TIMEOUT, rb.db_guard_sql(),
+                 "SELECT 1 FROM public.accounts WHERE id = %d FOR UPDATE;" % aid,
+                 "SELECT 1 FROM public.character_base WHERE account_id = %d ORDER BY id FOR UPDATE;" % aid,
+                 AP.offline_sql(aid), AP.same_rows_guard_sql(where, {t: (snap[t][0], snap[t][2]) for t in order})]
+        lines += AP.delete_statements(where, order, aid, a["username"], hold)
+        lines += [AP.count_guard_sql(where, {t: 0 for t in order}, "rows of the account are still there"),
+                  AP.fk_guard_sql(AP.fk_pairs(rb, order)), "COMMIT;"]
+        try:
+            rb.pg.run("\n".join(x for x in lines if x) + "\n", timeout=AP.TIMEOUT)
+        except Exception:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            raise
+    chars = ", ".join(c["name"] for c in a["characters"]) or "no characters"
+    c = {"engine": "rows", "id": "rw-" + stamp.strftime("%Y%m%d-%H%M%S-%f"), "time": stamp.isoformat(timespec="seconds"),
+         "database": rb.db, "character": "account " + a["username"], "cid": None, "action": "DELETE COMPLETELY account %s (%s; %d rows in %d tables)" % (
+             a["username"], chars, doc["total_rows"], len([t for t in order if snap[t][0]])),
+         "sql": [{"db": rb.db, "sql": "full delete of account #%d (backup %s)" % (aid, os.path.basename(path))}], "backup": path,
+         "diff": {}, "output": "%d rows deleted" % doc["total_rows"], "undone": False, "module": "character", "applies": "now",
+         "applies_text": common.APPLIES_TEXT.get("now", "now"), "tables": [t for t in order if snap[t][0]],
+         "no_undo": "use Restore under Account > Deleted completely (backup %s)" % os.path.basename(path)}
+    ctx.app.record_reborn_change(c)
+    return {"change": common.public_change(c), "backup": os.path.basename(path), "rows": doc["total_rows"],
+            "tables": [{"table": t, "rows": snap[t][0]} for t in order if snap[t][0]],
+            "note": "Account %s%s and %d rows that belonged to it are gone, also from the sign-up site. The user name stays held. "
+                    "Restore it any time from Deleted completely in the account list." % (
+                        a["username"], (", its characters (%s)," % chars) if a["characters"] else " (no characters)", doc["total_rows"])}
+
+
+@M.get("full-deletes")
+def full_deletes(ctx):
+    """GET /api/m/character/full-deletes - W23: the complete deletes this database has a backup for (newest first), and
+    whether each account could be restored now."""
+    rb = _rb(ctx)
+    out = AP.list_backups(rb.backup_dir, rb.db)
+    if out:
+        ids = ", ".join(str(int(x["account_id"])) for x in out)
+        exist = set(rb.pg.json("(SELECT coalesce(jsonb_agg(id), '[]') FROM accounts WHERE id IN (%s))" % ids) or [])
+        for x in out:
+            x["restored"] = x["account_id"] in exist
+    return {"backups": out, "writable": bool(rb.writable)}
+
+
+@M.post("full-deletes/restore")
+def full_delete_restore(ctx):
+    """POST /api/m/character/full-deletes/restore {file} - W23: put a completely deleted account back from its backup
+    (every row, with its own numbers), in one transaction. Refused when the account number, the user name or a
+    character name has been taken since."""
+    rb = ctx.need_rb()
+    if not rb.writable:
+        raise Refused("this editor is read-only")
+    doc, path = AP.load_backup(rb.backup_dir, (ctx.body or {}).get("file"), rb.db)
+    aid, user = int(doc["account_id"]), doc["username"]
+    taken = rb.pg.json("""(SELECT jsonb_build_object(
+        'id', EXISTS (SELECT 1 FROM accounts WHERE id = %d),
+        'name', (SELECT jsonb_agg(id) FROM accounts WHERE lower(username) = lower(%s)),
+        'chars', (SELECT coalesce(jsonb_agg(name), '[]') FROM character_base WHERE lifecycle_state = 'active' AND lower(name) IN (%s))))""" % (
+        aid, lit(user), ", ".join("lower(%s)" % lit(c["name"]) for c in doc.get("characters") or [] if c.get("state") == "active") or "NULL"))
+    if taken.get("id"):
+        raise Refused("account #%d exists again (restored already, or a new account got that number). Nothing was changed." % aid)
+    if taken.get("name"):
+        raise Refused("the user name %s is used by account #%s now. Nothing was changed." % (user, taken["name"][0]))
+    if taken.get("chars"):
+        raise Refused("an active character already uses the name %s. Rename it first. Nothing was changed." % ", ".join(taken["chars"]))
+    tables = [t["table"] for t in doc["tables"]]
+    rights = AP.missing_rights(rb, tables + ["public.account_username_holds"])
+    if rights:
+        raise Refused("this editor's database login may not %s. The lead runs editor/sql/w23-account-delete-grants.sql once." % "; ".join(rights))
+    cur = AP.insert_columns(rb, tables)
+    for t in doc["tables"]:
+        if t["rows"] and t["table"] not in cur:
+            raise Refused("table %s is not in this database any more; the backup cannot go back as it was" % t["table"])
+    # the conditions of a restore are the ids in the backup: the account, its characters, their pets
+    cids = [c["id"] for c in doc.get("characters") or []]
+    pets = next((t for t in doc["tables"] if t["table"] == "public.character_pets"), None)
+    pids = [int(r["id"]) for r in json.loads(pets["json"])] if pets and pets["rows"] else []
+    covered, _k, _u = AP.classify(rb.pg.json(AP.columns_sql()) or [])
+    idw = AP.id_conditions(covered, aid, cids, pids)
+    fks = _fk_graph(ctx)
+    cwhere, _seq = _cascade_closure(fks, aid)
+    where = {}
+    for t in tables:
+        conds = [c for c in (idw.get(t), cwhere.get(t.split(".", 1)[1]) if t.startswith("public.") else None) if c]
+        ev = [_in(f["cols"], f["pcols"], f["parent"], cwhere[f["parent"]]) for f in fks
+              if t == "public." + f["child"] and f["child"] in WIPE_EVIDENCE and f["parent"] in cwhere]
+        where[t] = " OR ".join("(%s)" % c for c in conds + ev) or "false"
+    expect = {t["table"]: t["rows"] for t in doc["tables"]}
+    stamp = datetime.datetime.now()
+    with rb.lock:
+        lines = ["BEGIN;", "SET LOCAL lock_timeout = '5s';", "SET LOCAL statement_timeout = '%ds';" % AP.TIMEOUT, rb.db_guard_sql()]
+        lines += AP.restore_statements(doc)
+        lines += [AP.count_guard_sql(where, expect, "the restored rows do not match the backup"),
+                  AP.fk_guard_sql(AP.fk_pairs(rb, tables)), "COMMIT;"]
+        rb.pg.run("\n".join(x for x in lines if x) + "\n", timeout=AP.TIMEOUT)
+    c = {"engine": "rows", "id": "rw-" + stamp.strftime("%Y%m%d-%H%M%S-%f"), "time": stamp.isoformat(timespec="seconds"),
+         "database": rb.db, "character": "account " + user, "cid": None,
+         "action": "RESTORE completely deleted account %s (%d rows from %s)" % (user, doc["total_rows"], os.path.basename(path)),
+         "sql": [{"db": rb.db, "sql": "restore of account #%d from %s" % (aid, os.path.basename(path))}], "backup": path,
+         "diff": {}, "output": "%d rows restored" % doc["total_rows"], "undone": False, "module": "character", "applies": "now",
+         "applies_text": common.APPLIES_TEXT.get("now", "now"), "tables": [t for t in tables if expect[t]],
+         "no_undo": "to remove it again use Delete completely on the account"}
+    ctx.app.record_reborn_change(c)
+    return {"change": common.public_change(c), "account": _account(ctx, aid), "rows": doc["total_rows"],
+            "note": "Account %s is back with its characters (%s) and every row it had (%d). The old password works." % (
+                user, ", ".join(x["name"] for x in doc.get("characters") or []) or "none", doc["total_rows"])}
 
 
 # ------------------------------------------------------------------ W4A: faction / gender / class change

@@ -10,7 +10,8 @@ sys.path.insert(0, os.path.dirname(HERE))
 from modules import npcs  # noqa: E402
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--src", default=os.path.join(HERE, "../../../../GodsWar-2.51/Polish/reborn-src-r3"))
+# the repo's own server/ (every wave since upstream); the old default was the r3 source copy beside the project
+ap.add_argument("--src", default=os.path.join(HERE, "..", "..", "server"))
 a = ap.parse_args()
 FAIL = []
 

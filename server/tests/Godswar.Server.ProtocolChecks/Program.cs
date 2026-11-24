@@ -65,6 +65,7 @@ internal static partial class Program
             (ProgressItemChecks.CheckName, ProgressItemChecks.RunAsync),
             (GoldBoxDialChecks.CheckName, GoldBoxDialChecks.RunAsync),
             (ClassChangeChecks.CheckName, ClassChangeChecks.RunAsync),
+            (EquipmentShiftChecks.CheckName, EquipmentShiftChecks.RunAsync), // B22 B27-C
             (EconomyMountChecks.CheckName, EconomyMountChecks.RunAsync), // ECONOMY r11
             (MarriageChecks.CheckName, MarriageChecks.RunAsync),
             (ArenaFeatureChecks.CheckName, ArenaFeatureChecks.RunAsync), // ARENA
@@ -73,6 +74,8 @@ internal static partial class Program
             (NpcBattlefieldTeleportChecks.CheckName, NpcBattlefieldTeleportChecks.RunAsync),
             (TransporterMenuPolicyChecks.CheckName, TransporterMenuPolicyChecks.RunAsync), // B22
             (TransporterHandlerChecks.MenuEditorCheckName, TransporterHandlerChecks.RunMenuEditorAsync), // B22
+            (TransporterHandlerChecks.PagesCheckName, TransporterHandlerChecks.RunPagesAsync), // B22 B26-T
+            (TransporterHandlerChecks.BoardNoticeCheckName, TransporterHandlerChecks.RunBoardNoticeAsync), // W20
             (PotionUsePolicyChecks.CheckName, PotionUsePolicyChecks.RunAsync),
             (PotionReceiptChecks.CheckName, PotionReceiptChecks.RunAsync),
             (PotionHandlerChecks.CheckName, PotionHandlerChecks.RunAsync),
@@ -95,6 +98,7 @@ internal static partial class Program
             (PostgresPetDurableCommandIntegrationChecks.MoneyBagCheckName, PostgresPetDurableCommandIntegrationChecks.RunMoneyBagsAsync),
             (PostgresPetDurableCommandIntegrationChecks.ProgressItemCheckName, PostgresPetDurableCommandIntegrationChecks.RunProgressItemsAsync),
             (MonsterOverrideChecks.CheckName, MonsterOverrideChecks.RunAsync),
+            (MonsterDamageBandChecks.CheckName, MonsterDamageBandChecks.RunAsync), // W23
             (GmNpcDialogueChecks.CheckName, GmNpcDialogueChecks.RunAsync),
             (VillagersChecks.CheckName, VillagersChecks.RunAsync), // VILLAGERS
             (CursedLandContentChecks.CheckName, CursedLandContentChecks.RunAsync),
@@ -156,6 +160,7 @@ internal static partial class Program
             (PostgresWonderlandTitleChecks.CheckName, PostgresWonderlandTitleChecks.RunAsync), // S5: was never registered
             (PostgresWonderlandTitleChecks.LateJoinerCheckName, PostgresWonderlandTitleChecks.RunLateJoinerAsync), // S5 late joiner
             (InstanceCallerHandlerChecks.WonderlandLateJoinerCheckName, InstanceCallerHandlerChecks.RunWonderlandLateJoinerAsync), // S5 registry side
+            (InstanceCallerHandlerChecks.BoundedSettlementRetriesCheckName, InstanceCallerHandlerChecks.RunBoundedSettlementRetriesAsync), // S5b bounded retries
             (OperatorAuthorityChecks.CheckName, OperatorAuthorityChecks.RunAsync),
             (GmPowerPolicyChecks.CheckName, GmPowerPolicyChecks.RunAsync), // W5B
             (W6BWellAndStatusChecks.CheckName, W6BWellAndStatusChecks.RunAsync), // W6B
@@ -166,6 +171,12 @@ internal static partial class Program
             (B22G2Checks.MedalCheckName, B22G2Checks.RunMedalsAsync), // B22 G2 medal drops
             (B22G2Checks.SanctumCheckName, B22G2Checks.RunSanctumAsync), // B22 G2 Aether Sanctum
             (B23SanctumChecks.CheckName, B23SanctumChecks.RunAsync), // B23-S Sanctum bosses
+            (AtlantisRankScaleChecks.CheckName, AtlantisRankScaleChecks.RunAsync), // ATL-SLIDERS Atlantis rank sliders
+            (B26W16Checks.EndgameCheckName, B26W16Checks.RunEndgameAsync), // W16 end-game master switch
+            (B26W16Checks.ShopCheckName, B26W16Checks.RunShopsAsync), // W16 d125 mall purge, d126 Vigor
+            (B26W16Checks.NpcCheckName, B26W16Checks.RunNpcAsync), // W16 d128 silent NPC buttons
+            (B27MountDragonChecks.GearCheckName, B27MountDragonChecks.RunGearAsync), // B27 d138 mount gear upgrade
+            (B27MountDragonChecks.DragonCheckName, B27MountDragonChecks.RunDragonAsync), // B27 d139 dragon pieces
             (Round2Checks.CheckName, Round2Checks.RunAsync), // ROUND2
             ("Minimum client build login gate", LegacyAuthenticationProfileChecks.RunClientBuildAsync), // ROUND3
             ("Client build number recorded and logged", LegacyAuthenticationProfileChecks.RunClientBuildRecordingAsync), // ROUND-CLIENTBUILD

@@ -1015,7 +1015,7 @@ COLS = {
     "npc_function_templates": {"function_flag": ("Flag bit.", {}), "function_key": ("Flag name.", {}), "script_file": ("Client Lua file.", {})},
     "gm_npc_spawns": {"id": ("Row number.", {"edit_class": DERIVED}), "name": ("Name.", {}),
                       "template_key": ("NPC template.", {"ref": "npc_template"}), "dialogue_key": ("GM dialogue.", {"ref": "gm_dialogue"}),
-                      "waypoint_id": ("GM waypoint.", {"ref": "gm_waypoint"}), "appearance_type": ("Appearance type.", {})},
+                      "waypoint_id": ("GM waypoint.", {"ref": "gm_waypoint"}), "appearance_type": ("Appearance word; bits 8-9 = which camp can talk to the NPC: 17 (0x11) Sparta only, 273 (0x111) Athens only, 529 (0x211) both camps. 0 = both camps (W23).", {})},
     "gm_npc_dialogues": {"dialogue_key": ("Dialogue id.", {"ref": "gm_dialogue"}), "function_flag": ("Client dispatch value (85 = GM slot).", {}),
                          "entry_page": ("First page.", {})},
     "gm_npc_dialogue_pages": {"dialogue_key": ("Dialogue.", {"ref": "gm_dialogue"}), "page_index": ("Page.", {}), "body_text": ("Page text.", {})},

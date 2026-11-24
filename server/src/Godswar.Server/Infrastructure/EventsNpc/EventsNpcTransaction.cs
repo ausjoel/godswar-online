@@ -452,6 +452,50 @@ internal sealed class EventsNpcTransaction
         if (await write.ExecuteNonQueryAsync(_token) != 1) throw new InvalidOperationException("item row changed");
     }
 
+    // B22 B27-C: the Class Shifter's equipment shift (the admin d136).
+    /// <summary>
+    /// B27-C: the kit-bag item in one slot with its five append attributes (attribute1-5, null when unset) and its
+    /// two class attributes, locked; null when empty.
+    /// </summary>
+    public async Task<(long Id, int ItemId, bool Bound, short?[] Attributes, short?[] ClassAttributes)?>
+        ReadShiftSlotAsync(int slot)
+    {
+        await using var read = Command(
+            "SELECT id, prop_id, bound, attribute1, attribute2, attribute3, attribute4, attribute5, " +
+            "class_attribute1, class_attribute2 FROM public.character_items " +
+            "WHERE user_id = @c AND item_location = @l AND slot_index = @s FOR UPDATE;");
+        read.Parameters.AddWithValue("l", KitBagLocation);
+        read.Parameters.AddWithValue("s", (short)slot);
+        await using var reader = await read.ExecuteReaderAsync(_token);
+        if (!await reader.ReadAsync(_token)) return null;
+        short? At(int ordinal) => reader.IsDBNull(ordinal) ? null : reader.GetInt16(ordinal);
+        return (reader.GetInt64(0), reader.GetInt32(1), Convert.ToInt32(reader.GetValue(2)) != 0,
+            [At(3), At(4), At(5), At(6), At(7)], [At(8), At(9)]);
+    }
+
+    /// <summary>
+    /// B27-C: turns one owned item row into another item in one statement: new item id, bound, and the five append
+    /// attribute ids (the levels, quality, grade, holy sockets, class and elemental attributes, experience and expiry
+    /// are left exactly as they are).
+    /// </summary>
+    public async Task ShiftItemAsync(long rowId, int newItemId, short?[] attributes)
+    {
+        if (attributes.Length != 5) throw new ArgumentException("five attributes expected", nameof(attributes));
+        await using var write = Command(
+            "UPDATE public.character_items SET prop_id = @i, bound = 1, attribute1 = @a1, attribute2 = @a2, " +
+            "attribute3 = @a3, attribute4 = @a4, attribute5 = @a5, updated_at = now() WHERE id = @id AND user_id = @c;");
+        write.Parameters.AddWithValue("i", newItemId);
+        for (var index = 0; index < 5; index++)
+        {
+            write.Parameters.Add(new NpgsqlParameter($"a{index + 1}", NpgsqlTypes.NpgsqlDbType.Smallint)
+            {
+                Value = attributes[index] is { } value ? value : DBNull.Value
+            });
+        }
+        write.Parameters.AddWithValue("id", rowId);
+        if (await write.ExecuteNonQueryAsync(_token) != 1) throw new InvalidOperationException("item row changed");
+    }
+
     /// <summary>W2: remove one owned item row entirely.</summary>
     public async Task DeleteItemAsync(long rowId)
     {

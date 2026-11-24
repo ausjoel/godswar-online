@@ -337,6 +337,9 @@ internal static class DataArchitectureCheckCatalog
             MedusaTitleOrderChecks.CheckName,
             MedusaTitleOrderChecks.RunAsync),
         (
+            OutpostNpcCampChecks.CheckName, // W23
+            OutpostNpcCampChecks.RunAsync),
+        (
             "Legacy talent command envelope",
             LegacyTalentCommandEnvelopeChecks.RunAsync),
         (

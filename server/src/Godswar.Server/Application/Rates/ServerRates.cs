@@ -120,6 +120,7 @@ internal static class ServerRateKeys
     public const string ClassChangeEnabled = "npc.class_change";
     public const string ClassChangeFreeLevel = "npc.class_change_free_level";
     public const string ClassChangeInPlaceRefresh = "npc.class_change_refresh"; // FINALISE
+    public const string ClassShiftEquipmentEnabled = "npc.class_shift_equipment"; // B22 B27-C
     public const string WorldBossNotice = "event.world_boss_notice"; // FINALISE
     public const string GmObeyGates = "gm.obey_gates"; // FINALISE
     public const string BagGainLog = "log.bag_gains"; // FINALISE
@@ -432,10 +433,12 @@ internal static class ServerRateCatalog
         .. Godswar.Server.Application.Combat.AreaSkillBalance.Definitions, // B21 item 18 area skill balance
         .. Godswar.Server.Application.Combat.ClassFieldSkills.Definitions, // B22 B23-F class field skill, PvP share
         Godswar.Server.Application.Limits.GameLimitProfile.Definition, // W4F original/Origin limits toggle
+        Godswar.Server.Application.Limits.EndgameSwitch.Definition, // W16 end-game master switch (d129)
         .. Godswar.Server.Application.Troy.TroyEvent.Definitions, // W2 F-27 TROY
         .. Godswar.Server.Application.Troy.TroyBossChain.Definitions, // W2 F-27 TROY slice 2: heroes and chests
         .. Godswar.Server.Application.WorldInstances.WonderlandIslandScale.Definitions, // WL-SLIDERS: per-island HP/damage %
         .. Godswar.Server.Application.WorldInstances.AetherSanctumBossScale.Definitions, // B23-S: Sanctum boss HP/damage %
+        .. Godswar.Server.Application.WorldInstances.AtlantisRankScale.Definitions, // ATL-SLIDERS: Atlantis per-rank HP/damage %
         .. Godswar.Server.Application.Seasons.MidAutumnSeason.Definitions, // W3 seasons mid-autumn
         Absolute(
             ServerRateKeys.HolyBoxPerStoreMaximum, HolyBoxCategory, 20,
@@ -684,6 +687,15 @@ internal static class ServerRateCatalog
             "stats, talents, skills and look at once. Off: the player is logged out and sees the " +
             "change at the next login. Not yet tested with the real game: turn it off if the old " +
             "class still shows."),
+        // B22 B27-C (the admin d136): the weapon and armour shift. On by default: the release is the dll; off = the old menu.
+        Absolute(
+            ServerRateKeys.ClassShiftEquipmentEnabled, NpcServiceCategory, 40,
+            "Class Shifter shifts equipment", "0/1", 1m, 0m, 1m, 1m,
+            "Game/GameClientHandler.EquipmentShift.cs",
+            "Lets the Class Shifter shift equipment. On: a weapon becomes the same-level weapon of the " +
+            "chosen class, armour keeps its name, attack and spell bonuses swap over, and the item is bound. " +
+            "Above the class change free level each shift uses one Equipment Shift Permit. Class Suit items " +
+            "cannot be shifted. Off: he only shows his menu."),
         // PARTY (r02): the admin's rule - party members near the kill share the
         // kill-quest credit, and the kill EXP is split equally between them.
         Absolute(

@@ -532,6 +532,12 @@ internal sealed partial class GameClientHandler
             return;
         }
 
+        // B27 (d139): the Mid-autumn Gift Pack Giver's dragon-piece exchanges (switch item.finalise2_vouchers).
+        if (dialogIndex == SummerGiftEnvoyFunction && await TryHandleMidAutumnGiverAsync(npc, subId, packet, cancellationToken))
+        {
+            return;
+        }
+
         // W3 seasons: the Thanksgiving Envoy's exchange forms (season "thanksgiving").
         if (dialogIndex == ThanksgivingFunction && await TryHandleThanksgivingAsync(npc, subId, packet, cancellationToken))
         {
@@ -625,6 +631,20 @@ internal sealed partial class GameClientHandler
                 dialogue,
                 dialogIndex,
                 selection,
+                cancellationToken))
+        {
+            return;
+        }
+
+        // B22 B27-C: the Class Shifter's weapon page and weapon buttons; off (returns false) unless enabled.
+        if (await TryHandleEquipmentShiftAsync(
+                npc,
+                dialogue,
+                dialogIndex,
+                subId,
+                selection,
+                pageSelection,
+                packet,
                 cancellationToken))
         {
             return;
@@ -750,6 +770,11 @@ internal sealed partial class GameClientHandler
         IReadOnlyList<int> reply,
         CancellationToken cancellationToken)
     {
+        if (_character is not null && reply is int[] fixedReply) // W16: faction-told pages (battlefield crier)
+        {
+            reply = CampVariantReply(dialogue.FunctionNumber, fixedReply, _character.Camp);
+        }
+
         await _session.SendAsync(
             PacketBuilder.NpcFunctionActionResponse(
                 npc.InteractionId,

@@ -178,10 +178,12 @@ These apply to every write, whatever the table:
   | `medusa_reward_revision` | selected_title_id |
   | `fighter_level_seal_revision` | fighter_level_sealed |
   | `character_pets.revision`, stat / skill `revision` | every changed pet row |
-  | `character_talents.outbox_revision` | a changed talent row (the outbox stream is `ordered_sparse`, so gaps are allowed) |
 
   Undo / Restore also move counters forward and never back. That avoids `UNIQUE (character_id,
   wallet_revision, currency_code)` collisions in the ledgers.
+  * **W15: `character_talents.outbox_revision` is never written** (Undo, Restore or edit). The talent outbox
+    stream is `strict`: a moved counter without an event left a hole the server waited on forever (live,
+    character 13 talent 150, 31 Oct). The server numbers talent events from the stream itself.
 * **`warehouse_revision` is special.** It may only advance together with a capacity increase, and that
   increase needs a `warehouse_expansion_settlements` row (triggers `guard_character_warehouse_capacity` and
   `require_warehouse_capacity_evidence`). The editor never writes either column.

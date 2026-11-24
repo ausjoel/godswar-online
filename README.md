@@ -62,6 +62,10 @@ See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
 `GODSWAR_EDITION=classic` runs the original game's limits; `reborn` (default) lifts them
 (gear quality 20 / grade 25). See [docs/EDITIONS.md](docs/EDITIONS.md).
 
+The end-game (Class Suit IV to VII, +21 to +25 with the rare gems, weapon ranks 11 to 14) has one hot master
+switch, `endgame.enabled` (0 off, 1 on, 2 = the two older switches decide). On a new server set it to 1 or 0.
+See [docs/ENDGAME.md](docs/ENDGAME.md).
+
 ## Credits
 
 The server descends from open-source work: [godswar-server-reborn](https://github.com/hejing900/godswar-server-reborn)

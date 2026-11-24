@@ -1,0 +1,95 @@
+{
+ "items": {
+  "1518": [
+   {
+    "item": 3876,
+    "slot": 0
+   }
+  ],
+  "1519": [
+   {
+    "item": 1000,
+    "slot": 0
+   },
+   {
+    "item": 1400,
+    "slot": 1
+   },
+   {
+    "item": 1700,
+    "slot": 2
+   },
+   {
+    "item": 1800,
+    "slot": 3
+   }
+  ],
+  "1520": [
+   {
+    "item": 2100,
+    "slot": 0
+   }
+  ],
+  "518": [
+   {
+    "item": 3876,
+    "slot": 0
+   }
+  ],
+  "519": [
+   {
+    "item": 1000,
+    "slot": 0
+   },
+   {
+    "item": 1400,
+    "slot": 1
+   },
+   {
+    "item": 1700,
+    "slot": 2
+   },
+   {
+    "item": 1800,
+    "slot": 3
+   }
+  ],
+  "520": [
+   {
+    "item": 2100,
+    "slot": 0
+   }
+  ]
+ },
+ "mycenae": {
+  "item": 4232,
+  "quantity": 8,
+  "quests": [
+   1813,
+   1814,
+   1815,
+   1816,
+   1983,
+   1984,
+   1985,
+   1986
+  ]
+ },
+ "source": "server/src/Godswar.Server: PacketBuilder.QuestAnswerFrames.Generated.cs, StarterQuestRewardRecords.cs, TitleExpertPolicy.cs, MycenaeBossPolicy.cs",
+ "titles": {
+  "1012": 2000,
+  "1116": 2001,
+  "1118": 2002,
+  "1122": 2005,
+  "116": 2501,
+  "118": 2502,
+  "12": 2500,
+  "1217": 2003,
+  "122": 2505,
+  "1221": 2004,
+  "1376": 2506,
+  "217": 2503,
+  "221": 2504,
+  "376": 2506
+ }
+}

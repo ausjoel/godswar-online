@@ -12,6 +12,7 @@
 <section class="band">
   <div class="container">
     {{ dl.cards() }}
+    <p class="small"><b>Launcher 1.0.5 (25 Nov):</b> a new launcher window in the style of the original GodsWar launcher, with the latest news, server status, a progress bar, <b>Update</b> (updates the launcher and the game), <b>Settings</b> (character models V1 or V2; on a Mac also Wine or Native) and <b>START</b>. On a Mac the first start still asks Wine or Native (Beta); hold <kbd>Option</kbd> while opening it to change that. Your launcher updates itself. On Windows, if you had launcher 1.0.4, a blank black window stays open behind the new one until you download the launcher again from this page and replace the old one.</p>
   </div>
 </section>
 <section class="band alt">
@@ -29,11 +30,13 @@
     <div class="panel">
       <h2>First time on Windows</h2>
       <ol>
-        <li>Run <b>GodsWar-Launcher-windows.exe</b> from anywhere.</li>
-        <li>If Windows says it protected your PC, click <b>More info</b>, then <b>Run anyway</b>. Allow it through the firewall if asked.</li>
+        <li>Run <b>GodsWar-Launcher-windows.exe</b> from anywhere. Always start the game from the launcher: it installs its own copy and keeps it up to date. A game zip you unzip yourself never gets updates.</li>
+        <li>The launcher isn't code-signed, so SmartScreen may say "Windows protected your PC". Click <b>More info</b>, then <b>Run anyway</b>. Allow it through the firewall if asked.</li>
+        <li>If your PC doesn't have Microsoft's Visual C++ 2005 runtime, the launcher installs it the first time. Windows shows one prompt ("Win32 Cabinet Self-Extractor", from Microsoft Corporation): click <b>Yes</b>.</li>
         <li>Wait for the first download. The game opens when it is ready.</li>
       </ol>
-      <p class="small">Game closes straight away or mentions MSVCR80 or d3dx9? Install Microsoft's Visual C++ 2005 Redistributable (x86) and the DirectX End-User Runtime. Full steps: <a href="/static/player-guide.html">install help</a>.</p>
+      <p class="small">After the first download, updates fetch only the files that changed, not the whole game.</p>
+      <p class="small">Clicked <b>No</b> on that prompt, or Windows still says <b>MSVCP80.dll</b> is missing? Install the <b>Visual C++ 2005 SP1 Redistributable (x86)</b> from <a href="https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist#visual-studio-2005-vc-80-sp1-no-longer-supported" rel="noopener">Microsoft's download page</a>, then start the launcher again. If the game mentions d3dx9, install Microsoft's DirectX End-User Runtime. Full steps: <a href="/static/player-guide.html">install help</a>.</p>
     </div>
   </div>
 </section>

@@ -31,6 +31,7 @@
       let sel = new Set(), D = null, group = "hp", anchor = "middle";
       let curves = { hp: [[1, 1], [200, 1]], attack: [[1, 1], [200, 1]], defence: [[1, 1], [200, 1]], rating: [[1, 1], [200, 1]] };
       const mapBox = h("div", { class: "gw-cv-maps" }), presetBox = h("div", { class: "gw-cv-presets" });
+      const sliderBox = h("section", { class: "gw-cv-sliders", hidden: true });
       const calcBox = h("section", { class: "gw-cv-calc" });
       const curveEl = h("div", { class: "gw-cv-curve" }), plotEl = h("div", { class: "gw-cv-plot" }), info = h("div", { class: "gw-cv-info" });
       const groupSel = h("select", { "aria-label": "Curve", onchange: e => { group = e.target.value; drawCurve(); drawPlot(); } }, Object.entries(GROUPS).map(([k, v]) => h("option", { value: k }, v)));
@@ -38,7 +39,7 @@
         h("option", { value: "lowest" }, "lowest level"), h("option", { value: "middle", selected: true }, "middle level"), h("option", { value: "highest" }, "highest level"));
       el.append(
         h("p", { class: "gw-dim" }, "1. Tick maps (or load a preset). 2. Pick a curve and drag its points (double-click the curve to add a point, double-click a point to remove it). 3. Preview, then Write. HP is written per spawn; attack / defence / ratings per monster type and map (the server ignores template HP). Level is never changed. Everything applies after a gw251 restart. ", GW.appliesChip("after_restart")),
-        h("h3", null, "Presets"), presetBox, h("h3", null, "Maps"), mapBox,
+        h("h3", null, "Presets"), presetBox, h("h3", null, "Maps"), mapBox, sliderBox,
         h("div", { class: "gw-cv-bar" }, h("label", null, "Curve ", groupSel), h("label", { "data-help": "One monster type can spawn at several levels on one map; its attack/defence row is computed at this level." }, "Several levels: use the ", anchorSel),
           h("button", { class: "gw-btnx", type: "button", onclick: previewNow }, "Preview"), h("button", { class: "gw-btnx", type: "button", onclick: write }, "Write")),
         h("div", { class: "gw-cv-graphs" }, curveEl, plotEl), info, calcBox);
@@ -62,7 +63,7 @@
           if (mapSec !== "all" && g.section !== mapSec) continue;
           const maps = g.maps.filter(m => !mapQ || (m.name + " " + m.map_id + " " + (m.scene || "")).toLowerCase().includes(mapQ));
           if (!maps.length) continue;
-          const tickable = maps.filter(m => !m.view_only), allOn = tickable.length > 0 && tickable.every(m => sel.has(m.map_id));
+          const tickable = maps.filter(m => !m.view_only && !m.sliders), allOn = tickable.length > 0 && tickable.every(m => sel.has(m.map_id));
           mapBox.append(h("div", { class: "gw-cv-sechead" }, h("b", null, g.title), h("span", { class: "gw-dim" }, " " + maps.length + " maps "),
             h("button", { type: "button", class: "gw-btnx small", onclick: async () => { for (const m of tickable) { if (allOn) sel.delete(m.map_id); else sel.add(m.map_id); } drawMaps(); await reload(); } }, allOn ? "Untick all" : "Tick all")));
           const grid = h("div", { class: "gw-cv-tiles" });
@@ -70,7 +71,17 @@
             const on = sel.has(m.map_id), lv = m.levels;
             const meta = h("div", { class: "gw-dim" }, (lv ? "Lv ~" + lv[2] + (lv[0] === lv[1] ? "" : " (" + lv[0] + "-" + lv[1] + ")") + " · " : "") +
               (m.view_only ? (m.templates || 0) + " monster types" : (m.spawns != null ? m.spawns : m.published + m.gm) + (m.medusa && !(m.published + m.gm) ? " monsters" : " spawns")));
-            if (m.view_only) {      // Atlantis / Wonderland: the server makes these monsters in code (modules/curves.py VIEW_ONLY)
+            if (m.sliders) {        // Atlantis / Wonderland: monsters made in code; HP % / damage % sliders (modules/curves.py SLIDER_MAPS)
+              const open = () => openSliders(m);
+              grid.append(h("div", { class: "gw-cv-tile slider" + (sliderMap === m.map_id ? " on" : ""), role: "button", tabindex: 0,
+                title: m.name + " (map " + m.map_id + "): HP and damage sliders. " + m.why,
+                onclick: open, onkeydown: e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } } },
+                m.thumb ? h("img", { src: m.thumb, alt: "", loading: "lazy" }) : h("div", { class: "gw-cv-nothumb" }, "#" + m.map_id),
+                h("div", { class: "gw-cv-tname" }, h("span", { class: "gw-chip", "data-help": m.why }, "Sliders"), " " + m.name),
+                h("div", { class: "gw-dim" }, (m.templates || 0) + " monster types · HP % and damage %")));
+              continue;
+            }
+            if (m.view_only) {
               grid.append(h("div", { class: "gw-cv-tile locked", role: "button", tabindex: 0, title: m.name + " (map " + m.map_id + "): view only. " + m.why,
                 onclick: () => GW.alert(m.why, m.name + ": view only"), onkeydown: e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); GW.alert(m.why, m.name + ": view only"); } } },
                 m.thumb ? h("img", { src: m.thumb, alt: "", loading: "lazy" }) : h("div", { class: "gw-cv-nothumb" }, "#" + m.map_id),
@@ -85,6 +96,53 @@
           }
           mapBox.append(grid);
         }
+      }
+      // ---- Atlantis / Wonderland sliders: server_rates rows, saved through the Server rates write (Undo in the Change log)
+      let sliderMap = null;
+      async function openSliders(m) {
+        if (sliderMap === m.map_id) { sliderMap = null; sliderBox.hidden = true; drawMaps(); return; }
+        sliderMap = m.map_id; drawMaps();
+        GW.clear(sliderBox).append(h("p", { class: "gw-dim" }, "Loading " + m.name + "..."));
+        sliderBox.hidden = false;
+        let S;
+        try { S = await ctx.api("sliders", { map: m.map_id }); } catch (e) { GW.clear(sliderBox).append(h("p", { class: "gw-dim" }, "Could not read the sliders: " + String(e.message || e))); return; }
+        drawSliders(m, S);
+        sliderBox.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      function drawSliders(m, S) {
+        const inputs = {};
+        GW.clear(sliderBox).append(
+          h("h3", null, m.name + ": HP and damage"),
+          h("p", { class: "gw-dim" }, S.why + " " + S.applies + " ", GW.appliesChip("hot_reload")));
+        if (S.note) sliderBox.append(h("p", { class: "gw-dim" }, h("b", null, S.note)));
+        const table = h("div", { class: "gw-cv-slgrid" });
+        for (const u of S.units) {
+          const cells = u.rows.map(r => {
+            const num = h("input", { type: "number", min: r.min, max: r.max, step: r.step, value: r.value, disabled: !r.present || null,
+              "aria-label": u.title + " " + (r.kind === "hp" ? "HP" : "damage") + " percent" });
+            const rng = h("input", { type: "range", min: r.min, max: r.max, step: r.step, value: r.value, disabled: !r.present || null,
+              "aria-label": u.title + " " + (r.kind === "hp" ? "HP" : "damage") + " slider" });
+            const mark = () => { const ch = Number(num.value) !== r.value; num.classList.toggle("changed", ch); rng.classList.toggle("changed", ch); };
+            rng.oninput = () => { num.value = rng.value; mark(); };
+            num.oninput = () => { rng.value = num.value; mark(); };
+            inputs[r.key] = { num, r };
+            return h("label", { class: "gw-cv-slcell", "data-help": r.description }, (r.kind === "hp" ? "HP %" : "Damage %") + " ", rng, num);
+          });
+          table.append(h("div", { class: "gw-cv-slrow" }, h("div", null, h("b", null, u.title), h("div", { class: "gw-dim" }, u.stock)), ...cells));
+        }
+        const note = h("input", { type: "text", placeholder: "Note (optional)", "aria-label": "Note", maxlength: 200 });
+        sliderBox.append(table, h("div", { class: "gw-cv-bar" },
+          h("button", { class: "gw-btnx", type: "button", onclick: () => { for (const k in inputs) { inputs[k].num.value = 100; inputs[k].num.oninput(); } } }, "All 100 (normal)"),
+          note,
+          h("button", { class: "gw-btnx", type: "button", disabled: S.missing.length === S.units.length * 2 || null, onclick: async () => {
+            const values = {}, expected = {};
+            for (const k in inputs) { const v = Number(inputs[k].num.value); if (v !== inputs[k].r.value) { values[k] = v; expected[k] = inputs[k].r.value; } }
+            if (!Object.keys(values).length) { GW.alert("Nothing changed.", m.name); return; }
+            try {
+              GW.writeDone(await ctx.api("sliders_save", { map: m.map_id, values, expected, note: note.value }), m.name + " sliders saved");
+              drawSliders(m, await ctx.api("sliders", { map: m.map_id }));
+            } catch (e) { await GW.writeError(e); }
+          } }, "Save")));
       }
       async function reload() {
         if (!sel.size) { D = null; drawCurve(); drawPlot(); return; }

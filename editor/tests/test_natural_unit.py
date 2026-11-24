@@ -9,8 +9,11 @@ CONTENT = {"skills": [{"id": 1, "name": "Slash", "classes": [0], "minlv": 40}, {
 META = {100: {"name": "Sword", "server": True, "overlap": 1, "slot": 1, "minlv": 60, "classes": [3]},
         200: {"name": "Potion", "server": True, "overlap": 99, "slot": -1, "minlv": 0, "classes": []},
         300: {"name": "Ghost", "server": False, "overlap": 1, "slot": -1, "minlv": 0, "classes": []}}
-CLIENT = {"100": {"max_quality": 10, "max_grade": 12, "append_attributes": [40]}}
-ATTRS = {"40": {"max": 25}, "50": {"max": 25}}
+CLIENT = {"100": {"max_quality": 10, "max_grade": 12, "append_attributes": [40]},
+          "400": {"max_quality": 20, "max_grade": 25, "append_attributes": ["10", "11", 130]}}
+ATTRS = {"40": {"max": 25}, "50": {"max": 25}, "10": {"max": 25}, "14": {"max": 25}, "20": {"max": 25}, "24": {"max": 25},
+         "134": {"max": 25}, "999": {"max": 25}}
+META[400] = {"name": "Girdle", "server": True, "overlap": 1, "slot": 5, "minlv": 1, "classes": []}
 
 
 def item(**kw):
@@ -77,6 +80,28 @@ class Natural(unittest.TestCase):
         self.assertEqual(rules(self.items(item(prop_id=100, attribute1=50, attribute_level1=26))), ["attribute", "attribute-level"])
         self.assertEqual(rules(self.items(item(holy_socket_count=5))), ["sockets"])
         self.assertEqual(rules(self.items(item(holy_socket_count=1, holy_socket1_level=11))), ["holy-level"])
+
+    def test_enhanced_attribute_is_the_family_the_item_rolls(self):
+        # the item rolls Physical Defense as 10/11 (Shield Stone family 10-14); Quartz enhancing reaches 14
+        for a in (10, 12, 14, 134):
+            self.assertEqual(self.items(item(prop_id=400, attribute1=a, attribute_level1=1)), [], a)
+
+    def test_wrong_family_attribute_is_still_flagged(self):
+        # Spell Attack (Magic Stone 20-24) is not a family this item rolls, enhanced or not
+        for a in (20, 24):
+            out = self.items(item(prop_id=400, attribute1=a, attribute_level1=1))
+            self.assertEqual(rules(out), ["attribute"], a)
+
+    def test_unknown_attribute_matches_only_itself(self):
+        self.assertEqual(rules(self.items(item(prop_id=400, attribute1=999, attribute_level1=1))), ["attribute"])
+        self.assertEqual(rules(self.items(item(prop_id=100, attribute1=40, attribute_level1=1))), [])
+
+    def test_same_rule_as_item_legality(self):
+        from modules import _attribute_families as AF
+        self.assertTrue(AF.rolls_on(14, ["10", 11]))
+        self.assertFalse(AF.rolls_on(24, [10, 11]))
+        self.assertTrue(AF.rolls_on(999, [999]))
+        self.assertFalse(AF.rolls_on(998, [999]))
 
     def test_pets(self):
         pet = dict(id=1, name="p", activity_state="owned", level=1, experience=0, rank=1)

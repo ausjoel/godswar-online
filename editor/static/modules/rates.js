@@ -27,7 +27,10 @@
   const isMult = r => r.kind === "multiplier";
   const isSwitch = r => r.unit === "0/1" || (r.kind !== "multiplier" && Number(r.min_value) === 0 && Number(r.max_value) === 1);
   const isBp = r => r.unit === "basis points";      // stored in 1/100 of a percent: always say the percent too
-  const valText = (r, v) => isMult(r) ? "x" + fmtN(v) : isSwitch(r) ? (Number(v) ? "on" : "off") : isBp(r) ? fmtN(v) + " (" + fmtN(Number(v) / 100) + "%)" : fmtN(v) + (r.unit ? " " + r.unit : "");
+  // a setting whose numbers name modes: the value is shown as the mode's name (the end-game master switch)
+  const MODES = { "endgame.enabled": ["off", "on", "separate switches"] };
+  const modeText = (r, v) => (MODES[r.rate_key] || [])[Number(v)];
+  const valText = (r, v) => modeText(r, v) ? Number(v) + " = " + modeText(r, v) : isMult(r) ? "x" + fmtN(v) : isSwitch(r) ? (Number(v) ? "on" : "off") : isBp(r) ? fmtN(v) + " (" + fmtN(Number(v) / 100) + "%)" : fmtN(v) + (r.unit ? " " + r.unit : "");
   // a stock setting stored in internal units (scale 10000 = basis points) is shown and edited as value / scale
   const stockText = (s, v) => v === null || v === undefined ? "(empty)" : s.scale ? ((s.shown || {}).prefix || "") + fmtN(Number(v) / s.scale) : fmtN(v);
   // the server's description in the house style: "On: / Off: / Needs:" start their own line

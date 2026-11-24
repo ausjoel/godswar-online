@@ -260,6 +260,10 @@ internal sealed class ManagementHttpServer
                     cancellationToken),
                 // RATES: current server-rates snapshot (loopback only).
                 "/rates" => RatesResponse(),
+                // S5b: instance reward settlements parked since start (deterministic rejections, long outages).
+                // The VPS health check alerts when "total" grows. Ids and statuses only, no secrets.
+                "/settlement/parked" => FixedResponse(200, "OK",
+                    Encoding.UTF8.GetBytes(Godswar.Server.Application.WorldInstances.ParkedSettlements.DescribeJson())),
                 "/npc-content" => await NpcContentResponseAsync(NpcContentOverrides.DescribeHook, cancellationToken),
                 "/event-content" => await NpcContentResponseAsync(NpcContentOverrides.DescribeEventsHook, cancellationToken),
                 "/gate-content" => await NpcContentResponseAsync(NpcContentOverrides.DescribeGatesHook, cancellationToken), // FINALISE2

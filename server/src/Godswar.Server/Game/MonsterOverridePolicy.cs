@@ -113,7 +113,7 @@ internal static class MonsterOverridePolicy
             return false;
         }
 
-        overrides = (hasTemplate ? template : MonsterAttributeOverride.None)
+        overrides = (hasTemplate ? template.WithAttackSwitches() : MonsterAttributeOverride.None)
             .Overlay(hasEdit ? edit.Attributes : MonsterAttributeOverride.None);
         return !overrides.IsEmpty;
     }

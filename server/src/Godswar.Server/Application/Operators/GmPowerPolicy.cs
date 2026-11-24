@@ -74,6 +74,8 @@ internal static class GmPowerPolicy
             "Teleports the GM or another player, online or logged out."),
         new("cmd.leave", "travel", "/leave", "Leaves the current instance run."),
         new("cmd.testrun", "travel", "/testrun ...", "Starts a private test run of an instance."),
+        new("cmd.wlclear", "travel", "/wlclear", // WL-SLIDERS / EDITOR-SMOKE: the rig aid was missing from the catalogue
+            "Test servers only (GODSWAR_RIG_TEST_RUNS=1): kills every enemy of the current Wonderland island."),
         new("cmd.where", "travel", "/where [name]", "Shows a map number and position."),
         new("cmd.instances", "travel", "/instances", "Lists every running world instance and who is inside."),
 

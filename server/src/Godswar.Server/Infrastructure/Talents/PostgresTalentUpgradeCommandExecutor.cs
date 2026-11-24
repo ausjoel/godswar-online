@@ -257,8 +257,17 @@ internal sealed partial class PostgresTalentUpgradeCommandExecutor :
         var newRank = checked(currentRank + 1);
         var remainingPoints =
             checked(character.Value.TalentPoints - cost);
-        var aggregateRevision =
-            checked((talent?.OutboxRevision ?? 0) + 1);
+        // W15: the event version comes from the outbox stream itself, not from
+        // character_talents.outbox_revision + 1. An outside write that moved
+        // outbox_revision without an event (gwadmin-web Undo / Restore moved it
+        // forward) left a hole in this strict stream, and the dispatcher waited for
+        // the missing version forever (live: character 13 talent 150, 12 events
+        // queued since 31 Oct). A deleted talent row no longer restarts at 1 either.
+        var aggregateRevision = await ReadNextStreamVersionAsync(
+            connection,
+            transaction,
+            aggregateKey,
+            cancellationToken);
         var eventId = Guid.NewGuid();
 
         var auditId = await InsertAuditAsync(
@@ -307,6 +316,7 @@ internal sealed partial class PostgresTalentUpgradeCommandExecutor :
             envelope,
             newRank,
             remainingPoints,
+            aggregateRevision,
             cancellationToken);
         if (persistedRevision != aggregateRevision)
         {

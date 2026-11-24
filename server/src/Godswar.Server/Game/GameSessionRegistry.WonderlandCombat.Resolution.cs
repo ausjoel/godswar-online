@@ -64,8 +64,11 @@ internal sealed partial class GameSessionRegistry
             // B23-S: the Aether Sanctum boss damage % slider (default 200), every hit a Sanctum boss lands.
             return ordinary.Damage == 0 ? ordinary : ordinary with
             {
-                Damage = AetherSanctumBossScale.ScaleDamage(attack.Monster.Definition.MapId,
-                    attack.Monster.Definition.TemplateKey, ordinary.Damage)
+                // ATL-SLIDERS: the Atlantis rank damage % slider (default 100), every hit an Atlantis wave monster lands.
+                Damage = AtlantisRankScale.ScaleDamage(attack.Monster.Definition.MapId, attack.Monster.ObjectId,
+                    attack.Monster.Definition.TemplateKey,
+                    AetherSanctumBossScale.ScaleDamage(attack.Monster.Definition.MapId,
+                        attack.Monster.Definition.TemplateKey, ordinary.Damage))
             };
         }
         var targetStats = MonsterIncomingCombatPolicy.ResolveTargetStats(target.Character, mitigation);

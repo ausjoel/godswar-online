@@ -35,7 +35,7 @@ internal static class GodGemLootRule
     /// <summary>Deterministic per death; null = no gem.</summary>
     public static uint? TryRoll(string templateKey, Guid deathEventId, ServerRatesSnapshot rates)
     {
-        if (deathEventId == Guid.Empty || rates.Get(Finalise2RateKeys.GodGemDrops) < 1m || !IsListed(templateKey))
+        if (deathEventId == Guid.Empty || !Godswar.Server.Application.Limits.EndgameSwitch.GodGemDrops(rates) /* W16 master */ || !IsListed(templateKey))
         {
             return null;
         }

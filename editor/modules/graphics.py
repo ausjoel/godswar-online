@@ -278,6 +278,8 @@ def still(ctx):
 @M.get("mapimage")
 def mapimage(ctx):
     mid = ctx.qint("id", None, 0, 100000)
+    if mid is None:                     # EDITOR-SMOKE: was a 500 (TypeError in "%d" % None) without ?id=
+        raise Bad("id is required (the map number)")
     kind = ctx.q("kind", "terrain")
     if kind not in ("terrain", "minimap"):
         raise Bad("kind is terrain or minimap")

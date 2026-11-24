@@ -114,7 +114,7 @@ internal static class DuelArenaSpawnStreamChecks
             Check.True(
                 length == AppearancePacketLength &&
                 opcode == AppearanceOpcode &&
-                objectType == ArenaNpcObjectType &&
+                objectType == PacketBuilder.SentNpcWord(ArenaNpcObjectType, wanted.TemplateKey[..wanted.TemplateKey.LastIndexOf('_')]) && // W24/W25
                 objectId == wanted.ObjectId &&
                 x == wanted.X &&
                 y == 0f &&

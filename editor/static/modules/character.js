@@ -576,12 +576,16 @@
       const delLabel = h("label", { class: "gw-dim", "data-help": "Accounts deleted in the editor stay for 30 days (nobody can log in, the name stays taken) and can be restored. Tick to list them." }, showDel, " Show deleted");
       const holdsBox = h("details", { class: "gw-ch-holds" }, h("summary", { "data-help": "User names nobody can register again: the old names of renamed accounts, the names of deleted accounts and names reserved by hand. The game's first-login registration, the sign-up site and this editor all refuse them." }, "Held user names"));
       holdsBox.addEventListener("toggle", () => { if (holdsBox.open) this.loadHolds(holdsBox); });
+      // W23: accounts deleted completely, each with a one-click Restore from its backup
+      const fullBox = h("details", { class: "gw-ch-holds" }, h("summary", { "data-help": "Accounts removed with Delete completely. Each one has a full backup; Restore puts the account, its characters and every row back exactly as they were." }, "Deleted completely"));
+      fullBox.addEventListener("toggle", () => { if (fullBox.open) this.loadFullDeletes(fullBox); });
+      this.fullBox = fullBox;
       this.accDetail = h("section", { class: "gw-frame-normalwindow gw-win gw-ch-accdetail" }, h("div", { class: "gw-wtitle" }, "Account"));
       const newBtn = h("button", { class: "gw-btnx", type: "button", disabled: !this.d.writable || null, "data-help": "Make a new login (user name + password), written exactly like the game server's own first-login registration." }, "+ New account");
       newBtn.addEventListener("click", () => this.newAccount());
       this.body.append(h("div", { class: "gw-ch-accgrid" },
         h("section", { class: "gw-frame-normalwindow gw-win gw-ch-accleft" }, h("div", { class: "gw-wtitle" }, "Accounts"),
-          h("div", { class: "gw-ch-acctools" }, newBtn, search, count, delLabel), list, holdsBox),
+          h("div", { class: "gw-ch-acctools" }, newBtn, search, count, delLabel), list, holdsBox, fullBox),
         this.accDetail));
       this.accList = list; this.accCount = count;
       let t = null;
@@ -722,7 +726,11 @@
             "data-help": softOk ? "Hide the account and make it unusable. It can be restored for 30 days; then the purge timer removes it for good (after a database backup). The user name can never be registered again." : "Needs the server release with migration 240 (name holds and deletions).",
             onclick: () => this.deleteAccount(a, "soft") }, "Delete account (restorable 30 days)"),
           softOk ? null : h("span", { class: "gw-dim" }, "needs the server update (migration 240)")),
-        h("details", null, h("summary", null, "Delete now, for good (advanced)"), delBox));
+        h("div", { class: "gw-ch-line" },
+          h("button", { class: "gw-btnx danger", type: "button", disabled: ro || null,
+            "data-help": "Removes the account, all its characters, everything that belongs to them and its sign-up site record, now.\n• A full backup of every row is written first.\n• Restore puts it all back in one click (Deleted completely, in the account list).\n• Refused while the account is logged in. The user name stays held.",
+            onclick: () => this.fullDelete(a) }, "Delete account completely")),
+        h("details", null, h("summary", null, "Older delete options (advanced)"), delBox));
       this.ctx.api("account/" + a.id + "/delete-plan").then(P => {
         if (!this.acct || this.acct.id !== a.id) return;
         a._notRestorable = P.not_restorable || [];
@@ -817,6 +825,57 @@
         if (mode === "delete" || mode === "wipe") { await this.loadAccounts(""); GW.clear(this.accDetail).append(h("div", { class: "gw-wtitle" }, "Account"), h("p", { class: "gw-dim" }, "Account " + a.username + " was deleted. Undo is in the change log (and on the bar above).")); }
         else this.afterAccount(r);
       } catch (e) { await GW.writeError(e); }
+    },
+    // W23: delete an account completely (plan first, typed confirmation) and restore it from its backup
+    async fullDelete(a) {
+      let P;
+      GW.status("Checking everything that belongs to " + a.username + " ...");
+      try { P = await this.ctx.api("account/" + a.id + "/full-delete-plan"); } catch (e) { await GW.writeError(e); return; }
+      GW.status("");
+      const tbl = h("table", { class: "gw-ch-deltbl" }, h("tr", null, h("th", null, "Table"), h("th", null, "Rows"), h("th", null, "Why")),
+        P.tables.map(t => h("tr", null, h("td", { "data-help": t.label || t.table }, t.table.replace(/^public\./, "")), h("td", null, fmt(t.rows)),
+          h("td", null, { cascade: "belongs to the account", evidence: "kill / loot / claim record", "sign-up site": "sign-up site", "by number": "holds its number" }[t.why] || t.why))));
+      const kept = h("ul", { class: "gw-dim" }, P.kept.filter(k => !/_ids$/.test(k.column)).map(k => h("li", null, k.qt.replace(/^public\./, "") + "." + k.column + ": " + k.why)));
+      if (!P.can_delete) {
+        await GW.confirm({ title: "Delete completely", ok: "OK", cancel: false, el: h("div", { class: "gw-mod-character" }, h("p", { class: "tt-bad" }, "Account " + a.username + " cannot be deleted completely:"),
+          h("ul", null, P.blockers.map(b => h("li", null, b)))) });
+        return;
+      }
+      const inp = h("input", { class: "gw-ch-input", "aria-label": "Type the user name", autocomplete: "off" });
+      const ok = await GW.confirm({ title: "Delete " + a.username + " completely?", danger: true, ok: "Delete completely",
+        el: h("div", { class: "gw-mod-character" },
+          h("p", null, "Account " + a.username + ", its characters (" + (P.account.characters.join(", ") || "none") + ") and " + fmt(P.total_rows) + " rows in " + P.tables.length + " tables are removed now, also from the sign-up site. A backup of every row is written first; Restore (Deleted completely, in the account list) puts it all back."),
+          h("details", null, h("summary", null, "What is removed"), tbl),
+          h("details", null, h("summary", null, "What stays, and why"), kept),
+          (P.unreviewed || []).length ? h("p", { class: "gw-dim" }, "Not checked (left alone): " + P.unreviewed.map(u => u.qt + "." + u.column).join(", ")) : null,
+          h("p", null, "Type ", h("b", null, a.username), " to confirm:"), inp) });
+      if (!ok) return;
+      try {
+        const r = await this.ctx.api("account/" + a.id + "/full-delete", { confirm: inp.value });
+        this.acct = null;                       // gone: the change event must not reload it
+        this.done(r);
+        GW.alert(r.note + (a.id === this.d.base.account_id ? "\n\nThis page's character belonged to it: choose another character in the top bar." : ""), "Account deleted completely");
+        await this.loadAccounts("");
+        GW.clear(this.accDetail).append(h("div", { class: "gw-wtitle" }, "Account"), h("p", { class: "gw-dim" }, "Account " + a.username + " was deleted completely. Restore it from Deleted completely in the account list."));
+        if (this.fullBox) { this.fullBox.open = true; this.loadFullDeletes(this.fullBox); }
+      } catch (e) { await GW.writeError(e); }
+    },
+    async loadFullDeletes(box) {
+      let r;
+      for (const x of Array.from(box.children)) if (x.tagName !== "SUMMARY") x.remove();
+      try { r = await this.ctx.api("full-deletes"); } catch (e) { box.append(h("p", { class: "tt-bad" }, e.message)); return; }
+      if (!r.backups.length) { box.append(h("p", { class: "gw-dim" }, "No account has been deleted completely.")); return; }
+      for (const b of r.backups) {
+        box.append(h("div", { class: "gw-ch-line" },
+          h("span", null, h("b", null, b.username), " #" + b.account_id + " · " + (b.characters.map(c => c.name).join(", ") || "no characters") + " · " + when(b.created) + " · " + fmt(b.rows) + " rows"),
+          b.restored ? h("span", { class: "gw-chip now", "data-help": "This account number exists again (restored)." }, "restored")
+            : h("button", { class: "gw-btnx small", type: "button", disabled: !r.writable || null, "data-help": "Put the account, its characters and every row back from this backup, exactly as they were.", onclick: () => this.restoreFull(b, box) }, "Restore")));
+      }
+    },
+    async restoreFull(b, box) {
+      if (!await GW.confirm({ title: "Restore " + b.username + "?", message: "Account " + b.username + " comes back with its characters (" + (b.characters.map(c => c.name).join(", ") || "none") + ") and all " + fmt(b.rows) + " rows, as they were when it was deleted. The old password works.", ok: "Restore" })) return;
+      try { const r = await this.ctx.api("full-deletes/restore", { file: b.file }); this.done(r); GW.status(r.note, "ok"); this.loadFullDeletes(box); this.afterAccount(r); }
+      catch (e) { await GW.writeError(e); }
     },
     async restoreAccount(a) {
       if (!await GW.confirm({ title: "Restore " + a.username + "?", message: "The account can log in again with its old password and characters.", ok: "Restore" })) return;

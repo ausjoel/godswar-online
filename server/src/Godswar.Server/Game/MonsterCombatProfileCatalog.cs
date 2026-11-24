@@ -193,6 +193,14 @@ internal sealed partial class MonsterCombatProfileCatalog
             };
         }
 
+        // W25 (the admin d152b): "suggested" low-level attack, only while its hot switch is on; never lowers an attack.
+        if (MonsterAttackSwitches.On(MonsterAttackSwitches.SuggestedLowLevel) &&
+            MonsterOverrideCatalog.Current.SuggestedPhysicalAttack(monster.MapId, monster.TemplateKey) is int suggested &&
+            resolved.PhysicalAttack < suggested)
+        {
+            resolved = resolved with { PhysicalAttack = suggested };
+        }
+
         return resolved;
     }
 

@@ -62,3 +62,6 @@
 /* B22 P1 (d32): teleporter menu editor (static/modules/teleport-menu.js) */
 .gw-npc-tmenu { border-top: 1px solid #2e5468; margin-top: 10px; padding-top: 6px; }
 .gw-npc-tmenu-form { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 10px; }
+
+/* B22 B26-T: rows on a second menu page sit indented under their page button (teleport-pages.js) */
+.gw-npc-tele-page2 { margin-left: 24px; border-left: 2px solid #2e5468; padding-left: 8px; }

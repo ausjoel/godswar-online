@@ -9,6 +9,7 @@ ordinary world teleporters (Sparta, Athens, Mycenae) use this table; battlefield
 Button WORDS are client text: a sub id shows a button only if the client's NpcFunTranmit.lua labels it. Sub ids
 1094-1105 are kept for new destinations; their words come with a client update (P1/client generator)."""
 from . import common, world as W
+from . import _teleport_pages  # B22 B26-T: menu pages (parent_sub_id)
 from .common import Bad
 
 TABLE = "npc_teleport_menu"
@@ -73,7 +74,8 @@ def menu(ctx, npc):
             "effective": entry.get("effective"), "rows": rows, "table": exists,
             "version": W._version(ctx, _parts(npc)) if exists else "new",
             "choices": [describe(s) for s in known], "slot_first": tm["slot_first"], "slot_last": tm["slot_last"],
-            "maximum_buttons": tm["maximum_buttons"], "currencies": list(CURRENCIES)}
+            "maximum_buttons": tm["maximum_buttons"], "currencies": list(CURRENCIES),
+            "page_support": bool(tm.get("page_support")), "pages": entry.get("pages") or {}}  # B22 B26-T
 
 
 def ctx_content(ctx):
@@ -90,6 +92,7 @@ def _clean_rows(ctx, npc, doc, body_rows):
         raise Bad("at most %d rows" % MAX_ROWS)
     known = {int(t["sub"]) for t in doc.get("teleports") or [] if t.get("npc") in {n["npc"] for n in tm["npcs"]}}
     labels = _labels()
+    page_buttons = _teleport_pages.page_buttons(body_rows)  # B22 B26-T: these open a page and go nowhere themselves
     out, seen, warnings = [], set(), []
     for i, r in enumerate(body_rows):
         if not isinstance(r, dict):
@@ -127,12 +130,14 @@ def _clean_rows(ctx, npc, doc, body_rows):
                 raise Bad("button %d: (%g, %g) on %s is in or against a wall. Nearest open point: %s" % (
                     sub, x, z, scene, "(%g, %g)" % near if near else "none found"))
             row.update(target_map_id=target, pos_x=x, pos_z=z)
-        elif sub not in known:
+        elif sub not in known and sub not in page_buttons:
             raise Bad("button %d is a new destination: pick its map and click the point it goes to" % sub)
         if not hidden and sub not in labels:
             warnings.append("button %d has no words in the current client, so players see no button for it until the "
                             "client update that adds them" % sub)
         out.append(row)
+    if page_buttons:  # B22 B26-T: counted per page
+        return out, warnings + _teleport_pages.apply(out, body_rows, tm)
     visible = sum(1 for r in out if not r["hidden"])
     if visible > tm["maximum_buttons"]:
         raise Bad("%d buttons are shown but the game window has room for %d: hide or remove some" % (visible, tm["maximum_buttons"]))

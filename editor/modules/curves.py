@@ -32,10 +32,17 @@ Every map with monsters (2026-11-19, the admin: "the monster editor map doesnt h
     difficulty and monster, as stock HP x the curve; stock = data/medusa-stock-hp.json (the server migration's own values), so a
     second write never compounds. Attack is fixed per difficulty in code (MedusaIslandCombatOverride.ApplyMonsterAttackProfile),
     and the rules name aliases, not template keys, so no attack / defence / rating rows are written for Medusa.
-  * VIEW ONLY: Atlantis 205 (AtlantisSpawnBalancePolicy: level = the party's highest level, HP = rank base x party size, both in
-    code; a fixed gm_monster_attributes row would replace that party scaling) and Wonderland 207 (WonderlandMonsterPlan: the whole
-    roster is code; see the damage calculator's Wonderland view). The picker shows them with the reason; load/preview/apply refuse
-    them.
+  * SLIDERS, not a curve: Atlantis 205 and Wonderland 207 build their monsters in code when a party enters (Atlantis:
+    AtlantisSpawnBalancePolicy, level = the party's highest level, HP = rank base x party level and size; Wonderland:
+    WonderlandMonsterPlan, the whole roster). Nothing in the spawn tables holds them, and a fixed gm_monster_attributes row
+    would replace the party scaling (Atlantis) or be recomputed away on every hit (Wonderland's attack is re-inferred from
+    captured hits, WonderlandCapturedAttackPolicy.ApplyProfile). So their tile opens hot server-rate sliders instead
+    (the admin 2026-11-23, "can we make the view only data ... atlantis and wonderland to be editable?"):
+      - Atlantis: HP % and damage % per rank (normal / elite / boss), server AtlantisRankScale (instance.atlantis_<rank>_*);
+      - Wonderland: HP % and damage % per island 1-8, server WonderlandIslandScale (instance.wonderland_island<N>_*).
+    100 = stock. HP applies to runs that start afterwards, damage at once; no restart. The save is rates._save (the Server
+    rates page's guarded write, change record and Undo); route "sliders" / "sliders_save". load/preview/apply still refuse
+    these two maps, so a curve can never be written to them by mistake.
 All of it is start-up content: it applies after a gw251 restart. Writes go through world._write (backup, version check,
 guard, change log, Undo).
 """
@@ -45,7 +52,7 @@ import struct
 
 import os
 
-from . import common, world as W, _monster_sections as SEC
+from . import common, world as W, _monster_sections as SEC, rates as RATES
 from .common import Bad, lit
 
 M = common.module(
@@ -84,12 +91,14 @@ PRESETS = [
 MEDUSA_MAPS = {204: (1,), 200: (2, 3)}
 DIFFICULTY = {1: "Normal", 2: "Enhanced", 3: "Mythic"}
 MEDUSA_STOCK = os.path.join(common.HERE, "data", "medusa-stock-hp.json")
-VIEW_ONLY = {
-    205: "Atlantis monsters are made by the server when a party enters: level = the party's highest level and HP = the rank's "
-         "base x party size (AtlantisSpawnBalancePolicy). Nothing in the database holds them, and a fixed attack/defence row "
-         "would replace the party scaling, so this page does not write Atlantis.",
-    207: "Wonderland's whole roster (levels, HP, attacks, defences) is in the server code (WonderlandMonsterPlan), not the "
-         "database, so this page cannot change it. See its numbers under Damage to a character -> Wonderland.",
+ATLANTIS_RANKS = [("normal", "Normal monsters", 15_000), ("elite", "Elite monsters", 75_000), ("boss", "Bosses", 500_000)]
+SLIDER_MAPS = {
+    205: {"why": "Atlantis monsters are made by the server when a party enters: level = the party's highest level and HP grows "
+                 "with the party's level and size. Set HP % and damage % per rank here (100 = normal); the party scaling stays.",
+          "units": [("atlantis_" + k, t) for k, t, _ in ATLANTIS_RANKS]},
+    207: {"why": "Wonderland's monsters (levels, HP, attacks) are set in the server code per island. Set HP % and damage % per "
+                 "island here (100 = normal). See each monster's numbers under Damage to a character -> Wonderland.",
+          "units": [("wonderland_island%d" % i, "Island %d" % i) for i in range(1, 9)]},
 }
 
 
@@ -113,8 +122,8 @@ def _alias_name(alias):
 
 def _check_maps(maps):
     for m in maps:
-        if m in VIEW_ONLY:
-            raise Bad("map %d is view only: %s" % (m, VIEW_ONLY[m]))
+        if m in SLIDER_MAPS:          # the curve itself never writes these maps
+            raise Bad("map %d is set with its HP / damage sliders, not the curve: %s" % (m, SLIDER_MAPS[m]["why"]))
 
 
 def formula(level, elite=False, boss=False):
@@ -331,14 +340,14 @@ def maps(ctx):
         "d": lv % {"c": "d.clear_bytes"}, "g": lv % {"c": "g.clear_bytes"},
         "md": "CASE m.map_id %s ELSE ARRAY[]::smallint[] END" % " ".join(
             "WHEN %d THEN ARRAY[%s]::smallint[]" % (k, ",".join(map(str, v))) for k, v in sorted(MEDUSA_MAPS.items())),
-        "vo": ",".join(str(k) for k in sorted(VIEW_ONLY))})
+        "vo": ",".join(str(k) for k in sorted(SLIDER_MAPS))})
     for r in rows:
         r["name"] = SEC.section_name(r["map_id"]) or W._map_name(ctx, r["map_id"])
         decorate(r)
         r["medusa"] = int(r.get("medusa") or 0) if int(r["map_id"]) in MEDUSA_MAPS else 0
         r["spawns"] = int(r.get("published") or 0) + int(r.get("gm") or 0) + r["medusa"]
-        if int(r["map_id"]) in VIEW_ONLY:
-            r.update(view_only=True, why=VIEW_ONLY[int(r["map_id"])], edits=[])
+        if int(r["map_id"]) in SLIDER_MAPS:
+            r.update(view_only=False, sliders=True, why=SLIDER_MAPS[int(r["map_id"])]["why"], edits=["hp", "damage"])
         elif r["medusa"] and not (r.get("published") or r.get("gm")):
             r.update(view_only=False, edits=["hp"], why="Medusa's Island: HP is written to medusa_monster_rules (%s); attack, "
                      "defence and ratings are fixed in the server code." % " + ".join(DIFFICULTY[d] for d in MEDUSA_MAPS[int(r["map_id"])]))
@@ -444,6 +453,94 @@ def apply(ctx):
     r = W._write(ctx, scopes, act, stmts, fields, guard=guard, applies="after_restart", target="monster curve")
     r.update(hp_rows=len(hp_rows), attr_rows=len(attr_rows), kept_foreign=keep)
     return r
+
+
+# ---- Atlantis / Wonderland: HP % and damage % sliders (server_rates rows; see the module docstring) ----------------------
+def _atlantis_hp(base, level, party, stage):
+    """AtlantisSpawnBalancePolicy.Resolve: base x level^2 x stage% x party% / (90^2 x 100 x 100), integer maths."""
+    return min(base * level * level * (100 + 5 * (stage - 1)) * (100 + 50 * (party - 1)) // (90 * 90 * 100 * 100), 4_294_967_295)
+
+
+def _slider_units(mid):
+    """Per slider unit: its two rate keys and a line of stock numbers to judge a percent by."""
+    out = []
+    if mid == 205:
+        for (unit, title), (_, _, base) in zip(SLIDER_MAPS[205]["units"], ATLANTIS_RANKS):
+            out.append({"unit": unit, "title": title, "stock": "HP: %s for one level 90 player at stage 1, %s for five level "
+                        "200 players at stage 5." % ("{:,}".format(_atlantis_hp(base, 90, 1, 1)), "{:,}".format(_atlantis_hp(base, 200, 5, 5)))})
+    else:
+        roster = {}
+        try:
+            with open(WONDERLAND, encoding="utf-8") as f:
+                roster = json.load(f).get("roster") or {}
+        except (OSError, ValueError):
+            pass
+        rows = roster.get("athens") or []
+        for unit, title in SLIDER_MAPS[207]["units"]:
+            isle = int(unit[len("wonderland_island"):])
+            bosses = [r for r in rows if r.get("island") == isle and r.get("boss") and not r.get("allied")]
+            mobs = [r for r in rows if r.get("island") == isle and not r.get("allied")]
+            stock = ", ".join("%s %s HP" % (b["name"], "{:,}".format(int(b["hp"]))) for b in bosses) or "no boss"
+            out.append({"unit": unit, "title": title + (" - " + " and ".join(b["name"] for b in bosses) if bosses else ""),
+                        "stock": "Normal: %s; %d enemies on the island." % (stock, len(mobs))})
+    return out
+
+
+def _slider_keys(mid):
+    return ["instance.%s_%s_percent" % (u, kind) for u, _ in SLIDER_MAPS[mid]["units"] for kind in ("hp", "damage")]
+
+
+def _slider_map(ctx):
+    mid = W._int((ctx.body or {}).get("map"), 0, 255, "map")
+    if mid not in SLIDER_MAPS:
+        raise Bad("map %d has no HP / damage sliders (only Atlantis 205 and Wonderland 207)" % mid)
+    return mid
+
+
+@M.post("sliders")
+def sliders(ctx):
+    """POST /api/m/curves/sliders {map} - the HP % / damage % rows of Atlantis (per rank) or Wonderland (per island)."""
+    mid = _slider_map(ctx)
+    keys = _slider_keys(mid)
+    rows = W._q(ctx, "(SELECT coalesce(json_agg(to_jsonb(r)), '[]') FROM public.server_rates r WHERE r.rate_key = ANY(ARRAY[%s]))"
+                % ",".join(lit(k) for k in keys)) or []
+    by = {r["rate_key"]: r for r in rows}
+    units = []
+    for u in _slider_units(mid):
+        items = []
+        for kind in ("hp", "damage"):
+            k = "instance.%s_%s_percent" % (u["unit"], kind)
+            r = by.get(k)
+            items.append({"key": k, "kind": kind, "present": r is not None,
+                          "label": (r or {}).get("label") or ("HP" if kind == "hp" else "Damage"),
+                          "description": (r or {}).get("description") or "",
+                          "value": float(r["value"]) if r else 100.0, "default": float(r["default_value"]) if r else 100.0,
+                          "min": float(r["min_value"]) if r else 10.0, "max": float(r["max_value"]) if r else 500.0,
+                          "step": float(r.get("step") or 5) if r else 5.0})
+        units.append(dict(u, rows=items))
+    missing = [k for k in keys if k not in by]
+    return {"map": mid, "why": SLIDER_MAPS[mid]["why"], "units": units, "missing": missing,
+            "note": ("This server has not got these settings yet (they appear after the game server is updated and restarted)."
+                     if missing else None),
+            "applies": "HP: runs that start after the save. Damage: at once, also in runs already going. No restart."}
+
+
+@M.post("sliders_save")
+def sliders_save(ctx):
+    """POST /api/m/curves/sliders_save {map, values: {key: percent}, expected: {key: shown}, note} - the Server rates
+    page's guarded write (rates._save: bounds, 409 on a changed value, change record with Undo, hot reload)."""
+    mid = _slider_map(ctx)
+    b = ctx.body or {}
+    values, expected = b.get("values") or {}, b.get("expected") or {}
+    if not isinstance(values, dict) or not isinstance(expected, dict):
+        raise Bad("values and expected must be objects")
+    allowed = set(_slider_keys(mid))
+    stray = sorted(set(values) - allowed)
+    if stray:
+        raise Bad("not a slider of this map: %s" % ", ".join(stray))
+    c = RATES._save(ctx, values, {k: v for k, v in expected.items() if k in values}, {}, {},
+                    str(b.get("note") or "")[:200] or ("monster stat curve: %s sliders" % SEC.section_name(mid)))
+    return RATES._answer(ctx, c)
 
 
 # ---- "Damage to a character" (static/shared/damage_calc.js) ----------------------------------------------------------

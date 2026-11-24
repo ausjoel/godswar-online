@@ -39,7 +39,7 @@ internal static partial class ClassSuitConversionPlanner
             return Fail(
                 equipment,
                 ClassSuitConversionStatus.UnsupportedOperation,
-                "Class Suit IV is off: the server runs the Original GodsWar limits (limits.original_gw = 1).",
+                "Class Suit IV is off: the server runs the Original GodsWar limits (limits.original_gw = 1, or endgame.enabled = 0).",
                 out equipmentAfter,
                 out status,
                 out reason);
@@ -168,7 +168,7 @@ internal static partial class ClassSuitConversionPlanner
             return Fail(
                 equipment,
                 ClassSuitConversionStatus.UnsupportedOperation,
-                "Class Suit V-VII is off: the server runs the Original GodsWar limits (limits.original_gw = 1).",
+                "Class Suit V-VII is off: the server runs the Original GodsWar limits (limits.original_gw = 1, or endgame.enabled = 0).",
                 out equipmentAfter,
                 out status,
                 out reason);

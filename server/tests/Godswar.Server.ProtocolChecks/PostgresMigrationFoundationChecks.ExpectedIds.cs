@@ -209,6 +209,7 @@ internal static partial class PostgresMigrationFoundationChecks
         "20261112_241_login_awards", // W4-B login-window awards, Prize Chest, queued buffs
         "20261113_242_session_health", // W6A per-connection login and session health
         "20261122_243_clear_stale_login_status", // W14 one-off clear of stale token-less login flags
-        "20261122_244_medusa_title_order" // MEDUSA-TITLES fastest Advanced clear = Executioners (+3%)
+        "20261122_244_medusa_title_order", // MEDUSA-TITLES fastest Advanced clear = Executioners (+3%)
+        "20261124_245_outpost_npc_camp_neutral" // W23 outpost NPCs open to both camps (0x0211)
     ];
 }

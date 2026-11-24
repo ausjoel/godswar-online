@@ -34,6 +34,11 @@ internal sealed partial class GameClientHandler
             return;
         }
 
+        if (npcId == GameSessionRegistry.BoardWindowId) // W20: count leftover cases (form open past the board hold)
+        {
+            Console.WriteLine($"[board] NPC form OK landed on the board window (W20) dialog={dialogIndex} subId={subId}");
+        }
+
         // A Wonderland run's own actors own their actions too: the teleporter and
         // blackmarket dialogs and the treasure-chest claims. Both handlers refuse
         // anything that is not one of those actors, and only on map 207.

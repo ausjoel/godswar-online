@@ -147,36 +147,87 @@ internal static class PostgresMonsterOverrideSnapshotReader
             NpgsqlTransaction transaction,
             CancellationToken cancellationToken)
     {
-        await using var command = new NpgsqlCommand(
+        // W25 (the admin d152b): which reversible data step wrote a row's attack, the attack from before it (its backup table)
+        // and the step-20 "suggested" low-level attack. The backup / suggested tables exist only after their data steps.
+        bool b23, b25, sug;
+        await using (var probe = new NpgsqlCommand(
             """
-            SELECT map_id, template_key,
-                   level, current_health, maximum_health,
-                   physical_attack, magic_attack, physical_defense, magic_defense,
-                   hit, dodge, critical, critical_resistance
-            FROM gm_monster_attributes
-            ORDER BY map_id, template_key
-            LIMIT @limit;
-            """,
-            connection,
-            transaction);
-        command.Parameters.AddWithValue("limit", MaximumAttributeRows);
-        var rows = new List<((short, string), MonsterAttributeOverride)>();
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
+            SELECT coalesce(has_table_privilege(to_regclass('public.w23_monster_attack_backup'), 'SELECT'), false),
+                   coalesce(has_table_privilege(to_regclass('public.w25_world_boss_attack_backup'), 'SELECT'), false),
+                   coalesce(has_table_privilege(to_regclass('public.w25_suggested_attack'), 'SELECT'), false);
+            """, connection, transaction))
+        await using (var r = await probe.ExecuteReaderAsync(cancellationToken))
         {
-            var key = (reader.GetInt16(0), reader.GetString(1));
-            rows.Add((key, new MonsterAttributeOverride(
-                Level: OptionalInt(reader, 2),
-                CurrentHealth: OptionalInt(reader, 3),
-                MaximumHealth: OptionalInt(reader, 4),
-                PhysicalAttack: OptionalInt(reader, 5),
-                MagicAttack: OptionalInt(reader, 6),
-                PhysicalDefense: OptionalInt(reader, 7),
-                MagicDefense: OptionalInt(reader, 8),
-                Hit: OptionalInt(reader, 9),
-                Dodge: OptionalInt(reader, 10),
-                Critical: OptionalInt(reader, 11),
-                CriticalResistance: OptionalInt(reader, 12))));
+            await r.ReadAsync(cancellationToken);
+            (b23, b25, sug) = (r.GetBoolean(0), r.GetBoolean(1), r.GetBoolean(2));
+        }
+
+        var sql = $"""
+            SELECT a.map_id, a.template_key,
+                   a.level, a.current_health, a.maximum_health,
+                   a.physical_attack, a.magic_attack, a.physical_defense, a.magic_defense,
+                   a.hit, a.dodge, a.critical, a.critical_resistance,
+                   CASE WHEN a.updated_by = 'w23-monster-damage' OR a.note LIKE '%[W23 attack]%' THEN 'w23'
+                        WHEN a.updated_by = 'w25-world-boss' OR a.note LIKE '%[W25 attack]%' THEN 'w25b' END AS step,
+                   CASE WHEN a.updated_by = 'w23-monster-damage' OR a.note LIKE '%[W23 attack]%'
+                        THEN {(b23 ? "b23.physical_attack" : "NULL::integer")}
+                        ELSE {(b25 ? "b25.physical_attack" : "NULL::integer")} END AS off_pa,
+                   CASE WHEN a.updated_by = 'w23-monster-damage' OR a.note LIKE '%[W23 attack]%'
+                        THEN {(b23 ? "b23.magic_attack" : "NULL::integer")}
+                        ELSE {(b25 ? "b25.magic_attack" : "NULL::integer")} END AS off_ma
+            FROM gm_monster_attributes a
+            {(b23 ? "LEFT JOIN public.w23_monster_attack_backup b23 ON b23.map_id = a.map_id AND b23.template_key = a.template_key" : "")}
+            {(b25 ? "LEFT JOIN public.w25_world_boss_attack_backup b25 ON b25.map_id = a.map_id AND b25.template_key = a.template_key" : "")}
+            ORDER BY a.map_id, a.template_key
+            LIMIT @limit;
+            """;
+        var rows = new List<((short, string), MonsterAttributeOverride)>();
+        await using (var command = new NpgsqlCommand(sql, connection, transaction))
+        {
+            command.Parameters.AddWithValue("limit", MaximumAttributeRows);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var key = (reader.GetInt16(0), reader.GetString(1));
+                rows.Add((key, new MonsterAttributeOverride(
+                    Level: OptionalInt(reader, 2),
+                    CurrentHealth: OptionalInt(reader, 3),
+                    MaximumHealth: OptionalInt(reader, 4),
+                    PhysicalAttack: OptionalInt(reader, 5),
+                    MagicAttack: OptionalInt(reader, 6),
+                    PhysicalDefense: OptionalInt(reader, 7),
+                    MagicDefense: OptionalInt(reader, 8),
+                    Hit: OptionalInt(reader, 9),
+                    Dodge: OptionalInt(reader, 10),
+                    Critical: OptionalInt(reader, 11),
+                    CriticalResistance: OptionalInt(reader, 12),
+                    AttackStep: reader.IsDBNull(13) ? null : reader.GetString(13),
+                    OffPhysicalAttack: OptionalInt(reader, 14),
+                    OffMagicAttack: OptionalInt(reader, 15))));
+            }
+        }
+
+        if (sug)
+        {
+            var index = rows.Select(static (row, i) => (row.Item1, i)).ToDictionary(static x => x.Item1, static x => x.i);
+            await using var command = new NpgsqlCommand(
+                "SELECT map_id, template_key, physical_attack FROM public.w25_suggested_attack ORDER BY map_id, template_key LIMIT @limit;",
+                connection, transaction);
+            command.Parameters.AddWithValue("limit", MaximumAttributeRows);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var key = (reader.GetInt16(0), reader.GetString(1));
+                var attack = reader.GetInt32(2);
+                if (index.TryGetValue(key, out var at))
+                {
+                    rows[at] = (key, rows[at].Item2 with { SuggestedPhysicalAttack = attack });
+                }
+                else
+                {
+                    rows.Add((key, new MonsterAttributeOverride(SuggestedPhysicalAttack: attack)));
+                }
+            }
         }
 
         return rows;

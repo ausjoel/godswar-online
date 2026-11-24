@@ -25,12 +25,23 @@ type File struct {
 	URL     string `json:"url"`
 	Size    int64  `json:"size"`
 	SHA256  string `json:"sha256"`
+	Release int    `json:"release,omitempty"`
 }
 type Manifest struct {
 	Serial   int64           `json:"serial"`
 	Launcher map[string]File `json:"launcher"`
 	Client   map[string]File `json:"client"`
 	Native   map[string]File `json:"native,omitempty"`
+	News     []NewsItem      `json:"news,omitempty"`
+}
+
+// NewsItem: launcher 1.0.4+ "What's new" box (tools/news_from_site.py writes the -news file).
+type NewsItem struct {
+	ID      string `json:"id"`
+	Date    string `json:"date"`
+	Title   string `json:"title"`
+	URL     string `json:"url"`
+	Summary string `json:"summary"`
 }
 
 // keepNative copies the native entry of the currently published manifest, after checking its signature with the
@@ -76,12 +87,14 @@ func main() {
 	macClient := flag.String("mac-client", "", "mac client zip (file name inside -dir)")
 	winClient := flag.String("windows-client", "", "windows client zip")
 	clientVer := flag.String("client-version", "", "client version for both")
+	clientRel := flag.Int("client-release", 0, "update-channel release the client zips equal (Client/.client-release); lets launcher 1.0.3+ patch Windows in place (0 = full zip only)")
 	macLauncher := flag.String("mac-launcher", "", "mac launcher binary")
 	winLauncher := flag.String("windows-launcher", "", "windows launcher exe")
 	launcherVer := flag.String("launcher-version", "", "launcher version")
 	macNative := flag.String("mac-native", "", "GodsWar Native app zip (file name inside -dir); empty = keep the published one")
 	nativeVer := flag.String("native-version", "", "native app version")
 	keepFrom := flag.String("keep-native-from", "https://YOUR-DOMAIN.example/downloads/manifest.json", "published manifest to copy the native entry from when -mac-native is empty (\"\" = drop it)")
+	newsFile := flag.String("news", "", "JSON array of news items for the launcher's What's new box (\"\" = none)")
 	flag.Parse()
 	raw, err := os.ReadFile(*keyPath)
 	if err != nil {
@@ -101,6 +114,10 @@ func main() {
 	}
 	add(m.Client, "mac", *macClient, *clientVer)
 	add(m.Client, "windows", *winClient, *clientVer)
+	for p, f := range m.Client {
+		f.Release = *clientRel
+		m.Client[p] = f
+	}
 	add(m.Launcher, "mac", *macLauncher, *launcherVer)
 	add(m.Launcher, "windows", *winLauncher, *launcherVer)
 	if *macNative != "" {
@@ -108,6 +125,19 @@ func main() {
 		add(m.Native, "mac", *macNative, *nativeVer)
 	} else if *keepFrom != "" {
 		m.Native = keepNative(*keepFrom, priv.Public().(ed25519.PublicKey))
+	}
+	if *newsFile != "" {
+		nb, err := os.ReadFile(*newsFile)
+		if err == nil {
+			err = json.Unmarshal(nb, &m.News)
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "news: skipped:", err)
+			m.News = nil
+		}
+		if len(m.News) > 3 {
+			m.News = m.News[:3]
+		}
 	}
 	b, _ := json.Marshal(m)
 	sig := ed25519.Sign(priv, b)

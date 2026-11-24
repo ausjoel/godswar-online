@@ -31,3 +31,6 @@ Wine build with DXVK for Direct3D 9).
 `launcher/` builds a small launcher that downloads your client from a web server you
 control and applies updates: see [launcher/README.md](../launcher/README.md). You must
 create your own signing key first: `tools/make-update-key.sh`.
+The Mac launcher draws its window with AppKit through cgo, so building it needs a Mac with the Xcode command line
+tools (`xcode-select --install`); the Windows exe is built without cgo. The launcher window uses a plain look in this
+package (the original launcher art is not included).

@@ -140,6 +140,8 @@ internal static partial class InstanceCallerHandlerChecks
         public List<WonderlandTitleRequest> Requests { get; } = [];
         public List<WonderlandTitleReceipt> AppliedReceipts { get; } = [];
         public int FailuresRemaining { get; set; }
+        /// <summary>S5b: answer every settlement with this rejection status while set.</summary>
+        public WonderlandTitleStatus? RejectWith { get; set; }
 
         public Task<WonderlandTitleReceipt> SettleAsync(WonderlandTitleRequest request,
             CancellationToken cancellationToken = default)
@@ -151,6 +153,8 @@ internal static partial class InstanceCallerHandlerChecks
                 FailuresRemaining--;
                 return Task.FromException<WonderlandTitleReceipt>(new IOException("scripted title store unavailable"));
             }
+            if (RejectWith is { } rejection)
+                return Task.FromResult(new WonderlandTitleReceipt(rejection, request.WorldInstanceId, request.Award, []));
             if (_receipts.TryGetValue(request.RequestHash, out var previous))
                 return Task.FromResult(previous with { Status = WonderlandTitleStatus.Duplicate });
             var members = request.FrozenMembers.Select(member =>

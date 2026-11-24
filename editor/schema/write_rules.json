@@ -971,10 +971,8 @@
         "why": "the server reads this when the character enters the world and keeps its own copy in memory for the session; the client is never told about a database change"
       },
       "revision": {
-        "rule": "outbox_revision + 1 on a changed row (the outbox stream is 'ordered_sparse', gaps are fine)",
-        "counters": [
-          "outbox_revision"
-        ]
+        "rule": "W15: never write outbox_revision (the talent outbox stream is 'strict'; a moved counter without an event stalls it). The server numbers talent events from the stream.",
+        "counters": []
       },
       "invariants": [
         "talent_id FK talent_templates; class talents only",

@@ -134,8 +134,34 @@ internal sealed partial class GameClientHandler
     /// actions sit in <c>NpcFunWar.lua</c> under function 3, which cannot be advertised
     /// without displacing the quest page.
     /// </remarks>
+    // W16 (the admin d128): buttons 2-6 answer with the client's own information pages from NpcFunWarTxt.lua (they were
+    // silent): 2 Ni Mini -> 301 (NF_L0_WT301), 3 Lelantine -> 401-404 (NF_L0_FRAM730 over its four questions, whose
+    // answers are Index 3: 450/451 NF_L0_FRAM460/461 Athens/Sparta, 452-454 NF_L0_FRAM462-464), 4 Territory War -> 501
+    // (NF_L0_THWAR10501), 5 Duel Arena -> 601 (NF_L0_THWAR10601), 6 Parnassus -> 701 (NF_L0_WQX1). Text only, no action.
+    // Button 1 (Pindus) is left to the handlers that answer it today.
     private static readonly ScriptedNpcDialogue BattlefieldCrierDialogue = new(
         FunctionNumber: 27,
         OpeningMenu: [1, 2, 3, 4, 5, 6],
-        Steps: new Dictionary<int, int[]>());
+        Steps: new Dictionary<int, int[]>
+        {
+            [2] = [301],
+            [3] = [401, 402, 403, 404],
+            [4] = [501],
+            [5] = [601],
+            [6] = [701],
+            // the Lelantine questions, if the client names the clicked entry in +16
+            [401] = [450],
+            [402] = [452],
+            [403] = [453],
+            [404] = [454]
+        },
+        PageSelections: new Dictionary<int, IReadOnlyDictionary<int, int[]>>
+        {
+            // the Lelantine questions when +16 holds the page (3) and +20 the entry
+            [3] = new Dictionary<int, int[]> { [401] = [450], [402] = [452], [403] = [453], [404] = [454] }
+        });
+
+    /// <summary>W16: a reply whose client text differs by faction (the Lelantine story is told by each camp).</summary>
+    private static int[] CampVariantReply(int functionNumber, int[] reply, byte camp) =>
+        functionNumber == 27 && reply is [450] && camp != Godswar.Server.State.GameDefaults.AthensCamp ? [451] : reply;
 }

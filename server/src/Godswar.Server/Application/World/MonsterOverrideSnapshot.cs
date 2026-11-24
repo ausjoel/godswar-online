@@ -22,9 +22,34 @@ internal sealed record MonsterAttributeOverride(
     int? Hit = null,
     int? Dodge = null,
     int? Critical = null,
-    int? CriticalResistance = null)
+    int? CriticalResistance = null,
+    string? AttackStep = null,
+    int? OffPhysicalAttack = null,
+    int? OffMagicAttack = null,
+    int? SuggestedPhysicalAttack = null)
 {
     public static readonly MonsterAttributeOverride None = new();
+
+    // W25 (the admin d152b, 24 Nov): the attack a reversible data step wrote is applied only while that step's hot switch is
+    // on; off, the row's attack goes back to what it was before the step (the step's backup table; NULL = the formula).
+    public const string W23NewMapsStep = "w23";
+    public const string W25WorldBossStep = "w25b";
+
+    public static string? AttackSwitchKey(string? step) => step switch
+    {
+        W23NewMapsStep => MonsterAttackSwitches.W23NewMaps,
+        W25WorldBossStep => MonsterAttackSwitches.W25WorldBosses,
+        _ => null
+    };
+
+    /// <summary>This row as the switches say now: the step's attack, or the attack from before the step.</summary>
+    public MonsterAttributeOverride WithAttackSwitches()
+    {
+        var key = AttackSwitchKey(AttackStep);
+        return key is null || MonsterAttackSwitches.On(key)
+            ? this
+            : this with { PhysicalAttack = OffPhysicalAttack, MagicAttack = OffMagicAttack };
+    }
 
     public bool IsEmpty =>
         Level is null && CurrentHealth is null && MaximumHealth is null &&
@@ -48,7 +73,11 @@ internal sealed record MonsterAttributeOverride(
             Hit: more.Hit ?? Hit,
             Dodge: more.Dodge ?? Dodge,
             Critical: more.Critical ?? Critical,
-            CriticalResistance: more.CriticalResistance ?? CriticalResistance);
+            CriticalResistance: more.CriticalResistance ?? CriticalResistance,
+            AttackStep: more.AttackStep ?? AttackStep,
+            OffPhysicalAttack: more.AttackStep is null ? OffPhysicalAttack : more.OffPhysicalAttack,
+            OffMagicAttack: more.AttackStep is null ? OffMagicAttack : more.OffMagicAttack,
+            SuggestedPhysicalAttack: more.SuggestedPhysicalAttack ?? SuggestedPhysicalAttack);
     }
 }
 
@@ -179,6 +208,10 @@ internal sealed class MonsterOverrideSnapshot
         string templateKey,
         out MonsterAttributeOverride overrides) =>
         TemplateAttributesByKey.TryGetValue((mapId, templateKey), out overrides!);
+
+    /// <summary>W25: the "suggested" physical attack for this map + template (low-level normals), if the data step wrote one.</summary>
+    public int? SuggestedPhysicalAttack(short mapId, string templateKey) =>
+        TemplateAttributesByKey.TryGetValue((mapId, templateKey), out var row) ? row.SuggestedPhysicalAttack : null;
 }
 
 /// <summary>
@@ -202,4 +235,14 @@ internal static class MonsterOverrideCatalog
         ArgumentNullException.ThrowIfNull(snapshot);
         Volatile.Write(ref _current, snapshot);
     }
+}
+
+/// <summary>W25 (the admin d152b): hot switches for the reversible monster-attack data steps (Server rates page).</summary>
+internal static class MonsterAttackSwitches
+{
+    public const string W23NewMaps = "monster.attack_w23_new_maps";
+    public const string W25WorldBosses = "monster.attack_w25_world_bosses";
+    public const string SuggestedLowLevel = "monster.attack_suggested_low_level";
+
+    public static bool On(string key) => Godswar.Server.Application.Rates.ServerRates.Current.Get(key) >= 1m;
 }

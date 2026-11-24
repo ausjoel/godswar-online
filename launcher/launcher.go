@@ -24,7 +24,7 @@ import (
 )
 
 // Version is this binary's own version. Bump it for every published launcher.
-const Version = "1.0.2"
+const Version = "1.0.5"
 
 // PublicKey is the raw Ed25519 public key (same trust root as gwupdate).
 // Both are set at build time: go build -ldflags "-X main.PublicKey=... -X main.DefaultManifestURL=..." (see build.sh).
@@ -37,6 +37,9 @@ type File struct {
 	URL     string `json:"url"`
 	Size    int64  `json:"size"`
 	SHA256  string `json:"sha256"`
+	// Release (launcher 1.0.3+, clients only): the update-channel release this zip equals (Client/.client-release).
+	// 0 = unknown: the launcher then updates that client with the full zip only.
+	Release int `json:"release,omitempty"`
 }
 
 type Manifest struct {
@@ -45,6 +48,8 @@ type Manifest struct {
 	Client   map[string]File `json:"client"`
 	// Native (launcher 1.0.2+): the GodsWar Native app (exe-port, no Wine), Mac only. Older launchers ignore it.
 	Native map[string]File `json:"native,omitempty"`
+	// News (launcher 1.0.4+): the newest player-site posts for the "What's new" box. Older launchers ignore it.
+	News []NewsItem `json:"news,omitempty"`
 }
 
 type State struct {
@@ -58,6 +63,10 @@ type State struct {
 	Engine        string `json:"engine,omitempty"`
 	NativeVersion string `json:"native_version,omitempty"`
 	NativeRoot    string `json:"native_root,omitempty"`
+	// NewsHidden (1.0.4+): news ids the player chose "don't show again" for (newest last, capped).
+	NewsHidden []string `json:"news_hidden,omitempty"`
+	// Models (1.0.5+): the client's config.ini [SYSTEM] Avatar chosen in Settings ("1" original, "2" new; "" = untouched).
+	Models string `json:"models,omitempty"`
 }
 
 // Engines. Native is the Mac-only exe-port app; Windows always runs GodsWar.exe itself.
@@ -82,15 +91,30 @@ type Config struct {
 	Version     string
 	NoLaunch    bool
 	Engine      string // EngineWine (default) or EngineNative
+	ChannelURL  string // signed update channel for in-place patching ("" = DefaultChannelURL)
+	NoPatch     bool   // full zip only (testing)
 	HTTP        *http.Client
 	Logf        func(string, ...any)
 	// OnFirstInstall tells the player what is about to happen before a big first download.
 	OnFirstInstall func(sizeMB int64)
+	// News: the manifest's news items from the last Update (shown by whatsNew before launch).
+	News []NewsItem
+	// Status and Progress (1.0.5+): the launcher window shows what is happening; nil in headless runs.
+	Status   func(string)
+	Progress func(what string, done, total int64)
+	// progressLabel names the file being downloaded in Progress.
+	progressLabel string
 }
 
 func (c *Config) logf(f string, a ...any) {
 	if c.Logf != nil {
 		c.Logf(f, a...)
+	}
+	if c.Status != nil {
+		m := fmt.Sprintf(f, a...)
+		if m != "" {
+			c.Status(strings.ToUpper(m[:1]) + m[1:])
+		}
 	}
 }
 
@@ -229,7 +253,11 @@ func (c *Config) downloadOnce(f File, dest string) error {
 		if err != nil {
 			return err
 		}
-		_, err = io.Copy(out, &idleReader{r: resp.Body, d: 60 * time.Second})
+		var src io.Reader = &idleReader{r: resp.Body, d: 60 * time.Second}
+		if c.Progress != nil {
+			src = &progressReader{r: src, done: have, total: f.Size, label: c.progressLabel, fn: c.Progress}
+		}
+		_, err = io.Copy(out, src)
 		out.Close()
 		if err != nil {
 			return err // keep the .part so the next run resumes
@@ -399,6 +427,7 @@ func Update(c *Config) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	c.News = m.News
 	st := readState(c.DataDir)
 	if m.Serial < st.Serial {
 		return "", fmt.Errorf("manifest serial %d is older than the last seen %d; refusing a rollback", m.Serial, st.Serial)
@@ -410,6 +439,7 @@ func Update(c *Config) (string, error) {
 	if lf, ok := m.Launcher[c.Platform]; ok && CompareVersions(lf.Version, firstNonEmpty(st.LauncherVersion, c.Version)) > 0 {
 		c.logf("updating the launcher to %s", lf.Version)
 		dest := launcherPath(c.DataDir, c.Platform, lf.Version)
+		c.progressLabel = "Downloading launcher " + lf.Version
 		os.Remove(dest)
 		if err := c.Download(lf, dest); err != nil {
 			c.logf("launcher update failed, continuing with this one: %v", err)
@@ -434,11 +464,13 @@ func Update(c *Config) (string, error) {
 		if !ok {
 			return "", fmt.Errorf("no %s client in the manifest", c.Platform)
 		}
+		c.patchFirst(cf, &st)
 		root, ver, err := c.install(cf, "client", st.ClientRoot, st.ClientVersion, func(d string) (string, error) { return findClientRoot(d, c.Platform) })
 		if err != nil {
 			return "", err
 		}
 		st.ClientRoot, st.ClientVersion = root, ver
+		c.markRelease(cf, st)
 	}
 	if c.Engine != "" {
 		st.Engine = c.Engine
@@ -466,6 +498,10 @@ func (c *Config) install(f File, dir, haveRoot, haveVer string, find func(string
 		c.OnFirstInstall(f.Size >> 20)
 	}
 	c.logf("downloading %s %s (%d MB)", dir, f.Version, f.Size>>20)
+	c.progressLabel = "Downloading game " + f.Version
+	if dir == "native" {
+		c.progressLabel = "Downloading GodsWar Native " + f.Version
+	}
 	zipPath := filepath.Join(c.DataDir, "downloads", filepath.Base(f.URL))
 	if err := c.Download(f, zipPath); err != nil {
 		return "", "", err
@@ -473,7 +509,10 @@ func (c *Config) install(f File, dir, haveRoot, haveVer string, find func(string
 	stage := filepath.Join(c.DataDir, dir+"-new")
 	os.RemoveAll(stage)
 	c.logf("unpacking")
-	if err := extract(zipPath, stage); err != nil {
+	stop := c.unpackProgress(zipPath, stage)
+	err := extract(zipPath, stage)
+	stop()
+	if err != nil {
 		os.RemoveAll(stage)
 		return "", "", err
 	}
@@ -497,6 +536,65 @@ func (c *Config) install(f File, dir, haveRoot, haveVer string, find func(string
 	os.RemoveAll(old)
 	os.Remove(zipPath)
 	return root, f.Version, nil
+}
+
+// patchFirst (Windows): when the installed client is older than the manifest's, try the signed update channel first.
+// On success the client counts as cf.Version, so install() has nothing to download; on any problem install()
+// downloads the full zip as before. A running game (its files are locked on Windows) skips patching.
+func (c *Config) patchFirst(cf File, st *State) {
+	if c.Platform != "windows" || c.NoPatch || cf.Release < 1 || st.ClientRoot == "" || st.ClientVersion == "" {
+		return
+	}
+	if CompareVersions(cf.Version, st.ClientVersion) <= 0 {
+		return
+	}
+	if _, err := os.Stat(filepath.Join(st.ClientRoot, "GodsWar.exe")); err != nil {
+		return
+	}
+	cur := InstalledRelease(st.ClientRoot)
+	if cur < 1 {
+		c.logf("installed client has no release number; downloading the full client")
+		return
+	}
+	if gameRunning(st.ClientRoot) {
+		c.logf("GodsWar is running; close it to update")
+		return
+	}
+	got, err := c.PatchClient(st.ClientRoot, cur, cf.Release)
+	if err != nil {
+		c.logf("in-place update stopped (%v); downloading the full client instead", err)
+		return
+	}
+	if got == cf.Release {
+		c.logf("client updated in place to %s (release %d)", cf.Version, got)
+		st.ClientVersion = cf.Version
+		return
+	}
+	c.logf("update channel reached release %d, not %d; downloading the full client instead", got, cf.Release)
+}
+
+// markRelease records the channel release of a client that equals the manifest's (after a full install, or for a
+// 1.0.2-era install of the current version, which has no marker), so the next release can patch it in place.
+func (c *Config) markRelease(cf File, st State) {
+	if c.Platform != "windows" || cf.Release < 1 || st.ClientRoot == "" || st.ClientVersion != cf.Version {
+		return
+	}
+	if InstalledRelease(st.ClientRoot) == cf.Release {
+		return
+	}
+	if err := writeRelease(st.ClientRoot, cf.Release); err != nil {
+		c.logf("could not record the client release: %v", err)
+	}
+}
+
+// gameRunning: a running GodsWar.exe cannot be opened for writing on Windows.
+func gameRunning(root string) bool {
+	f, err := os.OpenFile(filepath.Join(root, "GodsWar.exe"), os.O_RDWR, 0)
+	if err != nil {
+		return !os.IsNotExist(err)
+	}
+	f.Close()
+	return false
 }
 
 // removeOldLaunchers deletes older copies; a copy that is still running cannot be deleted on Windows, so errors are ignored.
@@ -547,4 +645,65 @@ func (i *idleReader) Read(p []byte) (int, error) {
 		i.t.Stop()
 	}
 	return n, err
+}
+
+// progressReader reports download progress at most every 100 ms.
+type progressReader struct {
+	r           io.Reader
+	done, total int64
+	label       string
+	fn          func(string, int64, int64)
+	last        time.Time
+}
+
+func (p *progressReader) Read(b []byte) (int, error) {
+	n, err := p.r.Read(b)
+	p.done += int64(n)
+	if time.Since(p.last) > 100*time.Millisecond || err != nil {
+		p.last = time.Now()
+		p.fn(p.label, p.done, p.total)
+	}
+	return n, err
+}
+
+// unpackProgress reports how much of the zip has been unpacked (by the size written so far) until stop is called.
+func (c *Config) unpackProgress(zipPath, stage string) (stop func()) {
+	if c.Progress == nil {
+		return func() {}
+	}
+	var total int64
+	if zr, err := zip.OpenReader(zipPath); err == nil {
+		for _, f := range zr.File {
+			total += int64(f.UncompressedSize64)
+		}
+		zr.Close()
+	}
+	done := make(chan struct{})
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		t := time.NewTicker(time.Second)
+		defer t.Stop()
+		for {
+			var n int64
+			filepath.WalkDir(stage, func(_ string, d os.DirEntry, err error) error {
+				if err == nil && !d.IsDir() {
+					if fi, err := d.Info(); err == nil {
+						n += fi.Size()
+					}
+				}
+				return nil
+			})
+			if n > total {
+				n = total
+			}
+			c.Progress("Unpacking the game", n, total)
+			select {
+			case <-done:
+				return
+			case <-t.C:
+			}
+		}
+	}()
+	return func() { close(done); <-finished }
 }

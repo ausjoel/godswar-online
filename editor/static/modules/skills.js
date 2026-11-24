@@ -566,7 +566,7 @@
         if (r) this.reload();
       };
       const chainBox = (this.locked() && !liveChain) ? null : h("div", { class: "gw-sk-tools" },
-        h("span", { "data-help": "Mark every " + camp + " main-line quest (not the daily or repeatable ones) with a starting level up to this one, and their prerequisites, as completed. No rewards are granted. Shows the quests first." }, "Finish main chains through Lv "), upF,
+        h("span", { "data-help": "Mark every " + camp + " main-line quest (not the daily or repeatable ones) with a starting level up to this one, and their prerequisites, as completed. The character must be logged out (refused while online). It is paid each quest's rewards at their base values, not the server rates: EXP, Talent, Silver, Gold, every item of a choice reward (all of them, not only one) into the bag or the Prize Chest, and quest titles. Shows the quests and rewards first." }, "Finish main chains through Lv "), upF,
         h("button", { class: "gw-btnx small", type: "button", onclick: () => { if (upF.valid()) chain({ operation: "complete_main", level: upto }, "Finish main chains through Lv " + upto); } }, "Preview"),
         h("button", { class: "gw-btnx small", type: "button", "data-help": "Forget every completed " + camp + " main-line quest (including the daily main line), so it can be taken again.",
           onclick: () => chain({ operation: "reset", scope: "main" }, "Reset completed main-line quests") }, "Reset main line"),

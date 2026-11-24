@@ -110,14 +110,67 @@ internal sealed partial class PostgresTalentUpgradeCommandExecutor
             : null;
     }
 
+    /// <summary>
+    /// W15: the next contiguous version of this talent's strict outbox stream:
+    /// one past the newest event already written for it, and never at or below
+    /// the dispatcher's checkpoint. The caller holds the character row lock, so
+    /// two upgrades of one talent cannot read the same value.
+    /// </summary>
+    private async Task<long> ReadNextStreamVersionAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        string aggregateKey,
+        CancellationToken cancellationToken)
+    {
+        await using var command = CreateCommand(
+            """
+            SELECT GREATEST(
+                COALESCE((
+                    SELECT MAX(e.aggregate_version)
+                    FROM public.outbox_events e
+                    WHERE e.consumer_key = @consumerKey
+                      AND e.aggregate_type = @aggregateType
+                      AND e.aggregate_key = @aggregateKey
+                ), 0),
+                COALESCE((
+                    SELECT p.current_version
+                    FROM public.outbox_consumer_positions p
+                    WHERE p.consumer_key = @consumerKey
+                      AND p.aggregate_type = @aggregateType
+                      AND p.aggregate_key = @aggregateKey
+                ), 0)
+            )::bigint + 1;
+            """,
+            connection,
+            transaction);
+        command.Parameters.AddWithValue(
+            "consumerKey",
+            TalentUpgradePersistenceCodec.ConsumerKey);
+        command.Parameters.AddWithValue(
+            "aggregateType",
+            TalentUpgradePersistenceCodec.AggregateType);
+        command.Parameters.AddWithValue("aggregateKey", aggregateKey);
+        var scalar = await command.ExecuteScalarAsync(cancellationToken);
+        if (scalar is not long next || next <= 0)
+        {
+            throw new InvalidDataException(
+                "The talent outbox stream returned no next version.");
+        }
+
+        return next;
+    }
+
     private async Task<long> ApplyMutationAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         CommandEnvelope<TalentUpgradeCommand> envelope,
         int newRank,
         int remainingPoints,
+        long aggregateRevision,
         CancellationToken cancellationToken)
     {
+        // W15: outbox_revision is set to the stream version of the event written in
+        // this transaction (see ReadNextStreamVersionAsync), so the two can no longer drift.
         await using (var command = CreateCommand(
             """
             INSERT INTO public.character_talents (
@@ -131,13 +184,12 @@ internal sealed partial class PostgresTalentUpgradeCommandExecutor
                 @characterId,
                 @talentId,
                 @rank,
-                1,
+                @revision,
                 now()
             )
             ON CONFLICT (user_id, talent_id) DO UPDATE
             SET rank = EXCLUDED.rank,
-                outbox_revision =
-                    public.character_talents.outbox_revision + 1,
+                outbox_revision = EXCLUDED.outbox_revision,
                 updated_at = now()
             RETURNING outbox_revision;
             """,
@@ -153,6 +205,9 @@ internal sealed partial class PostgresTalentUpgradeCommandExecutor
             command.Parameters.AddWithValue(
                 "rank",
                 checked((short)newRank));
+            command.Parameters.AddWithValue(
+                "revision",
+                aggregateRevision);
             var scalar =
                 await command.ExecuteScalarAsync(cancellationToken);
             if (scalar is not long revision || revision <= 0)

@@ -446,7 +446,8 @@ internal sealed partial class GameClientHandler
             {
                 Console.WriteLine(
                     "[checkpoint] owner release failed " +
-                    $"reason={error.GetType().Name}");
+                    $"reason={error.GetType().Name} " + // W15: the status says which barrier refused
+                    $"detail={error.Message}");
             }
         }
     }
@@ -466,7 +467,8 @@ internal sealed partial class GameClientHandler
         {
             Console.WriteLine(
                 "[checkpoint] final position flush failed " +
-                $"reason={error.GetType().Name}");
+                $"reason={error.GetType().Name} " + // W15: the status says which barrier refused
+                $"detail={error.Message}");
         }
     }
 
@@ -485,7 +487,8 @@ internal sealed partial class GameClientHandler
         {
             Console.WriteLine(
                 "[checkpoint] final vitals flush failed " +
-                $"reason={error.GetType().Name}");
+                $"reason={error.GetType().Name} " + // W15: the status says which barrier refused
+                $"detail={error.Message}");
         }
     }
 

@@ -19,6 +19,7 @@ internal sealed partial class GameSessionRegistry
     {
         CancelAbandonedAtlantisRuns(now);
         await RetryPendingAtlantisRetirementsAsync(cancellationToken);
+        await RetryParkedAtlantisCompletionRewardsAsync(now, cancellationToken); // S5b
 
         // The Wonderland run advances once per tick, before the monster sweep
         // below: this is what publishes the current island's monsters into the

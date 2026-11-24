@@ -354,6 +354,17 @@ internal sealed partial class GameSessionRegistry
                 Godswar.Server.Application.World.Content.SkillBookChestLootRule.ChanceBasisPoints(
                     Godswar.Server.Application.Rates.ServerRates.Current));
         }
+        // W22 (the admin d141): a Golden Gem from the 19 open-map world bosses only, 0.75% per kill (code rule, own salt).
+        if (lootKey is not null &&
+            Godswar.Server.Application.World.Content.GoldenGemLootRule.TryRoll(
+                damage.Monster.Definition.TemplateKey, (short)damage.Monster.Definition.MapId, deathEventId,
+                Godswar.Server.Application.Rates.ServerRates.Current))
+        {
+            merged = Godswar.Server.Application.World.Content.SkillBookChestLootRule.Add(merged,
+                Godswar.Server.Application.World.Content.GoldenGemLootRule.ItemId,
+                Godswar.Server.Application.World.Content.GoldenGemLootRule.ChanceBasisPoints(
+                    Godswar.Server.Application.Rates.ServerRates.Current));
+        }
         // B22 B23-F (d86): a Flame Blast book from the table brings the killer's own class field book of that rank.
         if (lootKey is not null)
         {

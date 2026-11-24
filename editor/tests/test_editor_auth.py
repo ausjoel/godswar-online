@@ -8,6 +8,12 @@ import types
 import unittest
 from http.server import ThreadingHTTPServer
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+from smoke import find_gwadmin_dir  # noqa: E402  server.py imports ../gwadmin.py, which is not in the repo (GodsWar-VPS/tools)
+if find_gwadmin_dir():
+    sys.path.insert(0, find_gwadmin_dir())
+else:
+    raise unittest.SkipTest("gwadmin.py not found: set GWADMIN_TOOLS to the folder of GodsWar-VPS/tools/gwadmin.py")
 from editor_auth import Auth, COOKIE, TTL, verify_password
 from modules.accounts import verifier
 from server import Handler

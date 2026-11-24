@@ -140,6 +140,19 @@ internal static class GmNpcDialoguePolicy
             : string.Empty;
     }
 
+    /// <summary>W23: the appearance word for a GM placement with no camp chosen (0 = both camps).</summary>
+    public const uint BothCampsAppearanceType = 0x0211;
+
+    /// <summary>
+    /// W23 (the admin 24 Nov, "Athenian cant speak to NPC in delphi forest"): bits 8-9 of the appearance word are the
+    /// NPC's camp (0x0011 Sparta, 0x0111 Athens, 0x0211 both; see the reference capture in
+    /// CapturedNpcPlacements), and the client refuses a click on the other camp's NPC. An editor-added row left
+    /// at 0 used to fall back to NpcAppearanceDefaults (0x0011 = Sparta only), so every new GM NPC was silently
+    /// Sparta-only. A GM placement left at 0 is now open to both camps; an explicit word is kept as stored.
+    /// </summary>
+    public static uint EffectiveAppearanceType(uint stored) =>
+        stored == 0 ? BothCampsAppearanceType : stored;
+
     public static List<NpcSpawnDefinition> BuildPlacements(
         GmNpcOverrideSnapshot snapshot,
         short mapId,
@@ -223,7 +236,7 @@ internal static class GmNpcDialoguePolicy
                 placement.X,
                 placement.Z,
                 InteractionId: placement.ObjectId,
-                placement.AppearanceType,
+                EffectiveAppearanceType(placement.AppearanceType),
                 placement.Facing,
                 Detail10077: [],
                 Detail10080: []));

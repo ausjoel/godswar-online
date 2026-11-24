@@ -132,7 +132,7 @@ def item_findings(b, rows, meta_of, client_items, attributes):
                    ["clamp", "remove"], index=i, attribute=a, attribute_name=name, field=lcol, value=mx)
             # B22: the same family test as the Inventory editor and the worn-gear preset (an enhanced level such as
             # id 14 belongs to the family the item rolls, id 10); an exact-id test flagged every preset stat
-            if allowed and not set(AF.policy(a)["chain"]) & set(allowed):
+            if allowed and not AF.rolls_on(a, allowed):
                 _f(out, r, meta, "attribute", "unnatural", "%s cannot roll on this item." % name,
                    ["clear_attribute", "replace_attribute", "remove"], index=i, attribute=a, attribute_name=name, level=lv,
                    choices=[{"id": x, "name": attr_name(x), "max": int((attributes.get(str(x)) or {}).get("max") or 1)}

@@ -337,6 +337,42 @@ internal static partial class PacketBuilder
                 $"Captured {camp} mall catalog has an invalid frame count.");
         }
 
+        ApplyMallPriceCorrections(packets, camp); // W16 d125
         return packets;
+    }
+
+    /// <summary>
+    /// W16 (the admin d125): the captured mall sells the two Purge Potions at each other's price (Strong 11 Gold, Weak
+    /// 110), while the Athens Gold vendor (Athens_087) sells Weak 11 and Strong 110. The mall now matches Athens_087.
+    /// A record is changed only when it still holds the captured price, so a later capture or an editor shelf
+    /// (MallAthens / MallSparta rows replace the whole catalog) is never overwritten.
+    /// </summary>
+    internal static readonly (uint ItemId, uint CapturedPrice, uint Price)[] MallPriceCorrections =
+    [
+        (10102, 110, 11),  // Weak Purge Potion: 110 -> 11 Gold
+        (10101, 11, 110)   // Strong Purge Potion: 11 -> 110 Gold
+    ];
+
+    private static void ApplyMallPriceCorrections(byte[] packets, string camp)
+    {
+        for (var offset = 0; offset < packets.Length;
+             offset += BinaryPrimitives.ReadUInt16LittleEndian(packets.AsSpan(offset)))
+        {
+            for (var index = 0; index < packets[offset + 6]; index++)
+            {
+                var record = packets.AsSpan(offset + MallCatalogHeaderBytes + (index * MallCatalogItemBytes),
+                    MallCatalogItemBytes);
+                var item = BinaryPrimitives.ReadUInt32LittleEndian(record);
+                foreach (var (itemId, captured, price) in MallPriceCorrections)
+                {
+                    if (item != itemId) continue;
+                    var current = BinaryPrimitives.ReadUInt32LittleEndian(record.Slice(68));
+                    if (current == captured)
+                        BinaryPrimitives.WriteUInt32LittleEndian(record.Slice(68), price);
+                    else if (current != price)
+                        Console.WriteLine($"[mall] {camp} item {itemId} price {current} is not the captured {captured}; left as is");
+                }
+            }
+        }
     }
 }

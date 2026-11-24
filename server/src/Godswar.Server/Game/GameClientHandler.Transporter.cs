@@ -23,15 +23,85 @@ internal sealed partial class GameClientHandler
         IReadOnlyList<int> arguments,
         CancellationToken cancellationToken)
     {
+        // B22 B26-T: a click on page 2 carries the page button as the sub-id and the clicked button as path[0].
+        var pageClick = arguments.Count > 0 && arguments[0] != -1;
+        var clientPage = packet.Payload.Length >= 12 ? BinaryPrimitives.ReadInt32LittleEndian(packet.Payload.Slice(8, 4)) : 0;
         if (_character is null ||
             !IsCanonicalTransporterAction(
                 packet,
                 route,
                 npcId,
                 dialogIndex) ||
-            !TryAuthorizeTransporterAction(route, npcId) ||
+            !TryAuthorizeTransporterAction(route, npcId))
+        {
+            Console.Error.WriteLine(
+                "[transporter] rejected malformed or unauthorized action " +
+                $"character={_character?.Name ?? "<none>"} npc={npcId} " +
+                $"dialog={dialogIndex} page={clientPage} sub={subId} path0={(arguments.Count > 0 ? arguments[0] : -1)} length={packet.Length}");
+            return;
+        }
+
+        var context = _transporterDialogueContext!;
+        TransporterDestination destination;
+        TeleportMenuTarget? menuTarget;
+        NpcTeleportMenuRow? menuRow;
+        if (!pageClick &&
+            context.PageSubId is null &&
+            (context.MenuSubIds is null || context.MenuSubIds.Contains(subId)) &&
+            TransporterMenuPolicy.PageMenu(route.NpcKey, npcId, _character.CurrentMap, subId, NpcContentOverrides.Current) is
+                { Length: > 0 } pageMenu)
+        {
+            // B22 B26-T: a page button: send its page in the same window and remember what it showed.
+            _transporterDialogueContext = context with
+            {
+                PageSubId = subId,
+                PageMenuSubIds = pageMenu,
+                ExpiresAt = DateTimeOffset.UtcNow + TransporterProtocol.MenuContextLifetime
+            };
+            await _session.SendAsync(
+                PacketBuilder.NpcFunctionActionResponse(npcId, dialogIndex, pageMenu),
+                cancellationToken,
+                "TransporterPage");
+            Console.WriteLine(
+                $"[transporter] page opened character={_character.Name} npc={npcId} page={subId} " +
+                $"items={string.Join(',', pageMenu)}");
+            return;
+        }
+
+        if (pageClick)
+        {
+            if (context.PageSubId != subId ||
+                context.PageMenuSubIds is not { } pageShown ||
+                !TransporterMenuPolicy.TryReadPagePath(arguments, out var clickedOnPage) ||
+                !pageShown.Contains(clickedOnPage) ||
+                !TransporterMenuPolicy.TryResolvePageClick(
+                    route.NpcKey,
+                    npcId,
+                    _character.CurrentMap,
+                    subId,
+                    arguments,
+                    NpcContentOverrides.Current,
+                    out var clicked,
+                    out destination,
+                    out menuTarget,
+                    out menuRow))
+            {
+                Console.Error.WriteLine(
+                    "[transporter] rejected page click " +
+                    $"character={_character.Name} npc={npcId} dialog={dialogIndex} page={clientPage} sub={subId} " +
+                    $"path0={arguments[0]} open-page={context.PageSubId?.ToString() ?? "-"}");
+                return;
+            }
+
+            Console.WriteLine(
+                $"[transporter] page click character={_character.Name} npc={npcId} dialog={dialogIndex} page={clientPage} " +
+                $"page-button={subId} clicked={clicked} destination={destination.DisplayName}");
+            // From here on the clicked button is the button (overrides, logs, fee rows are keyed by it).
+            subId = clicked;
+        }
+        else if (context.PageSubId is not null ||
             // B22 (d32): only a button the menu showed, then the editor's row (or the compiled destination).
-            _transporterDialogueContext?.MenuSubIds is { } shown && !shown.Contains(subId) ||
+            context.MenuSubIds is { } shown && !shown.Contains(subId) ||
             !TransporterMenuPolicy.TryResolve(
                 route.NpcKey,
                 npcId,
@@ -40,14 +110,26 @@ internal sealed partial class GameClientHandler
                 subId,
                 arguments,
                 NpcContentOverrides.Current,
-                out var destination,
-                out var menuTarget,
-                out var menuRow))
+                out destination,
+                out menuTarget,
+                out menuRow))
         {
             Console.Error.WriteLine(
                 "[transporter] rejected malformed or unauthorized action " +
-                $"character={_character?.Name ?? "<none>"} npc={npcId} " +
-                $"dialog={dialogIndex} sub={subId} length={packet.Length}");
+                $"character={_character.Name} npc={npcId} " +
+                $"dialog={dialogIndex} page={clientPage} sub={subId} open-page={context.PageSubId?.ToString() ?? "-"} length={packet.Length}");
+            return;
+        }
+
+        // W25 (the admin 24 Nov: "dont allow factions to use opposite factions transporters"): a capital's Transporter serves only
+        // its own faction, whatever npc.all_factions does to other NPCs.
+        if ((destination.SourceMapId == Godswar.Server.State.GameDefaults.SpartaCapitalMap && _character.Camp != Godswar.Server.State.GameDefaults.SpartaCamp) ||
+            (destination.SourceMapId == Godswar.Server.State.GameDefaults.AthensCapitalMap && _character.Camp != Godswar.Server.State.GameDefaults.AthensCamp))
+        {
+            Console.Error.WriteLine(
+                "[transporter] refused other faction " +
+                $"character={_character.Name} camp={_character.Camp} npc={npcId} map={destination.SourceMapId}");
+            ClearTransporterDialogueContext();
             return;
         }
 
@@ -72,6 +154,7 @@ internal sealed partial class GameClientHandler
             await _session.SendAsync(
                 PacketBuilder.CapturedNpcFunctionActionResponse(
                     npcId,
+                    // B22 B26-T: now 1 (the Transporter type); the client draws the line with its own Index.
                     TransporterProtocol.ResultDialogIndex,
                     destination.LevelRequirementResultSubId),
                 cancellationToken,
@@ -91,7 +174,8 @@ internal sealed partial class GameClientHandler
         {
             // Mycenae's own line (NF_L0_10004 "Mycenae opens from 12:00 - 23:55.", NpcFunTranmit Index 1 sub 10001)
             // while its compiled hours apply; any other closed gate has no client line, so a server note.
-            var mycenaeLine = gateKey == GateKeys.Mycenae && GateRules.Mode(gateKey) == GateSchedule.Compiled &&
+            // B22 B26-T: the Index 1 line cannot draw after page 2, so a page click gets the server note.
+            var mycenaeLine = !pageClick && gateKey == GateKeys.Mycenae && GateRules.Mode(gateKey) == GateSchedule.Compiled &&
                 GateRules.EditedWindows(gateKey) is null;
             await _session.SendAsync(
                 mycenaeLine
@@ -116,7 +200,7 @@ internal sealed partial class GameClientHandler
             if (charged is null)
             {
                 await _session.SendAsync(
-                    fee.CapturedMycenaeLine
+                    fee.CapturedMycenaeLine && !pageClick // B22 B26-T: as above
                         ? PacketBuilder.CapturedNpcFunctionActionResponse(npcId, TransporterProtocol.DialogIndex, TransporterProtocol.MycenaeSilverResultSubId)
                         : PacketBuilder.ServerNote($"You need {fee.Amount:N0} {TransporterMenuPolicy.CurrencyName(fee.Currency)}!"),
                     cancellationToken,

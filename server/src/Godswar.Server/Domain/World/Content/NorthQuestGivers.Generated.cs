@@ -15,7 +15,8 @@ internal static class NorthQuestGivers
 
     public const short MapId = 6;
 
-    public const uint AppearanceType = 17;
+    // W23: 529 = 0x0211, both camps (was 17 = 0x0011, Sparta only; migration 20261124_245 fixed the live rows).
+    public const uint AppearanceType = 529;
 
     public static IReadOnlyList<Giver> All { get; } =
     [

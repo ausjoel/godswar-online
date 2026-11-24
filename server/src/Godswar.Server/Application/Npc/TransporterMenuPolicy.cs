@@ -21,7 +21,9 @@ internal sealed record NpcTeleportMenuRow(
     float? X,
     float? Z,
     int? MinimumLevel,
-    string? DisplayName);
+    string? DisplayName,
+    // B22 B26-T (the admin d121-d123): null = page 1; else the sub-id of the page-1 button that opens this row's page.
+    int? ParentSubId = null);
 
 /// <summary>B22: what one button costs. <see cref="CapturedMycenaeLine"/> = the client's own "You need 20,000 Silver!".</summary>
 internal readonly record struct TeleportPrice(string Currency, int Amount, bool CapturedMycenaeLine)
@@ -68,7 +70,11 @@ internal static class TransporterMenuPolicy
     public static IReadOnlyList<NpcTeleportMenuRow> RowsFor(NpcContentSnapshot snapshot, string npcKey) =>
         snapshot.TeleportMenus.TryGetValue(npcKey, out var rows) ? rows : [];
 
-    /// <summary>The buttons to send: the compiled list without rows, else the visible rows that resolve, in order, at most 12.</summary>
+    /// <summary>
+    /// The buttons to send: the compiled list without rows, else the visible page-1 rows that resolve, in order, at most 12.
+    /// B26-T: a page-1 row whose page (rows with <see cref="NpcTeleportMenuRow.ParentSubId"/> = its sub-id) has a
+    /// visible button that resolves is a page button and is sent too, although it has no destination of its own.
+    /// </summary>
     public static int[] EffectiveMenu(
         IEnumerable<int> publishedMenu,
         string npcKey,
@@ -84,7 +90,37 @@ internal static class TransporterMenuPolicy
         }
 
         return rows
-            .Where(static row => !row.Hidden)
+            .Where(static row => !row.Hidden && row.ParentSubId is null)
+            .OrderBy(static row => row.Position)
+            .ThenBy(static row => row.SubId)
+            .Where(row => PageMenu(npcKey, interactionId, sourceMapId, row.SubId, snapshot).Length > 0 ||
+                TryResolveRowDestination(npcKey, interactionId, sourceMapId, row, out _, out _))
+            .Select(static row => row.SubId)
+            .Distinct()
+            .Take(MaximumButtons)
+            .ToArray();
+    }
+
+    /// <summary>
+    /// B22 B26-T: the buttons of the page that page-1 button <paramref name="pageSubId"/> opens: its visible rows that
+    /// resolve, in order, at most 12. Empty when <paramref name="pageSubId"/> is not a visible page-1 row (no page).
+    /// One level only: a row on page 2 never opens a page.
+    /// </summary>
+    public static int[] PageMenu(
+        string npcKey,
+        uint interactionId,
+        short sourceMapId,
+        int pageSubId,
+        NpcContentSnapshot snapshot)
+    {
+        var rows = RowsFor(snapshot, npcKey);
+        if (!rows.Any(r => r.SubId == pageSubId && !r.Hidden && r.ParentSubId is null))
+        {
+            return [];
+        }
+
+        return rows
+            .Where(row => !row.Hidden && row.ParentSubId == pageSubId)
             .OrderBy(static row => row.Position)
             .ThenBy(static row => row.SubId)
             .Where(row => TryResolveRowDestination(npcKey, interactionId, sourceMapId, row, out _, out _))
@@ -92,6 +128,63 @@ internal static class TransporterMenuPolicy
             .Distinct()
             .Take(MaximumButtons)
             .ToArray();
+    }
+
+    /// <summary>
+    /// B22 B26-T: the destination of a page-2 click. The client sends the page button as the sub-id and the clicked
+    /// button as the first path value (rig-read from the real client, as for the battlefield Ni Mini page); every
+    /// other path value is -1. Only a visible row of that page resolves.
+    /// </summary>
+    public static bool TryResolvePageClick(
+        string npcKey,
+        uint interactionId,
+        short sourceMapId,
+        int pageSubId,
+        IReadOnlyList<int> arguments,
+        NpcContentSnapshot snapshot,
+        out int clickedSubId,
+        out TransporterDestination destination,
+        out TeleportMenuTarget? rowTarget,
+        out NpcTeleportMenuRow? row)
+    {
+        destination = null!;
+        rowTarget = null;
+        row = null;
+        clickedSubId = -1;
+        if (!TryReadPagePath(arguments, out clickedSubId))
+        {
+            return false;
+        }
+
+        var clicked = clickedSubId;
+        if (Array.IndexOf(PageMenu(npcKey, interactionId, sourceMapId, pageSubId, snapshot), clicked) < 0)
+        {
+            return false;
+        }
+
+        row = RowsFor(snapshot, npcKey).First(r => r.SubId == clicked && !r.Hidden && r.ParentSubId == pageSubId);
+        return TryResolveRowDestination(npcKey, interactionId, sourceMapId, row, out destination, out rowTarget);
+    }
+
+    /// <summary>B22 B26-T: a path of exactly one value (the clicked page-2 button), the rest -1.</summary>
+    public static bool TryReadPagePath(IReadOnlyList<int> arguments, out int clickedSubId)
+    {
+        clickedSubId = -1;
+        if (arguments.Count != TransporterProtocol.FunctionArgumentCount || arguments[0] <= 0)
+        {
+            return false;
+        }
+
+        for (var index = 1; index < arguments.Count; index++)
+        {
+            if (arguments[index] != -1)
+            {
+                return false;
+            }
+        }
+
+        clickedSubId = arguments[0];
+        return true;
     }
 
     /// <summary>
@@ -126,7 +219,8 @@ internal static class TransporterMenuPolicy
             return false;
         }
 
-        row = rows.FirstOrDefault(r => r.SubId == subId && !r.Hidden);
+        // B26-T: a page-2 row is only reachable through its page (TryResolvePageClick), never with an empty path.
+        row = rows.FirstOrDefault(r => r.SubId == subId && !r.Hidden && r.ParentSubId is null);
         if (row is null)
         {
             return false;

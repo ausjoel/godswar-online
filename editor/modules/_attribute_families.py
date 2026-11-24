@@ -38,3 +38,10 @@ def policy(aid):
 
 def class_allowed(aid,profession):
     return (profession in (0,1) and aid in (200,201,210,211)) or (profession in (2,3) and aid in (220,221,230,231))
+
+
+def rolls_on(aid, allowed):
+    """True when attribute aid can sit on an item whose data lists the rollable ids allowed: aid is in the same stone
+    family as one of them (Quartz enhancing moves a stat up its family, e.g. Physical Defense 10 -> 14). An id outside
+    every known family only matches itself. Item legality and the Natural check both use this rule."""
+    return bool(set(policy(aid)['chain']) & {int(x) for x in allowed})

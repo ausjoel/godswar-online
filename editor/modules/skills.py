@@ -12,8 +12,8 @@ abbreviated S/ = src/Godswar.Server):
     PostgresPetDurableCommandExecutor.PlayerSkillBooks.cs:281-332). The editor writes exactly that.
   * Talents (character_talents): rank 0..100 (S/Application/Talents/TalentProgression.cs RankCap); the client shows at
     most 60 (Polish/POINTS-AUDIT.md CL1). Only the class's talents are loaded; Champions get 18 of the 19 class-1
-    talents in a fixed order (PostgresCharacterSnapshotReader.Progression.cs TalentsQuery). Every changed row bumps
-    outbox_revision (PostgresTalentUpgradeCommandExecutor.Mutation.cs:126-142). Changing a rank does not touch the
+    talents in a fixed order (PostgresCharacterSnapshotReader.Progression.cs TalentsQuery). W15: outbox_revision is
+    NEVER written here (the talent outbox stream is strict; a bump without an event stalled it on live, 31 Oct / 12 Nov). Changing a rank does not touch the
     talent points (character_base.SkillPoint), like a GM edit.
   * Zodiac: sign character_base.zodiac_type 0..11 (S/Packets/PacketBuilder.ForgeZodiac.cs:47), level 1..30, energy
     0..storage cap of the level (S/State/ZodiacEnergyCatalog.cs). Grids (character_zodiac_skill_grids): 16 grids, level
@@ -535,8 +535,7 @@ def set_talents(ctx, cid):
             if cur.get(tid, 0) == rk and (tid in cur or rk == 0):
                 continue
             out.append("INSERT INTO character_talents (user_id, talent_id, rank, updated_at) VALUES (%d, %d, %d, now()) "
-                       "ON CONFLICT (user_id, talent_id) DO UPDATE SET rank = EXCLUDED.rank, updated_at = now(), "
-                       "outbox_revision = character_talents.outbox_revision + 1" % (cid, tid, rk))
+                       "ON CONFLICT (user_id, talent_id) DO UPDATE SET rank = EXCLUDED.rank, updated_at = now()" % (cid, tid, rk))
         if not out:
             raise Bad("nothing to change: the talents already have those ranks")
         blk = _conflict_block(checks)
@@ -788,11 +787,21 @@ def quest_chain_plan(rules, camp, operation, level, scope, rows):
     return {"changed": removed, "conflicts": conflicts}
 
 
+def rb_dump(ctx, cid):
+    d = ctx.need_rb().dump(int(cid))
+    if not d.get("character_base"):
+        raise NotFound("no such character")
+    return d
+
+
 @M.post(r"questchain/(\d+)")
 def quest_chain(ctx, cid):
     """POST /api/m/skills/questchain/<cid>  {operation: complete_main|reset, level (complete_main), scope: main|all (reset),
     apply: false = preview, true = write; expected: [ids] from the preview (required to apply)}.
-    Completing grants no rewards. Online characters go through the server (/admin/quest/chain), offline ones to the database."""
+    W23 (the admin 2026-11-24): completing an offline character also pays each quest's hand-in rewards (modules/maxer.py
+    pay_rewards: EXP, Talent EXP, Silver, Gold, the reward item into the bag or the Prize Chest, quest titles), unless
+    rewards: false. W24 (the admin d154/d155/d157): base values (no server rates), every item of a choice menu, and
+    complete_main is refused while the character is online. Reset still goes through the server when online."""
     cid = int(cid)
     op = ctx.body.get("operation")
     if op not in QUEST_CHAIN_OPS:
@@ -808,9 +817,23 @@ def quest_chain(ctx, cid):
     plan = quest_chain_plan(rules, camp, op, level, scope, st["quests"])
     what = ("complete %s main line through Lv %d" % (camp, level) if op == "complete_main"
             else "forget completed quests (%s)" % ("main line" if scope == "main" else "all"))
+    pay = op == "complete_main" and ctx.body.get("rewards", True) is not False
+    online = bool(common.online_info(ctx.app, cid).get("online"))
+    if op == "complete_main" and online:
+        # W24 (the admin d157): the running server cannot pay quest rewards, so finishing is refused while online
+        raise Refused("%s is online. Quests can only be finished while the character is logged out, so the rewards can be "
+                      "paid. Log %s out and try again (nothing was changed)." % (name, name))
+    reward_text, reward_detail, pay_in = None, None, None
+    if op == "complete_main":
+        reward_text = "none: completing this way grants no EXP, TP, Silver, Gold or items"
+        if pay and plan["changed"]:
+            from . import maxer as MX
+            pay_in = MX.finisher_inputs(ctx, cid)
+            reward_detail, _sql, _vals = MX.finisher_rewards(pay_in, rb_dump(ctx, cid), plan["changed"], rules)
+            reward_text = "; ".join(MX._reward_lines(reward_detail)) or "these quests pay nothing"
     preview = {"operation": op, "scope": scope, "level": level, "camp": camp, "character": name, "what": what,
-               "changed": plan["changed"], "conflicts": plan["conflicts"],
-               "rewards": "none: completing this way grants no EXP, TP, Silver, Gold or items" if op == "complete_main" else None}
+               "changed": plan["changed"], "conflicts": plan["conflicts"], "rewards": reward_text,
+               "reward_detail": None if reward_detail is None else {k: v for k, v in reward_detail.items() if k != "grants"}}
     if not ctx.body.get("apply"):
         return {"preview": preview}
     exp = ctx.body.get("expected")
@@ -821,7 +844,9 @@ def quest_chain(ctx, cid):
             ", ".join(map(str, plan["conflicts"])), "complete" if op == "complete_main" else "leave without their prerequisite"))
     if not plan["changed"]:
         raise Bad("nothing to change")
-    if common.online_info(ctx.app, cid).get("online"):
+    if op == "complete_main" and common.online_info(ctx.app, cid).get("online"):
+        raise Refused("%s logged in after the preview. Log %s out and try again (nothing was changed)." % (name, name))
+    if online or common.online_info(ctx.app, cid).get("online"):
         body = {"operation": op, "scope": scope, "level": level, "expected": plan["changed"]}
         r = ctx.live_call("character.quest_chain", name, body, cid=cid,
                           no_undo="applied by the running server; undo it with the opposite quest edit")
@@ -835,10 +860,20 @@ def quest_chain(ctx, cid):
             raise common.Conflict("the quest history changed since the preview; preview again (nothing written)")
         ids = ", ".join(map(str, plan["changed"]))
         if op == "complete_main":
-            return ["INSERT INTO character_quests (character_id, quest_id, state, progress) SELECT %d, q, 1, 0 FROM unnest(ARRAY[%s]) q "
-                    "ON CONFLICT (character_id, quest_id) DO NOTHING" % (cid, ids)]
+            out = ["INSERT INTO character_quests (character_id, quest_id, state, progress) SELECT %d, q, 1, 0 FROM unnest(ARRAY[%s]) q "
+                   "ON CONFLICT (character_id, quest_id) DO NOTHING" % (cid, ids)]
+            if pay_in is not None:
+                from . import maxer as MX
+                _r, rsql, _vals = MX.finisher_rewards(pay_in, d, plan["changed"], rules)
+                out += rsql
+            return out
         return ["DELETE FROM character_quests WHERE character_id = %d AND state = 1 AND quest_id IN (%s)" % (cid, ids)]
-    r = ctx.char_write(cid, "quests: %s (%d quests)" % (what, len(plan["changed"])), build, fields=["character_quests.*"])
+    fields = ["character_quests.*"]
+    if pay_in is not None:
+        from . import maxer as MX
+        fields = MX.finisher_fields(reward_detail)
+    r = ctx.char_write(cid, "quests: %s (%d quests)%s" % (what, len(plan["changed"]), (": " + reward_text)[:200] if pay_in else ""),
+                       build, fields=fields)
     r["mode"] = "database"
     r["preview"] = preview
     return r

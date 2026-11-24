@@ -47,10 +47,14 @@ internal sealed class AccountAuthenticationService :
     }
 
     /// <summary>
-    /// Preserves the local rollback's create-on-first-login behavior while
-    /// storing only a versioned verifier. Existing credentials still require
-    /// successful verification before any migration or presence update.
+    /// The raw-TCP (stock client) authenticator. Stores only a versioned
+    /// verifier. Existing credentials still require successful verification
+    /// before any migration or presence update.
     /// </summary>
+    // B22 W15 (the admin d103, 2026-11-22): this used to force AllowRegistration = true, so
+    // GODSWAR_AUTH_ALLOW_REGISTRATION=false / allowRegistration false never closed first-login account
+    // creation on the raw-TCP profile the VPS runs. It now keeps the configured flag; live keeps
+    // allowRegistration true in appsettings and closes it with the drop-in registration.conf.
     public static AccountAuthenticationService CreateLegacyRaw(
         IAccountCredentialStore credentials,
         IAccountPresenceWriter presence,
@@ -59,10 +63,7 @@ internal sealed class AccountAuthenticationService :
         IPasswordKdfScheduler? scheduler = null)
     {
         var policy = (options ??
-            throw new ArgumentNullException(nameof(options))).Snapshot() with
-        {
-            AllowRegistration = true
-        };
+            throw new ArgumentNullException(nameof(options))).Snapshot();
         return new AccountAuthenticationService(
             credentials,
             presence,

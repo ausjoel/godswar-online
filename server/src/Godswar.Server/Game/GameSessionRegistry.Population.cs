@@ -41,6 +41,7 @@ internal sealed partial class GameSessionRegistry
                     await PublishPopulationNoticeOnceAsync(cancellationToken);
                 }
                 await GreetNewBoardSessionsAsync(cancellationToken); // the admin 2026-11-08
+                await FlushHeldBoardAsync(instant,cancellationToken); // W20: board lines held while an NPC form was open
                 await AccrueTimePrizesAsync(cancellationToken); // W1 prize claims
                 await AccrueProfessionApAsync(cancellationToken); // PROF slice 1: online AP
                 await ExpireProfessionCooldownsAsync(cancellationToken); // PROF slice 2: Type 1 cooldowns

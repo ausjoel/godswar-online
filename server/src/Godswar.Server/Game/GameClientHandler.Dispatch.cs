@@ -244,18 +244,21 @@ internal sealed partial class GameClientHandler
                     $"[forge] ignored unsupported {Opcodes.Name(packet.Opcode)} opcode={packet.Opcode}");
                 break;
             case Opcodes.NpcDialogOpen:
+                _registry.NoteNpcFormActivity(_session); // W20: hold board lines while the window may be open
                 await HandleNpcDialogOpenAsync(packet, cancellationToken);
                 break;
             case Opcodes.NpcDialogPageRequest:
+                _registry.NoteNpcFormActivity(_session); // W20
                 await HandleNpcDialogPageRequestAsync(packet, cancellationToken);
                 break;
             case Opcodes.NpcFunctionAction:
-                if (IsGmPanelFrame(packet))
+                if (IsGmPanelFrame(packet)) // warehouse/sort/rank/info-tab frames: no NPC window (W20: no hold)
                 {
                     await HandleGmPanelFrameAsync(packet, cancellationToken);
                     break;
                 }
 
+                _registry.NoteNpcFormActivity(_session); // W20
                 await HandleNpcFunctionActionAsync(packet, cancellationToken);
                 break;
             case Opcodes.MallCatalog:

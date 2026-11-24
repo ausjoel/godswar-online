@@ -145,6 +145,12 @@ internal static class ServerRatesRuntime
                 $"by={snapshot.UpdatedBy} " +
                 $"changed=[{string.Join(", ", changes)}] " +
                 $"non-default=[{string.Join(", ", nonDefault)}]");
+            var endgame = Godswar.Server.Application.Limits.EndgameSwitch.Describe(snapshot); // W16
+            if (current.Source != "database" ||
+                endgame != Godswar.Server.Application.Limits.EndgameSwitch.Describe(current))
+            {
+                Console.WriteLine(endgame);
+            }
             return true;
         }
         finally

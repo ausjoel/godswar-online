@@ -7,7 +7,7 @@
 {% macro hero_buttons() %}
 <div class="dl-row">
   <a class="btn btn-gold" href="{{ mac_launcher }}" rel="noopener"><span>Download for Mac<small>Launcher · 6 MB zip</small></span></a>
-  <a class="btn btn-gold" href="{{ win_launcher }}" rel="noopener"><span>Download for Windows<small>Launcher · 6 MB</small></span></a>
+  <a class="btn btn-gold" href="{{ win_launcher }}" rel="noopener"><span>Download for Windows<small>Launcher · 9 MB</small></span></a>
 </div>
 <p class="dl-note">The launcher fetches the game (about 900 MB on Mac, 580 MB on Windows) and keeps it up to date. First time? <a href="/static/player-guide.html">Install help</a>.</p>
 <p class="dl-note">New, test version for Apple Silicon Macs: <a href="{{ native_zip }}" rel="noopener">GodsWar Native</a> runs the game without Wine.</p>
@@ -35,9 +35,9 @@
   </div>
   <div class="dl-card">
     <h3>Windows launcher</h3>
-    <p class="meta">Windows · GodsWar-Launcher-windows.exe · 6 MB</p>
-    <p>Run it from anywhere. The first start downloads the game (about 580 MB) into your user folder and opens it. After that it only checks for updates.</p>
-    <p class="small">If Windows says it protected your PC, choose <b>More info</b>, then <b>Run anyway</b>.</p>
+    <p class="meta">Windows · GodsWar-Launcher-windows.exe · 9 MB</p>
+    <p>Run it from anywhere. The first start downloads the game (about 580 MB) into your user folder and opens it. After that it keeps the game up to date by downloading only the files that changed, not the whole game.</p>
+    <p class="small">Use the launcher, not a game zip: an unzipped game never gets updates. The first time, it may install Microsoft's Visual C++ 2005 runtime: click <b>Yes</b> on the one Windows prompt. The launcher is not code-signed, so Windows may say it protected your PC: choose <b>More info</b>, then <b>Run anyway</b>.</p>
     <a class="btn btn-plain" href="{{ win_launcher }}" rel="noopener">Download for Windows</a>
   </div>
   <div class="dl-card test">
